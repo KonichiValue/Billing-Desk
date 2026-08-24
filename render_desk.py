@@ -168,6 +168,7 @@ color:#fff;display:grid;place-items:center;font-size:12px;font-weight:650}
 font:600 12.5px/1 ui-sans-serif,system-ui;padding:8px 14px;border-radius:8px;cursor:pointer}
 .refresh:hover{background:#1c3355}
 .refresh:disabled{opacity:.55;cursor:default}
+a.refresh{text-decoration:none;display:inline-block;line-height:1}
 .refresh-note{margin-left:10px;font-size:12px;color:#93a4bd;max-width:320px}
 .refresh-note.bad{color:#f4a3a3}
 .act-title{flex:1;min-width:0;font-weight:600;font-size:15.5px}
@@ -608,6 +609,7 @@ def shell(title: str, body: str) -> str:
 REFRESH_BUTTON = """
   <button id="refresh" class="refresh" hidden>Refresh</button>
   <button id="login" class="refresh" hidden>Log in</button>
+  <a id="login-link" class="refresh" hidden target="_blank" rel="noopener">Open sign-in page</a>
   <span id="refresh-note" class="refresh-note"></span>
 <script>
 (function () {
@@ -615,6 +617,7 @@ REFRESH_BUTTON = """
   if (location.protocol !== "http:" || key.indexOf("DESK_KEY") > -1) return;
   var btn = document.getElementById("refresh");
   var login = document.getElementById("login");
+  var link = document.getElementById("login-link");
   var note = document.getElementById("refresh-note");
   btn.hidden = false;
 
@@ -632,10 +635,20 @@ REFRESH_BUTTON = """
     fetch("/api/status").then(function (r) { return r.json(); }).then(function (s) {
       if (s.state === "running") { say(s.message + "\\u2026"); setTimeout(poll, 2000); return; }
       if (s.state === "done") { say("Refreshed, reloading"); location.reload(); return; }
-      // Signed out is not a failure, it is one click. Offer the click.
-      if (s.state === "needs_login") { ready(); login.hidden = false; say(s.message, "bad"); return; }
+      // Signed out is not a failure, it is one click. Offer the click, and the
+      // link the CLI printed once it has one. Keep polling so the moment the
+      // browser approval lands the buttons come back on their own.
+      if (s.state === "needs_login") {
+        ready();
+        login.hidden = false;
+        if (s.url) { link.href = s.url; link.hidden = false; }
+        say(s.message, "bad");
+        setTimeout(poll, 3000);
+        return;
+      }
       if (s.state === "failed") { ready(); say(s.message, "bad"); return; }
       login.hidden = true;
+      link.hidden = true;
       ready();
       say(s.message);
     });
@@ -652,9 +665,10 @@ REFRESH_BUTTON = """
 
   login.addEventListener("click", function () {
     login.disabled = true;
+    say("Starting the sign-in\\u2026");
     fetch("/api/login?k=" + encodeURIComponent(key), { method: "POST" })
       .then(function () { setTimeout(function () { login.disabled = false; poll(); }, 1500); })
-      .catch(function () { login.disabled = false; say("could not open Terminal", "bad"); });
+      .catch(function () { login.disabled = false; say("could not reach the desk server", "bad"); });
   });
 
   poll();

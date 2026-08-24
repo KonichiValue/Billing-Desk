@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import secrets
 import subprocess
 import sys
@@ -31,7 +32,7 @@ ROOT = Path(__file__).resolve().parent
 KEY = secrets.token_urlsafe(16)
 TIMEOUT_SECS = 900
 
-job = {"state": "idle", "message": "", "at": ""}
+job = {"state": "idle", "message": "", "url": "", "at": ""}
 job_lock = threading.Lock()
 
 
@@ -73,9 +74,11 @@ def rebuild() -> str:
     return html.read_text(encoding="utf-8")
 
 
-def set_job(state: str, message: str = "") -> None:
+def set_job(state: str, message: str = "", url: str = "") -> None:
     with job_lock:
-        job.update(state=state, message=message, at=datetime.now().strftime("%H:%M"))
+        job.update(
+            state=state, message=message, url=url, at=datetime.now().strftime("%H:%M")
+        )
 
 
 def logged_in() -> bool:
@@ -85,21 +88,69 @@ def logged_in() -> bool:
     return "not logged in" not in (status.stdout + status.stderr).lower()
 
 
-def start_login() -> None:
-    """Put the login in a Terminal window, because it needs a browser and a human.
+ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+URL_IN = re.compile(r"https://\S+")
 
-    A background server cannot complete an OAuth flow, so the honest thing is to
-    hand the step to Rei rather than fail at him.
+
+def start_login() -> None:
+    """Run the sign-in here and hand Rei the URL it prints.
+
+    Driving Terminal through AppleScript needs an automation permission this
+    process does not have, so instead the login runs as a child here and the
+    page shows the link. Rei approves it in the browser, this notices, and the
+    button comes back to life.
     """
-    script = (
-        'tell application "Terminal" to do script "cursor-agent login"\n'
-        'tell application "Terminal" to activate'
-    )
-    subprocess.run(["osascript", "-e", script], check=False)
-    set_job(
-        "needs_login",
-        "Finish the login in the Terminal window that just opened, then press Refresh.",
-    )
+    if logged_in():
+        set_job("idle", "Already signed in. Press Refresh.")
+        return
+    try:
+        proc = subprocess.Popen(
+            ["cursor-agent", "login"],
+            cwd=ROOT,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+    except OSError as exc:
+        set_job("needs_login", f"could not start the sign-in: {exc}")
+        return
+
+    set_job("needs_login", "Starting the sign-in")
+    lines: list[str] = []
+    threading.Thread(
+        target=lambda: [lines.append(ANSI.sub("", ln)) for ln in proc.stdout],
+        daemon=True,
+    ).start()
+
+    url, deadline = "", time.time() + 25
+    while time.time() < deadline and not url:
+        for line in list(lines):
+            found = URL_IN.search(line)
+            if found:
+                url = found.group(0).rstrip('.,")')
+                break
+        if not url:
+            time.sleep(0.5)
+
+    if url:
+        set_job("needs_login", "Approve the sign-in in your browser, then press Refresh.", url)
+    else:
+        set_job(
+            "needs_login",
+            "The sign-in printed no link. Open a Terminal and run: cursor-agent login",
+        )
+
+    # Wait for it to land rather than making him press anything twice.
+    end = time.time() + 300
+    while time.time() < end:
+        if logged_in():
+            set_job("idle", "Signed in. Press Refresh.")
+            return
+        if proc.poll() is not None and not url:
+            return
+        time.sleep(3)
 
 
 def run_refresh() -> None:
