@@ -175,18 +175,26 @@ Cover, in this order, skipping any section that does not apply:
 
 Style:
 - N2 level, ですます form. Business-polite but plain.
-- One idea per line. Aim for **under 20 characters** per line. Two short lines
-  always beat one long one.
-- **Cut every word that is not load-bearing.** Rei is scanning this at speed
-  before he speaks. Drop お疲れ様です, ありがとうございます and similar padding, or
-  keep at most one instance in the whole script. Never write a line that only
-  restates the previous line in different words.
-- Lead each block with the noun, not the wind-up. 「請求未発行の恒久対応です。」
+- **Every line is a complete, natural sentence.** One idea per line, but the
+  line has to stand on its own when spoken. Do not chop a sentence into
+  fragments across lines. Roughly 25 to 50 characters is the sweet spot; go
+  longer when the sentence genuinely needs it.
+- Wrong: 「自動発行はNG。」「ステートメントの作成までです。」
+  Right: 「理由に関わらず自動で請求を発行するのはNG、という理解です。」
+  「ステートメントの作成までを自動で行い、ホールドに該当する場合はOPSの確認対象とします。」
+- **Use the exact vocabulary TG and the team already use.** Do not simplify a
+  term into something more basic: TG has to recognise what Rei is talking about.
+  Keep 課金GAPホールド, 稼働確認, ホールド一覧, 管理件名, 期待値, ステートメント,
+  インテグリティチェック, リゾルバ, 託送番号不一致HOLD, 保安閉栓, 供給中断, アキュラル
+  and anything else lifted from the ticket or the thread.
+- Cut padding, not substance. Drop repeated お疲れ様です, and never write a line
+  that only restates the previous line. One ありがとうございます where it is
+  genuinely warranted is fine.
+- Lead each block with the topic, not the wind-up. 「請求未発行の恒久対応についてです。」
   beats 「請求未発行の恒久対応について、お話しさせていただきたいと思います。」
-- Three to five lines per block. At most four blocks per ticket.
-- No English loanwords where a normal Japanese term exists.
+- Two to five lines per block. At most four blocks per ticket.
 - Rei will read these aloud verbatim, so they must be natural spoken Japanese,
-  not written report style.
+  not written report style and not clipped notes.
 
 ### Do not manufacture asks
 
