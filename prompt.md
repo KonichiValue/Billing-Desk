@@ -335,29 +335,21 @@ only TG can answer it. A question in the script is more useful than a wrong draf
 
 ## Step 9: pick up what was left hanging
 
-Read the most recent `output/post-*.json` before you write anything. That is the
-last standup's outcome and it is the baseline today's page moves from. It tells
-you what Rei was asked to do, what he was holding and why, what other people
-owed him, and which decisions were still open. Anything in there that has not
-been answered since is still live, and saying "no change since Monday" is a real
-and useful status.
+Read `state/board.json` before you write anything. It is Rei's standing to-do
+list for this work, described in `board.py`, and it is the baseline today's page
+moves from. It tells you what is still with him, what he is holding and why,
+what other people owe him, and when he means to chase them.
 
-Check each of its actions against what you now see in Asana and Slack. An action
-that was done needs no space today. An action that was held and whose hold has
-now cleared is one of the most useful things you can put on the page, because
-nothing else will remind him.
+Check every open item against what you now see in Asana and Slack. An item
+already finished needs no space today. An item whose hold has cleared, or whose
+`chase_on` has arrived with no reply, is one of the most useful things you can
+put on the page, because nothing else will remind him. Say how long it has been
+sitting and who it is sitting on, and give it a place in `action_board` over
+anything speculative.
 
-Read `state/open-loops.json` if it exists. The post-standup agent writes it, and
-each entry is something Rei is waiting on or deliberately holding, with a
-`revisit` date.
-
-Any loop whose `revisit` date is today or earlier, and which is still unresolved
-after you have read the ticket and its threads, belongs on the page. Say how long
-it has been sitting and who it is sitting on. These are the things that quietly
-expire, so they earn a place in `action_board` over anything speculative.
-
-Drop loops that have since been answered. Do not repeat a loop back at Rei once
-the person has replied.
+Do not repeat something back at Rei once the person has replied. And do not edit
+the board from this run: the morning page is a briefing, the afternoon run and
+`tg refresh` are what move items.
 
 ## Output schema
 

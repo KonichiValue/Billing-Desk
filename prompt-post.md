@@ -1,14 +1,22 @@
-# Post-standup action list
+# Fold the standup into the board
 
 The Tokyo Gas billing standup has just finished. Rei Samuelsson attended it and
 now has to act on it. Your job is to turn the meeting, plus everything that
-happened around it, into one ticket-by-ticket picture of where each thing stands
-and what he does next.
+happened around it, into moves on his board.
 
-Your deliverable is `output/post-<YYYY-MM-DD>.json`, matching the schema at the
-bottom. Write it with the file-write tool. Do not print the JSON to stdout. The
-only other files you may create are `state/skip-next.json` and
-`state/open-loops.json`, where Steps 9 and 7 say so.
+Your deliverable is `state/board.json`, which already exists and is described in
+`board.py`. You are merging into it, not replacing it:
+
+- A ticket you already know keeps its entry. Update `where_it_stands`, append to
+  `events`, and move its items.
+- An item keeps its number for life. Numbers are never reused and never
+  renumbered, because Rei types them. New work takes `next_id` and increments it.
+- Never delete history. A finished item stays on the board with its `closed_at`.
+- A ticket that is no longer open in Asana comes off, and its open items close
+  as `dropped` with a note.
+
+Write the file with the file-write tool. Do not print JSON to stdout. The only
+other file you may create is `state/skip-next.json`, where the last step says so.
 
 Read `config.json` first for the Asana workspace, the TG project GIDs and Rei's
 identifiers.
@@ -25,11 +33,16 @@ able to read a single block and know what the ticket is, every conversation it
 lives in, what changed today, what he has to do, what he is waiting on, and the
 exact words to send, without scrolling to three other sections.
 
-So a ticket's actions, its drafts, its threads and its open decisions all sit
-inside that ticket. The only cross-ticket structure is a thin ranked `index` at
-the top telling him which ticket to open first.
+So a ticket's items, its drafts, its threads and its open decisions all sit
+inside that ticket. The page builds the running order itself, from item numbers
+and state, so you never write one.
 
-**Never refer to something Rei cannot immediately identify.** Every action names
+**Every open ticket stays on the board, even the quiet ones.** This is his
+to-do list for the TG billing work, not a record of one meeting. A ticket that
+was never reached at the standup still belongs here, with its Asana status and
+its threads, carrying no items if nothing needs him.
+
+**Never refer to something Rei cannot immediately identify.** Every item names
 its ticket. Every ticket carries its exact Japanese Asana title and permalink.
 Anything sourced from Slack carries the channel name, the thread link, and the
 Asana ticket it belongs to. "Follow up on the hold question" is useless.
@@ -58,16 +71,16 @@ Rei reads this page once and then works from it. Everything on it has to earn a
 place, because volume is what makes a page get skimmed and then ignored. Hard
 limits:
 
-- At most 3 actions per ticket. If a fourth exists, it is not important today.
-- At most 3 rows in `changed_today`. Silence on a ticket is one row, not three.
+- At most 3 open items per ticket. If a fourth exists, it is not important today.
+- At most 3 rows in `events`. Silence on a ticket is one row, not three.
 - `where_it_stands` is 2 sentences, 3 at the absolute most.
 - `threads` holds only conversations that **moved in the last few days** or that
   he owes a reply in. A dormant thread is noise.
 - `watch` holds at most 2 items, and only where you can name the route by which
   it reaches one of his tickets. "Useful context" is not a route. Prefer an empty
   array.
-- `open_decisions` holds only forks that nobody owns and no action covers. A
-  fork someone is already deciding is an action with `waits_on` naming them.
+- `open_decisions` holds only forks that nobody owns and no item covers. A
+  fork someone is already deciding is an item with `waits_on` naming them.
 
 Background he already knows gets cut. He has been on these tickets for weeks, so
 do not re-explain the cause of a bug he diagnosed himself. State what is new and
@@ -150,7 +163,7 @@ Fetch that page twice: once normally for the `<summary>`, and once with
 
 **The transcript is the valuable half.** The summary is flattened bullets. The
 transcript is where you see who pushed back, what premise somebody rejected,
-what was left undecided, and what was quietly taken away as an action. Read it in
+what was left undecided, and what was quietly taken away as an item. Read it in
 full.
 
 If no meeting note exists for today, **stop immediately.** Write the JSON with
@@ -167,7 +180,7 @@ you `started_the_day` plus the baseline for the timeline, which is the most
 useful thing on the page. Carry the `ref` tags across unchanged so the two pages
 line up.
 
-`changed_today` is a timeline, one per ticket, and it has to read as a single
+`events` is a timeline, one per ticket, and it has to read as a single
 story from morning to now. Every entry carries the time it happened and who
 moved it, and they are ordered by time no matter which channel each came from.
 Never split it by source, and never write two entries for one exchange. Say the
@@ -193,14 +206,14 @@ an outstanding ask just rolled forward with nowhere to go.
 
 Within a ticket, include work owned by other people whenever it gates Rei. When
 a TG person takes something away for internal clarification and Rei's ticket
-cannot progress until they return, that is an action like any other, with
+cannot progress until they return, that is an item like any other, with
 `waits_on` naming them and a `chase_on` date. Do not drop it because the name
 attached is not his.
 
-Everything Rei needs to keep track of is an action with a number, including the
-things he cannot move. A wait listed away from the actions gives him a second
-list to reconcile, and he then has to work out for himself which action it
-belongs to. So an action sits with him, or it sits with somebody named. The
+Everything Rei needs to keep track of is an item with a number, including the
+things he cannot move. A wait listed away from the items gives him a second
+list to reconcile, and he then has to work out for himself which item it
+belongs to. So an item sits with him, or it sits with somebody named. The
 things he is waiting for are the same numbers he already knows, further down the
 page.
 
@@ -252,21 +265,21 @@ plus `?thread_ts=<parent ts>&cid=<CHANNEL_ID>` for a reply inside a thread.
 When an engineer says something is harder than previously thought, or that a
 capability Rei has promised TG does not exist, that is the most consequential
 thing you can find. It means Rei is carrying a commitment he cannot keep and
-does not know it yet. Put it at the top of the ticket's `changed_today` and give
-it the first action.
+does not know it yet. Put it at the top of the ticket's `events` and give
+it the first item.
 
-## Step 5: build each ticket's actions
+## Step 5: build each ticket's items
 
-**One number per action, across the whole page.** `rank` is global and unique:
-rank 1 is the first thing Rei does today, rank 2 the second, wherever they sit.
-The running order at the top is built from these numbers, so an action can never
-be numbered two different ways. Rei says "do 4" and means rank 4.
+**One number per item, for the life of the item.** `id` is global, unique and permanent:
+it is allocated once from `next_id` and stays with the item until it closes, so
+"do 4" means the same piece of work next week. Never renumber to reflect
+priority. The page orders itself from state and consequence.
 
-Every action carries a `why`: **one sentence, 15 words at most**, on what goes
+Every item carries a `why`: **one sentence, 15 words at most**, on what goes
 wrong if he skips it. It sits in the running order table, so it has to be
 scannable. "Nakayama is refining this today and is blocked on the answer" works.
 "Important for the ticket" does not, and neither does a paragraph. Longer
-reasoning belongs in `detail`. If you cannot write the why, the action does not
+reasoning belongs in `detail`. If you cannot write the why, the item does not
 belong on the page.
 
 Rank by consequence.
@@ -282,27 +295,27 @@ Rank by consequence.
 5. Investigation with no deadline goes last.
 
 `detail` says what actually needs doing, in one to three bullets. "Follow up on
-X" is not an action. "Comment on the ticket confirming cases 1 and 2 keep the
-hold, and ask Tanaka who runs the filter query" is an action.
+X" is not an item. "Comment on the ticket confirming cases 1 and 2 keep the
+hold, and ask Tanaka who runs the filter query" is an item.
 
-Give every action an honest `est_minutes`. If a ticket has more than three
-actions, cut the weakest rather than shrinking estimates.
+Give every item an honest `est_minutes`. If a ticket has more than three
+items, cut the weakest rather than shrinking estimates.
 
-An action is a piece of work, not a message. It stays on its number until the
+An item is a piece of work, not a message. It stays on its number until the
 work is finished, so when Rei has already sent something and the answer landed,
 the follow-up belongs on the same number with `progress_note` saying what
 happened. Never open a fresh number for the next leg of a conversation he is
 already having. Numbers are how he refers to work all afternoon, and a list that
 grows a new one every time somebody replies stops being a list.
 
-Never write an action whose content is telling a Kraken colleague something they
+Never write an item whose content is telling a Kraken colleague something they
 can already read. Everyone on the Kraken side of these tickets, CDL and CE
 included, has the same Asana access Rei has, so relaying TG's answer to them is
 work that does not need doing. Check who can see the source before you draft a
 message about it. Reply to a colleague when they asked Rei something, or when he
 knows something that is genuinely not written down anywhere they look.
 
-An action carrying `waits_on` needs the same treatment in its `why`: say what of
+An item carrying `waits_on` needs the same treatment in its `why`: say what of
 Rei's cannot move until it lands. A line that only says what someone owes gives
 him no way to judge whether to chase. "The Databricks conditions" tells him
 nothing. "Until these arrive he cannot show TG where their patrol and the
@@ -335,9 +348,9 @@ works.
 
 ## Step 7: say clearly when he should not act yet
 
-Some actions look ready and are not. If sending now would commit Rei to a
+Some items look ready and are not. If sending now would commit Rei to a
 position that a pending reply might overturn, or would ask someone a question
-that is already being answered elsewhere, say so with a `hold` on that action.
+that is already being answered elsewhere, say so with a `hold` on that item.
 
 `hold.why` is the risk in one sentence. `hold.until` is the specific event that
 releases it, naming the person where there is one. `hold.revisit` is the date he
@@ -346,32 +359,16 @@ chases if that event has not happened.
 Be strict about this. A hold on something that could safely go today costs him a
 day. No hold on something premature costs him a retraction in front of TG.
 
-Every hold and every `waits_on` also gets written to
-`state/open-loops.json`, so nothing quietly expires:
+Nothing quietly expires, because holds and waits live on the board and the board
+outlives the day. So check them at the start of every run. Any hold past its
+`revisit` date, and any `waits_on` past its `chase_on`, comes back to `todo` on
+its own number, and the reason it is back is that it has been sitting. Clear the
+ones that have since been answered.
 
-```json
-{
-  "updated_at": "ISO 8601 with +09:00",
-  "loops": [
-    {
-      "ticket_ref": "請求未発行",
-      "what": "One sentence on what is pending.",
-      "who": "The person it is pending on",
-      "revisit": "YYYY-MM-DD",
-      "source_url": "Permalink"
-    }
-  ]
-}
-```
+## Step 8: bake the draft into the item
 
-Read that file at the start of the run. Any loop whose `revisit` date has passed
-and which is still unresolved becomes an action today, and the reason it appears
-is that it has been sitting. Drop loops that have since been answered.
-
-## Step 8: bake the draft into the action
-
-Where an action means Rei owes somebody words, the draft goes **inside that
-action**, in its `draft` field. Never in a separate section.
+Where an item means Rei owes somebody words, the draft goes **inside that
+item**, in its `draft` field. Never in a separate section.
 
 Match the language to the reader: English to Kraken, Japanese to TG. Japanese
 follows the morning page's rules: ですます, natural complete sentences of roughly
@@ -386,16 +383,16 @@ the end when he needs a decision. No preamble, no recap of process, no "just
 wanted to check in". Warmth belongs in the first line to someone he knows, and
 nowhere else.
 
-### If the action says to ask someone, write the message
+### If the item says to ask someone, write the message
 
-An action whose `detail` tells Rei to ask, tell, confirm or reply to a person is
+An item whose `detail` tells Rei to ask, tell, confirm or reply to a person is
 an outgoing message, and it needs a `draft`. Never leave the instruction on its
 own, because then he has to work out the wording himself, which is the part this
 page exists to do.
 
 If a bullet is genuinely a note to himself and nothing leaves, say so in the
-bullet. And if one action would send two messages to different people, split it:
-one action, one recipient, one draft, one number.
+bullet. And if one item would send two messages to different people, split it:
+one item, one recipient, one draft, one number.
 
 ### Never say back what they already wrote
 
@@ -497,7 +494,7 @@ or `*` for lists. Use these instead:
 Put a real newline between list items. Keep paragraphs short enough to read in a
 Slack thread without expanding.
 
-Where you lack the information to draft something, say so in the action's
+Where you lack the information to draft something, say so in the item's
 `detail` and leave `draft` out. Do not guess at content Rei will send.
 
 ## Step 9: did the meeting cancel a future standup?
@@ -531,19 +528,25 @@ delete any existing `state/skip-next.json` whose `skip_date` is in the past.
 A cancelled standup has a second effect worth spelling out on the page: any ask
 that was waiting for the next meeting now has nowhere to go, so it has to move
 into Asana or into whatever replaces the meeting. Say that in the affected
-ticket's actions.
+ticket's items.
 
-## Output schema
+## What you write into the board
 
-Write `output/post-<YYYY-MM-DD>.json` using today's date in JST.
+Merge into `state/board.json`. Set `checked_at` to now and keep `next_id` above
+every id you have used. A ticket looks like this, and an existing ticket keeps
+everything you are not changing.
 
 ```json
 {
-  "generated_at": "ISO 8601 with +09:00 offset",
-  "meeting_date": "YYYY-MM-DD",
-  "note_found": true,
+  "checked_at": "ISO 8601 with +09:00 offset",
+  "next_id": 8,
+  "headline": "One sentence. The most consequential thing for Rei right now.",
   "notion_url": "URL of today's meeting note",
-  "headline": "One sentence. The most consequential thing for Rei. Plain English.",
+  "meeting_note": {
+    "date": "YYYY-MM-DD of the standup you just processed",
+    "found": true,
+    "url": "Notion URL"
+  },
   "next_standup": {
     "date": "YYYY-MM-DD, or empty string if unknown",
     "skipped": false,
@@ -551,17 +554,22 @@ Write `output/post-<YYYY-MM-DD>.json` using today's date in JST.
   },
   "tickets": [
     {
+      "id": "Asana task gid. This is what stops a ticket being added twice.",
       "ref": "Short Japanese tag, 4 to 6 characters, matching the morning prep",
       "title_ja": "Exact Asana task title.",
       "title_en": "Short English title, under 10 words.",
       "asana_url": "permalink_url",
+      "asana": {
+        "status": "The Status field verbatim, e.g. 調査中",
+        "section": "The board column it sits in",
+        "priority": "Priority (Kraken resource allocation)",
+        "category": "Category field",
+        "assignee": "Assignee name"
+      },
       "internal_ticket": {
         "name": "Internal Kraken build ticket title, or empty string",
         "url": "URL, or empty string"
       },
-      "status_label": "Waiting on TG | Waiting on Kraken | Action on Rei | In progress | Monitoring",
-      "status_tone": "red | amber | green | grey",
-      "raised_at_standup": true,
       "terms": [
         {
           "term": "The shorthand as it appears in the tickets, e.g. ケース1・2",
@@ -570,10 +578,10 @@ Write `output/post-<YYYY-MM-DD>.json` using today's date in JST.
         }
       ],
       "where_it_stands": "2 to 4 sentences. Where the ticket actually is and who owns the next move. This is for Rei only, so internal detail is fine here.",
-      "started_the_day": "One or two sentences on where this ticket stood before today, so the timeline below has something to move from.",
-      "changed_today": [
+      "events": [
         {
-          "at": "HH:MM, 24-hour JST, of the message itself",
+          "on": "YYYY-MM-DD of the message",
+          "at": "HH:MM, 24-hour JST",
           "who": "Who moved it, with their side: 'TG, Tanaka' or 'Kevin Mann, Kraken' or 'You'",
           "what": "What they did or said, in one or two sentences.",
           "so_what": "What it changes for Rei. Empty string when the entry is only a step in the story.",
@@ -583,7 +591,7 @@ Write `output/post-<YYYY-MM-DD>.json` using today's date in JST.
       ],
       "threads": [
         {
-          "label": "What this conversation is, e.g. 'CE refinement request' or 'CE help thread on the 240 yen charge'",
+          "label": "What this conversation is, e.g. 'CE refinement request'",
           "where": "Asana | Slack #client-eng-jpn-refinement | Notion",
           "url": "Permalink to the thread or ticket",
           "last_from": "Name (Kraken) or Name (TG)",
@@ -591,17 +599,22 @@ Write `output/post-<YYYY-MM-DD>.json` using today's date in JST.
           "gist": "One line on where that conversation currently sits."
         }
       ],
-      "actions": [
+      "items": [
         {
-          "rank": 1,
+          "id": 8,
           "title": "Imperative, under 12 words.",
           "why": "One line on what goes wrong if he skips this. Never a restatement of the title.",
           "detail": [
             "One to three bullets on what actually needs doing.",
             "Concrete enough to start without rereading anything."
           ],
+          "state": "todo | hold | waiting | done | sent | dropped",
+          "state_at": "HH:MM the state last changed, or empty string",
+          "state_note": "A few words on why it is in that state. Empty string otherwise.",
+          "sent_by_you": false,
+          "opened": "YYYY-MM-DD this item first appeared",
           "committed_to": "Who Rei promised this to and when. Empty string if not a commitment.",
-          "progress_note": "What has already happened on this same number today, when the action has come back to him. Empty string otherwise.",
+          "progress_note": "What has already happened on this same number, when it has come back to him. Empty string otherwise.",
           "waits_on": {
             "who": "Who is holding this, with their side. Omit the whole object when the next move is Rei's.",
             "what": "Exactly what they owe, in one clause.",
@@ -626,7 +639,10 @@ Write `output/post-<YYYY-MM-DD>.json` using today's date in JST.
             "language": "ja | en",
             "body_ruby": "Draft text. Japanese uses {漢字|かんじ} markup.",
             "body_en": "English translation when the draft is Japanese, else empty string"
-          }
+          },
+          "history": [
+            {"at": "ISO 8601", "state": "waiting", "note": "with Kevin"}
+          ]
         }
       ],
       "open_decisions": [
@@ -655,6 +671,14 @@ Write `output/post-<YYYY-MM-DD>.json` using today's date in JST.
 Omit `hold` entirely on anything he can act on now. Omit `draft` when you cannot
 write it honestly.
 
-There is no separate running order in the JSON. The renderer builds it from the
-global `rank` on every action, so rank once and rank carefully. Keep `ref` tags
-identical to the morning prep.
+There is no running order in the board. The page builds it from each item's
+number and state, so an item can never be ordered two different ways. Keep `ref`
+tags identical to the morning prep, and keep ticket `id` equal to the Asana gid
+so nothing is ever added twice.
+
+When you have written the board, render it:
+
+```
+python3 render_desk.py    state/board.json output/desk.html
+python3 render_desk_md.py state/board.json output/desk.md
+```

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render the post-standup JSON into markdown.
+"""Render the board into markdown.
 
 The HTML page is for reading. This markdown file is for working: it is what a
 Cursor chat in this repo reads when Rei says "draft the reply to Nakayama-san"
@@ -17,13 +17,8 @@ import sys
 from datetime import date, datetime
 from pathlib import Path
 
-from render import action_state, load_progress, plain, tracked
-
-PROGRESS: dict = {}
-
-
-def state_of(action: dict) -> dict:
-    return action_state(PROGRESS, action)
+from render import item_state as state_of
+from render import plain, tracked
 
 
 def link(label: str, url: str) -> str:
@@ -70,8 +65,9 @@ def render_ticket(t: dict) -> list[str]:
         f"**{t.get('title_ja', '')}**",
         "",
         f"- Asana: {link(t.get('title_ja', 'ticket'), t.get('asana_url', ''))}",
-        f"- Status: {t.get('status_label', '')}"
-        + ("" if t.get("raised_at_standup", True) else " (not reached at the standup)"),
+        f"- Asana status: {(t.get('asana') or {}).get('status', 'unknown')}, "
+        f"{(t.get('asana') or {}).get('section', 'no section')}, "
+        f"priority {(t.get('asana') or {}).get('priority', 'unset')}",
     ]
 
     internal = t.get("internal_ticket") or {}
@@ -90,27 +86,26 @@ def render_ticket(t: dict) -> list[str]:
     out += block("What the shorthand means", terms)
 
     changed = []
-    if t.get("started_the_day"):
-        changed += [f"Where it stood this morning: {t['started_the_day']}", ""]
-    for c in sorted(t.get("changed_today", []), key=lambda x: x.get("at", "")):
-        changed.append(f"- **{c.get('at', '')} {c.get('who', '')}** {c.get('what', '')}")
+    for c in sorted(t.get("events", []), key=lambda x: (x.get("on", ""), x.get("at", ""))):
+        when = f"{c.get('on', '')} {c.get('at', '')}".strip()
+        changed.append(f"- **{when} {c.get('who', '')}** {c.get('what', '')}")
         if c.get("so_what"):
             changed.append(f"  So: {c['so_what']}")
         changed += [
             f"  Source: {c.get('where', '')} {link('link', c.get('source_url', ''))}",
             "",
         ]
-    out += block("How today went, in order", changed)
+    out += block("How this got here, in order", changed)
 
     actions: list[str] = []
     for a in sorted(
-        t.get("actions", []), key=lambda x: (state_of(x)["order"], x.get("rank", 99))
+        t.get("items", []), key=lambda x: (state_of(x)["order"], x.get("id", 99))
     ):
         mins = f", {a['est_minutes']} min" if a.get("est_minutes") else ""
         hold = a.get("hold") or {}
         st = state_of(a)
         active = st["state"] in {"todo", "hold"}
-        head = f"{a.get('rank', '-')}. {a.get('title', '')} [{st['label'].upper()}{mins}]"
+        head = f"{a.get('id', '-')}. {a.get('title', '')} [{st['label'].upper()}{mins}]"
         if active:
             actions += [f"#### {head}", ""]
         else:
@@ -159,7 +154,7 @@ def render_ticket(t: dict) -> list[str]:
         actions += render_draft(a.get("draft") or {}, st)
         if not active:
             actions += ["</details>", ""]
-    out += block("Actions, and where each one sits", actions)
+    out += block("Items, and where each one sits", actions)
 
     decisions = []
     for d in t.get("open_decisions", []):
@@ -183,29 +178,23 @@ def render_ticket(t: dict) -> list[str]:
 
 
 def render(data: dict) -> str:
-    global PROGRESS
-    meeting_date = data.get("meeting_date") or date.today().isoformat()
-    PROGRESS = load_progress(meeting_date)
-    try:
-        pretty = datetime.strptime(meeting_date, "%Y-%m-%d").strftime("%A %-d %B %Y")
-    except ValueError:
-        pretty = meeting_date
-
+    pretty = date.today().strftime("%A %-d %B %Y")
     tickets = data.get("tickets", [])
     total = sum(
-        a.get("est_minutes") or 0
+        i.get("est_minutes") or 0
         for t in tickets
-        for a in t.get("actions", [])
-        if state_of(a)["state"] == "todo"
+        for i in t.get("items", [])
+        if state_of(i)["state"] == "todo"
     )
 
     out = [
-        f"# After the TG billing standup, {pretty}",
+        f"# TG billing desk, {pretty}",
         "",
         data.get("headline", ""),
         "",
-        f"Meeting note: {link('Notion', data.get('notion_url', ''))}. "
-        f"Generated {data.get('generated_at', '')}.",
+        f"Board last checked {data.get('checked_at', 'never')}. "
+        f"Numbers stay with an item until it is closed, so 'do 4' means the same "
+        f"thing tomorrow.",
         "",
     ]
 
@@ -217,7 +206,7 @@ def render(data: dict) -> str:
             "",
         ]
 
-    rows = tracked(tickets, PROGRESS)
+    rows = tracked(tickets)
     if rows:
         counts: dict[str, int] = {}
         for _, _, st in rows:
@@ -261,7 +250,7 @@ def render(data: dict) -> str:
                 bits.append(st["note"])
             tail = "; ".join(b for b in bits if b)
             out.append(
-                f"- **{a.get('rank', '')}. {ref}: {a.get('title', '')}** ({tail})"
+                f"- **{a.get('id', '')}. {ref}: {a.get('title', '')}** ({tail})"
             )
         out.append("")
         mine = [(r, a) for r, a, s in rows if s["state"] == "todo"]
@@ -271,7 +260,7 @@ def render(data: dict) -> str:
             out += ["**With you, in order:**", ""]
             for ref, a in mine:
                 out.append(
-                    f"{a.get('rank', '')}. **{ref}: {a.get('title', '')}** "
+                    f"{a.get('id', '')}. **{ref}: {a.get('title', '')}** "
                     f"{first_sentence(a.get('why', ''))}"
                 )
             out.append("")

@@ -4,26 +4,30 @@ Guidance for AI agents working in this repository.
 
 ## What this repo is
 
-Rei's desk for the Tokyo Gas billing work: a prep page before the standup, an
-action list after it, and a tracked state of where every action sits for the
-rest of the day. See `README.md` for how they are built.
+Rei's to-do list for the Tokyo Gas billing work. Every ticket open in his name
+in the two TG Asana projects lives here, with the Slack threads it is discussed
+in, what has happened on it, and the numbered items of work it has left. The
+standup is one of the things that moves it, not the reason it exists.
 
-## When Rei asks you to act on the standup
+`state/board.json` is the one durable file, and `board.py` documents it. Days
+come and go, the standup happens or it does not, but an item keeps its number
+until it is closed. Everything in `output/` is rendered from the board.
 
-**Read `output/post-<today>.md` first, before answering anything.** That file is
-today's action list, grouped by ticket, with every Asana link, Slack thread and
-draft already gathered. If it does not exist, check for `output/post-<recent
-date>.md` and say which day you are working from. `output/prep-<today>.md` does
-not exist; the morning page is HTML plus `output/prep-<today>.json`.
+## When Rei asks you to act on his work
+
+**Read `output/desk.md` first, before answering anything.** That is the board in
+markdown: every ticket, its Asana status, its threads, its timeline and its
+items, with the drafts already written. Say plainly when `checked_at` is hours
+old rather than answering from a stale page.
 
 Requests will usually be one of these, and they arrive without much context
 because the context is in the file:
 
-- **"Draft the reply to X"** &mdash; find the matching action, check whether it
+- **"Draft the reply to X"** &mdash; find the matching item, check whether it
   already has a `draft`, and improve it rather than starting over. Show the draft
   in chat and wait for approval. Never post it.
-- **"Do action 3"** &mdash; the numbers refer to the running order table at the
-  top of the markdown, so resolve them from there and confirm which one you mean
+- **"Do 3"** &mdash; item numbers are permanent and unique across the board, so
+  resolve the number from `state/board.json` and confirm which one you mean
   before doing work.
 - **"Check the codebase for X"** &mdash; the Kraken Core checkout is at
   `~/Projects/kraken-core`, not here. Read `~/Projects/kraken-core/AGENTS.md`
@@ -38,18 +42,19 @@ One word, in a chat opened on this folder. **Read `prompt-refresh.md` and follow
 it exactly.** It is the same routine `tg refresh` runs from the terminal, so the
 answer should not depend on which one he used.
 
-In short: check only what the open actions point at, put what you find in each
-ticket's timeline, move the actions those events affect, rebuild both pages, and
-report only what changed. Closed actions stay closed.
+In short: sweep every open ticket in Asana, read the threads behind the open
+items, put what you find in each ticket's timeline, move the items those events
+affect, rebuild both files, and report only what changed. Closed items stay
+closed and numbers never change.
 
 `./tick.py` on its own prints the same status without spending a single token,
 so use that when he only wants to know where he is.
 
 ## When Rei says he has done something
 
-Run `./tick.py` and nothing else. It records the state in
-`state/progress-<date>.json` and rebuilds both pages. Never hand-edit the report
-to mark something done.
+Run `./tick.py` and nothing else. It records the state on the item in
+`state/board.json` and rebuilds both files. Never hand-edit a page to mark
+something done.
 
 ```
 ./tick.py                  # where everything is
@@ -60,20 +65,18 @@ to mark something done.
 ./tick.py 1 --undo         # forget the state entirely
 ```
 
-**Sending a message is not finishing an action.** If a reply is expected, the
-action goes to `-w <who>`, so the page shows it sitting with them rather than
-pretending it is closed. Use plain `./tick.py <n>` only when nothing comes back.
+**Sending a message is not finishing an item.** If a reply is expected, the item
+goes to `-w <who>`, so the page shows it sitting with them rather than pretending
+it is closed. Use plain `./tick.py <n>` only when nothing comes back.
 
 When the reply arrives, the follow-up stays on the same number: run `--mine`,
-then edit that action in the JSON with the new draft and a `progress_note`
-saying what already happened. Never add a new numbered action for the next leg
-of a conversation he is already in, because the numbers are how he refers to his
-work all afternoon.
+then edit that item on the board with the new draft and a `progress_note` saying
+what already happened. Never add a new number for the next leg of a conversation
+he is already in, because the numbers are how he refers to his work.
 
-Read `state/progress-<today>.json` before answering "what's left". If Rei
-mentions doing something that is not on the list, say so rather than inventing a
-number for it. The pages show status but cannot change it, so the state file is
-the only truth about what is closed.
+Read the board before answering "what's left". If Rei mentions doing something
+that is not on it, say so rather than inventing a number. The pages show status
+but cannot change it; the board is the only truth about what is closed.
 
 ## Hard rules that carry over from the source material
 
@@ -99,19 +102,20 @@ the only truth about what is closed.
    with the reading on the whole word, never per character.
 6. **Never invent a source.** If you cannot quote the message something came
    from, say you could not find it.
-7. **Respect a hold.** When the list marks an action "do not send this yet", do
-   not draft around it or send it because Rei asked casually. Say what it is
-   waiting on and confirm he wants to override.
+7. **Respect a hold.** When an item says "do not send this yet", do not draft
+   around it or send it because Rei asked casually. Say what it is waiting on and
+   confirm he wants to override.
 
 ## Changing what lands on the pages
 
-Edit the prompts, not the output. `prompt.md` drives the morning page and
-`prompt-post.md` the afternoon one; the schema at the bottom of each is the
-contract the renderers expect. If you add a field, update the matching renderer
-in the same change, and check both `render_post.py` and `render_md.py` for the
-afternoon page.
+Edit the prompts, not the output. `prompt.md` drives the morning prep page,
+`prompt-post.md` folds the standup into the board, and `prompt-refresh.md` is
+the sweep behind "refresh". The schema in `prompt-post.md` and the shape in
+`board.py` are the contract the renderers expect, so if you add a field, update
+`render_desk.py` and `render_desk_md.py` in the same change.
 
-Do not hand-edit files in `output/`. They are regenerated.
+Do not hand-edit files in `output/`. They are regenerated from the board on
+every page load.
 
 ## House style for this repo
 

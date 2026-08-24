@@ -1,19 +1,20 @@
 #!/bin/zsh
-# One command for the standup list, from the terminal or the Dock.
+# One command for the TG billing work, from the terminal or the Dock.
 #
-#   tg                  open today's page, print where everything sits
+#   tg                  open the desk, print where everything sits
 #   tg s                print status only, costs nothing
-#   tg 4                action 4 is finished
+#   tg 4                item 4 is finished
 #   tg 2 -w Kevin       sent, now sitting with Kevin
 #   tg 2 --mine         he replied, it is yours again
 #   tg 5 --dropped -n "TG answered it themselves"
-#   tg refresh          go and see what moved, rebuild, open
+#   tg refresh          sweep every open ticket and thread, rebuild, open
 #   tg chat             open the folder in Cursor to hand work over
-#   tg build            full rebuild from the Notion meeting note
+#   tg build            rebuild the desk page from the board
+#   tg post             rebuild from today's Notion meeting note
 #   tg stop             shut the local page server down
 #
 # Anything numeric goes straight to tick.py, so the numbers you see on the page
-# are the numbers you type.
+# are the numbers you type. They belong to the item until it closes.
 
 set -uo pipefail
 
@@ -23,11 +24,7 @@ cd "$REPO" || { print -u2 "no repo at $REPO"; exit 1 }
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 export TZ="Asia/Tokyo"
 
-latest() {
-  local f
-  f=(output/post-*.json(Nn))
-  [[ ${#f} -gt 0 ]] && print -r -- "${f[-1]}"
-}
+BOARD="state/board.json"
 
 PORT="${TG_DESK_PORT:-8787}"
 CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
@@ -50,10 +47,7 @@ serve_url() {
 }
 
 page() {
-  local json="$(latest)"
-  [[ -n "$json" ]] || { print -u2 "no list built yet, run: tg build"; return 1 }
-  local built="${${json:t:r}#post-}"
-  [[ "$built" == "$(date +%Y-%m-%d)" ]] || print -r -- "Showing $built, no list for today yet."
+  [[ -f "$BOARD" ]] || { print -u2 "no board yet, run: tg build"; return 1 }
 
   local url
   if url="$(serve_url)"; then
@@ -67,9 +61,9 @@ page() {
   fi
 
   print -u2 "desk server would not start, opening the file instead"
-  python3 render_post.py "$json" "${json:r}.html" >/dev/null || return 1
-  python3 render_md.py "$json" "${json:r}.md" >/dev/null
-  open "${json:r}.html"
+  python3 render_desk.py "$BOARD" output/desk.html >/dev/null || return 1
+  python3 render_desk_md.py "$BOARD" output/desk.md >/dev/null
+  open output/desk.html
 }
 
 stop_server() {
@@ -92,7 +86,10 @@ case "${1:-}" in
     page ;;
   chat)          open -a Cursor "$REPO" ;;
   stop)          stop_server ;;
-  build)         ./run_post.sh --force ;;
+  build)
+    python3 render_desk.py "$BOARD" output/desk.html || exit 1
+    python3 render_desk_md.py "$BOARD" output/desk.md ;;
+  post)          ./run_post.sh --force ;;
   prep)          ./run_prep.sh ;;
   open)          page ;;
   -h|--help|help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' ;;

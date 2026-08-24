@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Build the post-standup action list and open it in the browser.
+# Fold today's standup into the board, then open the desk.
 #
 #   ./run_post.sh            normal run, skips if today's page already exists
 #   ./run_post.sh --force    rebuild even if today's page exists
@@ -30,8 +30,8 @@ for arg in "$@"; do
 done
 
 TODAY="$(date +%Y-%m-%d)"
-JSON="output/post-$TODAY.json"
-HTML="output/post-$TODAY.html"
+BOARD="state/board.json"
+HTML="output/desk.html"
 LOG="logs/run.log"
 AGENT_LOG="logs/agent-post-$TODAY.log"
 TIMEOUT_SECS="${POST_TIMEOUT:-900}"
@@ -44,18 +44,12 @@ log() { print -r -- "[$(date '+%Y-%m-%d %H:%M:%S')] post: $*" | tee -a "$LOG"; }
 
 fail() {
   log "FAILED: $1"
-  python3 render_post.py --error "$1
+  python3 render_desk.py --error "$1
 
 Agent log: $DIR/$AGENT_LOG" "$HTML"
   [[ $OPEN -eq 1 ]] && open "$HTML"
   exit 1
 }
-
-if [[ -f "$HTML" && $FORCE -eq 0 ]]; then
-  log "already built for $TODAY, opening existing page (use --force to rebuild)"
-  [[ $OPEN -eq 1 ]] && open "$HTML"
-  exit 0
-fi
 
 command -v cursor-agent >/dev/null 2>&1 || fail "cursor-agent is not on PATH"
 
@@ -66,25 +60,30 @@ fi
 MODEL_ARG=()
 [[ -n "${POST_MODEL:-}" ]] && MODEL_ARG=(--model "$POST_MODEL")
 
-# True when the JSON exists and reports that the meeting note was found.
+# True when the board has already taken in today's meeting note.
 note_found() {
-  [[ -f "$JSON" ]] || return 1
-  python3 - "$JSON" <<'PY'
+  [[ -f "$BOARD" ]] || return 1
+  python3 -c '
 import json, sys
 try:
     with open(sys.argv[1], encoding="utf-8") as fh:
-        data = json.load(fh)
+        note = json.load(fh).get("meeting_note") or {}
 except (OSError, json.JSONDecodeError):
     sys.exit(1)
-sys.exit(0 if data.get("note_found") else 1)
-PY
+sys.exit(0 if note.get("found") and note.get("date") == sys.argv[2] else 1)
+' "$BOARD" "$TODAY"
 }
+
+if note_found && [[ $FORCE -eq 0 ]]; then
+  log "today's note is already on the board, opening the desk (use --force to redo)"
+  [[ $OPEN -eq 1 ]] && open "$HTML"
+  exit 0
+fi
 
 attempt=0
 while true; do
   attempt=$((attempt + 1))
   log "attempt $attempt, looking for today's meeting note"
-  rm -f "$JSON"
 
   cursor-agent \
     --print \
@@ -103,7 +102,7 @@ while true; do
   AGENT_RC=$?
   kill $WATCHDOG 2>/dev/null
 
-  [[ -f "$JSON" ]] || fail "the agent finished (exit $AGENT_RC) without writing $JSON"
+  [[ -f "$BOARD" ]] || fail "the agent finished (exit $AGENT_RC) without writing $BOARD"
 
   if note_found; then
     log "meeting note found on attempt $attempt"
@@ -122,19 +121,19 @@ while true; do
   sleep "$RETRY_SECS"
 done
 
-if ! python3 render_post.py "$JSON" "$HTML" >>"$LOG" 2>&1; then
-  fail "could not render $JSON into HTML. See $LOG"
+if ! python3 render_desk.py "$BOARD" "$HTML" >>"$LOG" 2>&1; then
+  fail "could not render $BOARD into HTML. See $LOG"
 fi
 
 # The markdown is the version a Cursor chat reads when handing work back.
-if ! python3 render_md.py "$JSON" "output/post-$TODAY.md" >>"$LOG" 2>&1; then
+if ! python3 render_desk_md.py "$BOARD" "output/desk.md" >>"$LOG" 2>&1; then
   log "WARNING: markdown render failed, HTML page is still fine"
 fi
 
 # Actions into Reminders, due today, or on the chase date when they are held.
 # Opt in with POST_REMIND=1; needs Reminders access granted once.
 if [[ "${POST_REMIND:-0}" == "1" ]]; then
-  if ! python3 remind.py "$JSON" >>"$LOG" 2>&1; then
+  if ! python3 remind.py "$BOARD" >>"$LOG" 2>&1; then
     log "WARNING: could not push reminders"
   fi
 fi

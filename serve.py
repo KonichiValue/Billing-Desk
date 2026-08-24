@@ -34,22 +34,20 @@ job = {"state": "idle", "message": "", "at": ""}
 job_lock = threading.Lock()
 
 
-def latest_json() -> Path | None:
-    found = sorted((ROOT / "output").glob("post-*.json"))
-    return found[-1] if found else None
+BOARD = ROOT / "state" / "board.json"
 
 
-def rebuild(report: Path) -> str:
-    """Render the page and hand back the HTML, so a load is always current."""
-    html = report.with_suffix(".html")
+def rebuild() -> str:
+    """Render the desk and hand back the HTML, so a load is always current."""
+    html = ROOT / "output" / "desk.html"
     subprocess.run(
-        [sys.executable, "render_post.py", str(report), str(html)],
+        [sys.executable, "render_desk.py", str(BOARD), str(html)],
         cwd=ROOT,
         check=True,
         stdout=subprocess.DEVNULL,
     )
     subprocess.run(
-        [sys.executable, "render_md.py", str(report), str(report.with_suffix(".md"))],
+        [sys.executable, "render_desk_md.py", str(BOARD), str(ROOT / "output/desk.md")],
         cwd=ROOT,
         check=False,
         stdout=subprocess.DEVNULL,
@@ -131,12 +129,11 @@ class Handler(BaseHTTPRequestHandler):
                 self.json_out(200, dict(job))
             return
         if path in ("/", "/index.html"):
-            report = latest_json()
-            if report is None:
-                self.send(404, b"No list built yet. Run: tg build", "text/plain")
+            if not BOARD.exists():
+                self.send(404, b"No board yet. Run: tg build", "text/plain")
                 return
             try:
-                html = rebuild(report)
+                html = rebuild()
             except subprocess.CalledProcessError as exc:
                 self.send(500, f"render failed: {exc}".encode(), "text/plain")
                 return

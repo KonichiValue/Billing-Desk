@@ -1,61 +1,90 @@
-# Refresh today's standup list
+# Bring the board up to date
 
-Go and see what has moved since the page was last built, then rebuild it. Do
-this and nothing else. This is the routine behind the word "refresh" in a chat
-and behind `tg refresh` in the terminal, so both cost the same.
+Go and see what has moved, fold it into `state/board.json`, rebuild the page.
+This is the routine behind the word "refresh" in a chat, behind `tg refresh` in
+the terminal, and behind the Refresh button on the page, so all three cost the
+same.
 
 Tool names below are indicative. Use whatever equivalents you have for Asana,
 Slack and Notion.
 
+## What the board is
+
+`state/board.json` is the only durable file, and `board.py` documents its shape.
+It holds every open TG billing ticket assigned to Rei and every item of work on
+those tickets. Items keep their number until they are closed, so "do 4" means
+the same thing next week. Never renumber, never reuse a number, never rewrite
+history that has already happened.
+
 ## 1. Read where things stand
 
-Read `output/post-<today>.json` and `state/progress-<today>.json`. If there is
-no list for today, read the most recent `output/post-*.json` and say which day
-you are working from. Note the timestamp of the last entry in each ticket's
-`changed_today`, because that is the line you are checking forward from.
+Read `state/board.json`. Note, per ticket, the timestamp of the last entry in
+`events`: that is the line you are checking forward from. Note which items are
+`todo`, `hold` or `waiting`, and who each waiting item sits with.
 
-## 2. Check only what the open actions point at
+## 2. Sweep every open ticket
 
-For every action that is not finished:
+Asana first, because the board should match it:
 
-- New comments on that ticket in Asana, after the last timeline entry.
-- New replies in the Slack threads listed under the ticket's `threads`.
+- Every incomplete task assigned to Rei in `インシデント（TG Shared）` and
+  `Billing 2-Week Cycle [TG shared]`. That is the ticket set. A ticket that is
+  open in Asana belongs on the board even when nothing needs him today.
+- For each ticket, refresh `asana`: `status`, `section`, `priority`, `category`,
+  `assignee`. These are what Asana says, not your reading of it.
+- New tickets since the last sweep get added, with `where_it_stands`, `terms`
+  and `threads` filled in the same way the morning prep does it.
+- A ticket completed in Asana, or reassigned away from Rei, comes off the board.
+  Close its open items as `dropped` with a note saying why.
+
+Check `modified_at` before pulling comment bodies, so an unchanged ticket costs
+one call.
+
+## 3. Then the conversations
+
+- New replies in every thread listed under each ticket's `threads`.
+- Slack messages that mention Rei and have no reply from him, in the channels
+  those threads live in. If one belongs to a ticket on the board, attach it as a
+  thread and give it an item. If it belongs to no ticket, still give it an item
+  on the closest ticket and say so in the item's `why`.
 - The internal build ticket, when TG is waiting on a build.
 
-Nothing else. Do not re-read closed actions, do not re-read the meeting note,
-and do not go looking for new tickets; the morning run does that. Check comment
-timestamps before pulling comment bodies, so an unchanged ticket costs one call.
+Do not re-read closed items and do not re-read the meeting note.
 
-## 3. Put what you found in the timeline
+## 4. Put what you found in the timeline
 
-Add each new event to that ticket's `changed_today`, in time order, with `at`,
-`who`, `what`, `so_what` and `source_url`. Rei's own messages go in as "You".
-Leave `so_what` empty unless the event changes what he does.
+Add each new event to that ticket's `events`, in time order, with `on`
+(YYYY-MM-DD), `at` (HH:MM), `who`, `what`, `so_what`, `where` and `source_url`.
+Rei's own messages go in as "You". Leave `so_what` empty unless the event
+changes what he does.
 
-## 4. Move the actions those events affect
+## 5. Move the items those events affect
 
-- Someone answered something he sent: the action comes back on the same number.
-  Rewrite the `draft` for the reply and add a `progress_note` saying what
-  already happened. Do not create a new number for the next leg of a
-  conversation he is already in.
-- The thing an action was held for has happened: drop the `hold`.
-- He sent something and the page did not know: `./tick.py <n> -w "<who>"` when a
-  reply is expected, `./tick.py <n> --sent` when nothing comes back.
-- Genuinely new work takes the next free number.
+- Someone answered something he sent: the item comes back to `todo` on the same
+  number. Rewrite its `draft` for the reply and put what already happened in
+  `progress_note`. Never open a new number for the next leg of a conversation
+  he is already in.
+- The thing an item was held for has happened: drop the `hold`, set `todo`.
+- He sent something and the board did not know: `state` becomes `waiting` with
+  `waits_on` filled in, or `sent` when nothing comes back.
+- Genuinely new work takes `next_id` and increments it.
+- Nothing moved on an item: leave it exactly as it is.
 
-## 5. Rebuild
+Set `checked_at` to now, in ISO 8601 with the offset.
+
+## 6. Rebuild
 
 ```
-python3 render_post.py output/post-<date>.json output/post-<date>.html
-python3 render_md.py   output/post-<date>.json output/post-<date>.md
+python3 render_desk.py    state/board.json output/desk.html
+python3 render_desk_md.py state/board.json output/desk.md
 ```
 
-`tg refresh` opens the page itself, so do not open it again.
+`tg refresh` and the Refresh button open the page themselves, so do not open it
+again.
 
-## 6. Say what changed, briefly
+## 7. Say what changed, briefly
 
 A few lines on what moved and what it means for the list. If nothing moved, say
-so in one line and stop. Never restate the whole list back to him.
+so in one line and stop. Never restate the whole board back to him.
 
 The rules in `AGENTS.md` apply throughout, particularly: never send anything,
 and never draft around a hold.

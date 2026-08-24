@@ -1,23 +1,31 @@
 # TG billing desk
 
-Where the Tokyo Gas billing work sits all day: two generated pages, a tracked
-list of what is with you and what is with somebody else, and a Dock app that
-opens the current state. Both pages are self-contained HTML.
+The to-do list for the Tokyo Gas billing work. Every ticket open in your name in
+the two TG Asana projects, the Slack threads it is argued out in, what has
+happened on it, and the numbered work it has left. A Dock app opens it, a
+Refresh button brings it up to date, and the numbers stay put.
 
-| | When | What it answers |
+**The board is the product.** `state/board.json` holds the tickets and the
+items; `board.py` documents it. An item is with you, with somebody else, or
+finished, and it keeps its number until it closes, so "do 4" means the same
+thing next week. Everything else in the repo either writes to the board or draws
+it.
+
+Two scheduled runs feed it, because the standup is the day's forcing function:
+
+| | When | What it does |
 |---|---|---|
-| **Morning prep** | 09:10, Mon/Wed/Thu | What do I need to know and say at 10:30? |
-| **Post-standup list** | from 11:00, same days | What do I do now, in what order? |
+| **Morning prep** | 09:10, Mon/Wed/Thu | A separate briefing page: what to know and say at 10:30. |
+| **Standup fold-in** | from 11:00, same days | Reads the meeting note and moves the board. |
 
 The split is deliberate. Before the standup you have 30 minutes and you spend
 them reading, so the morning page is for preparing, not working. Replies,
-investigation and ticket updates all wait for the afternoon page.
+investigation and ticket updates wait for the desk.
 
-The afternoon page is also written as markdown, `output/post-<date>.md`. That is
-the version to hand work back from: open a Cursor chat in this repo and say
-"draft the reply to Nakayama-san" or "check the codebase for X", and `AGENTS.md`
-points the agent at today's file so it starts with the full picture. The HTML is
-for reading, the markdown is for delegating, and both come from the same JSON.
+The desk is written twice: `output/desk.html` to read, `output/desk.md` to hand
+work back from. Open a Cursor chat in this repo and say "draft the reply to
+Nakayama-san" or "check the codebase for X", and `AGENTS.md` points the agent at
+the markdown so it starts with the full picture.
 
 ## Morning prep
 
@@ -46,7 +54,7 @@ TG will raise it at 10:30 and you cannot answer cold.
 
 `PREP_MODEL` picks a model. `PREP_TIMEOUT` changes the watchdog, default 900.
 
-## Post-standup list
+## The standup fold-in
 
 1. Finds today's `Billing Stand Up` meeting note in Notion and reads both the
    summary and the **full transcript**. The transcript is the valuable half:
@@ -57,17 +65,17 @@ TG will raise it at 10:30 and you cannot answer cold.
    Heqing DM. Threads get read in full, because a reversal lands in reply 30 and
    an engineer saying "actually this is harder than I thought" outranks anything
    said in the room.
-4. Ranks everything by what happens if you do nothing today, commitments made in
-   front of TG first.
-5. Records anything other people owe you, with a chase date, and the forks nobody
-   has been assigned to decide.
-6. Writes the replies you now owe, each one sitting inside the action it belongs
+4. Opens new items for what the meeting created, and moves the ones it answered.
+   Existing numbers are reused, never reassigned.
+5. Records anything other people owe you on the item it blocks, with a chase
+   date, so there is no second list of waits to reconcile.
+6. Writes the replies you now owe, each one sitting inside the item it belongs
    to.
 
-**Everything is grouped by ticket.** One block per ticket holds where it stands,
-what changed today, what to do, the drafts, who you are waiting on, what is
-undecided, and every thread it lives in. The only cross-ticket structure is the
-running order at the top, which tells you which ticket to open first.
+**Everything is grouped by ticket.** One block per ticket holds its Asana status,
+where it stands, the timeline, the items, the drafts, what is undecided and every
+thread it lives in. The only cross-ticket structure is the running order at the
+top, which the page derives rather than anyone writing.
 
 The Notion note lands about five minutes after the meeting ends, but meetings
 overrun. So each attempt is a cheap agent run that exits immediately when the
@@ -75,16 +83,12 @@ note is missing, and the runner retries every five minutes until 11:45.
 
 ```sh
 ./run_post.sh            # polls until the note appears
-./run_post.sh --force    # rebuild today's list
+./run_post.sh --force    # fold today's note in again
 ./run_post.sh --once     # single attempt, fail if the note isn't up yet
 ```
 
 `POST_MODEL`, `POST_TIMEOUT` (900), `POST_DEADLINE` (11:45) and `POST_RETRY`
 (300 seconds) all override.
-
-Every action has one number, unique across the page, and the running order is
-built from those numbers rather than written separately. So "do 4" always means
-the same thing, and the table and the ticket sections cannot disagree.
 
 ## Getting at it during the day
 
@@ -105,28 +109,28 @@ failing quietly. Opening the HTML file directly still works and simply has no
 button, since a `file://` page has nothing to send the click to.
 
 ```
-tg              open the page, print where everything sits
+tg              open the desk, print where everything sits
 tg s            status only, costs nothing
-tg 4            action 4 is finished
+tg 4            item 4 is finished
 tg 2 -w Kevin   sent, now sitting with Kevin
 tg 2 --mine     he replied, it is yours again
-tg refresh      go and see what moved, rebuild, open
+tg refresh      sweep every open ticket and thread, rebuild, open
 tg chat         open the folder in Cursor to hand work over
-tg build        full rebuild from the Notion meeting note
+tg build        re-render the page from the board, no agent
+tg post         fold today's Notion meeting note in again
 ```
 
 `refresh` also works as a single word typed into a Cursor chat on this folder.
 Both routes run `prompt-refresh.md`, so the answer does not depend on which one
-you used: it checks only the sources the open actions point at, adds what it
-finds to each ticket's timeline, moves the actions those events affect, and
-rebuilds. It will not reopen closed actions or start the day again. For that,
-`tg build`, which throws away the day's hand edits.
+you used: it sweeps every ticket still open in Asana, reads the threads behind
+your open items, adds what it finds to each ticket's timeline, and moves the
+items those events affect. It never reopens a closed item and never renumbers.
 
 ## Keeping the list honest
 
-An action is with you, with somebody else, or finished. Sending a message
-usually moves it to the middle one, because the reply comes back on the same
-number and the work is not over.
+An item is with you, with somebody else, or finished. Sending a message usually
+moves it to the middle one, because the reply comes back on the same number and
+the work is not over.
 
 ```sh
 ./tick.py                            # where everything is
@@ -137,10 +141,10 @@ number and the work is not over.
 ./tick.py 1 --undo                   # forget the state entirely
 ```
 
-Both pages open with **Where you are**: one checklist, yours at the top, then
-what you are not allowed to send yet, then what sits with someone else, then
-what is finished. Each line carries how it got there, so a waiting row says who
-has it and since when. The minutes count only the work still with you.
+The desk opens with **Where you are**: one list, yours at the top, then what you
+are not allowed to send yet, then what sits with someone else. Finished work
+folds away behind a count. Each line carries how it got there, so a waiting row
+says who has it and since when, and the minutes count only what is still yours.
 
 The pages are read-only about status, deliberately. A page opened from disk
 cannot write to disk, so a checkbox on it could only ever remember a tick inside
@@ -148,22 +152,22 @@ one browser, and a control that looks authoritative while the chat and the state
 file know nothing about it is worse than no control. Close things by saying so in
 chat, or with `tick.py`.
 
-Progress lives in `state/progress-<date>.json`, not in the report, so
-regenerating the report keeps it. That file is also how a chat in this repo knows
-where you are without you explaining: `AGENTS.md` tells the agent to run
-`./tick.py` rather than editing the page by hand.
+State lives on the item in `state/board.json`, so rebuilding a page never loses
+it and nothing has to be reconciled across days. That file is also how a chat in
+this repo knows where you are without you explaining: `AGENTS.md` tells the agent
+to run `./tick.py` rather than editing a page by hand.
 
 ## Reminders
 
-`POST_REMIND=1` pushes the actions into an Apple Reminders list called
-`TG standup` at the end of a run. Anything actionable is due that day, anything
-held is due on its chase date and titled "(waiting)". The note carries the why,
-the link and the draft. Re-running replaces that day's reminders rather than
-duplicating them.
+`POST_REMIND=1` pushes the open items into an Apple Reminders list called
+`TG billing` at the end of a run. Anything with you is due that day, anything
+held or sitting with someone else is due on its chase date and says so in the
+title. The note carries the why, the link and the draft. Finished items are
+skipped, and re-running replaces the list rather than duplicating it.
 
 ```sh
-python3 remind.py output/post-2026-08-24.json --dry-run
-python3 remind.py output/post-2026-08-24.json --list "Work"
+python3 remind.py state/board.json --dry-run
+python3 remind.py state/board.json --list "Work"
 ```
 
 macOS asks for Reminders access the first time, so run it once by hand before
@@ -190,9 +194,10 @@ If the agent is not confident about the date it writes nothing and flags it in
 - The amber **Check before 10:30** box holds unknowns and hard cautions,
   including anything you must not say to TG.
 - **Script only** strips the morning page back to the Japanese at a larger size.
-- On the afternoon page, the running order links straight down to the ticket, a
-  red action border means you committed to it out loud, and a draft always sits
-  inside the action that needs it.
+- On the desk, the running order links straight down to the ticket, each ticket
+  header carries what Asana currently says about it, a red border means you
+  committed to it out loud, and a draft always sits inside the item that needs
+  it. Anything not with you is folded shut.
 - Both pages are plain HTML. Keep them, mail them, print them.
 
 ## Pieces
@@ -200,23 +205,24 @@ If the agent is not confident about the date it writes nothing and flags it in
 | File | What it is |
 |---|---|
 | `prompt.md` | Morning agent instructions and output schema. |
-| `prompt-post.md` | Post-standup agent instructions and output schema. |
+| `prompt-post.md` | How the standup gets folded into the board, plus the board schema. |
 | `AGENTS.md` | How a Cursor chat in this repo picks up today's list and acts on it. |
 | `config.json` | Project GIDs, user GIDs, meeting time, Slack channel hints. |
-| `render.py` | Morning JSON into HTML, plus the shared CSS, the error page and the cancelled-standup notice. No network, no LLM. |
-| `render_post.py` | Post-standup JSON into HTML. Imports the shared styling from `render.py`. |
-| `render_md.py` | Post-standup JSON into markdown, for handing work back in chat. |
-| `tick.py` | Close actions and rebuild both pages. The only way progress gets recorded. |
+| `board.py` | The board: what it holds, how state moves, where numbers come from. |
+| `render.py` | Morning JSON into HTML, plus the shared CSS, the lifecycle and the error page. No network, no LLM. |
+| `render_desk.py` | The board into `output/desk.html`. |
+| `render_desk_md.py` | The board into `output/desk.md`, for handing work back in chat. |
+| `tick.py` | Move items along and rebuild. The only way state gets recorded. |
 | `serve.py` | The local page server: renders on every load, and runs the agent when the Refresh button asks. Loopback only, keyed. |
-| `bin/tg` | The one command. Opens the window, moves actions along, starts a refresh. |
+| `bin/tg` | The one command. Opens the window, moves items along, starts a refresh. |
 | `install.sh` | Links `tg` and builds the Dock app. Safe to rerun. |
 | `prompt-refresh.md` | What "refresh" means, for the button and for a chat alike. |
 | `app/` | The icon generator and the Tokyo Gas mark. The Kraken mark is read from `~/Projects/kraken-core` at build time. |
 | `run_prep.sh` | Morning entry point. Guards, skip check, timeout, error page. |
-| `run_post.sh` | Afternoon entry point. Polls for the Notion note. |
+| `run_post.sh` | Afternoon entry point. Polls for the Notion note, then folds it in. |
 | `launchd/` | The two schedules. |
-| `output/` | Per day: the morning JSON and HTML, the afternoon JSON, HTML and markdown. |
-| `state/` | `skip-next.json` when a standup has been cancelled, `progress-<date>.json` for what you have closed, `open-loops.json` for holds carried across days. |
+| `output/` | `desk.html` and `desk.md`, both rendered from the board, plus the morning prep pages. |
+| `state/` | `board.json`, the one durable file, and `skip-next.json` when a standup has been cancelled. |
 | `logs/` | `run.log` for both runners, `agent-<date>.log` and `agent-post-<date>.log` for raw agent transcripts. |
 
 ## Furigana markup
@@ -259,8 +265,8 @@ POST_MODEL=gpt-5.6-sol-high ./run_post.sh --force
 The prompts name the Asana, Slack and Notion tools as those MCP servers expose
 them today, and both say to use the equivalent if a toolset names them
 differently rather than skipping the step. The renderers and `tick.py` are plain
-Python with no model involved at all, so a page can always be rebuilt from its
-JSON.
+Python with no model involved at all, so the desk can always be rebuilt from the
+board.
 
 `CLAUDE.md` and `GEMINI.md` are symlinks to `AGENTS.md`, so an assistant that
 looks for its own filename finds the same instructions.

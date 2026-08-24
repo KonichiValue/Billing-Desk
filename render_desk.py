@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Render the post-standup JSON into a single self-contained HTML page.
+"""Render the board into the desk page: one self-contained HTML file.
 
 Everything is grouped by ticket, because that is how the work gets done. The
-only cross-ticket structure is the running order at the top.
+only cross-ticket structure is the running order at the top, which is the list
+Rei actually works from.
 
 Usage:
-    python3 render_post.py output/post-2026-08-24.json output/post-2026-08-24.html
-    python3 render_post.py --error "message" output/post-2026-08-24.html
+    python3 render_desk.py state/board.json output/desk.html
+    python3 render_desk.py --error "message" output/desk.html
 """
 
 from __future__ import annotations
@@ -21,21 +22,14 @@ from pathlib import Path
 from render import (
     CSS,
     JS,
-    action_state,
     esc,
     furi,
+    item_state as state_of,
     link_btn,
-    load_progress,
     pill,
     plain,
     tracked,
 )
-
-PROGRESS: dict = {}
-
-
-def state_of(action: dict) -> dict:
-    return action_state(PROGRESS, action)
 
 EXTRA_CSS = """
 .panel{background:var(--card);border:1px solid var(--line);border-radius:12px}
@@ -61,7 +55,15 @@ padding:22px;margin-bottom:22px;scroll-margin-top:80px}
 font-size:12.5px;color:var(--soft)}
 .tk-int{margin:9px 0 0;font-size:12.5px;color:var(--soft)}
 .tk-int b{color:#b54708;font-weight:650}
-.silent{color:#b54708;font-weight:600}
+.tk-chip{font-size:12px;font-weight:600;padding:3px 9px;border-radius:6px;
+background:#f2f4f7;color:var(--mut)}
+.tk-chip.warn{background:#fef3f2;color:#b42318}
+.track-closed>summary{cursor:pointer;padding:10px 18px;font-size:12.5px;
+font-weight:650;color:var(--soft);border-top:1px solid var(--line)}
+.evs-earlier{margin:0 0 12px}
+.evs-earlier>summary{cursor:pointer;font-size:12.5px;font-weight:650;
+color:var(--soft);padding:6px 0}
+.evs-earlier .evs{margin-top:8px}
 .thr{list-style:none;margin:0;padding:0;display:grid;gap:1px;background:var(--line);
 border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .thr li{background:#fff;padding:10px 13px;display:flex;gap:12px;
@@ -247,29 +249,32 @@ def sub_line(st: dict) -> str:
     return " &middot; ".join(esc(b) for b in bits)
 
 
-def render_track(tickets: list[dict], refs: dict[str, str]) -> str:
-    """The one list Rei works from all afternoon: what is his, what is not."""
-    rows = tracked(tickets, PROGRESS)
-    if not rows:
-        return '<div class="panel" style="padding:18px 22px"><p class="empty">Nothing came out of this standup that needs action from you.</p></div>'
-
-    counts = {"todo": 0, "hold": 0, "waiting": 0, "closed": 0}
-    out = []
-    for ref, a, st in rows:
-        counts["closed" if st["closed"] else st["state"]] += 1
-        mins = a.get("est_minutes")
-        sub = sub_line(st)
-        out.append(
-            f"""
+def track_row(ref: str, item: dict, st: dict, refs: dict[str, str]) -> str:
+    mins = item.get("est_minutes")
+    sub = sub_line(st)
+    return f"""
       <li class="tr {"shut" if st["closed"] else ""}">
-        <span class="tr-rank">{esc(a.get("rank", "-"))}</span>
+        <span class="tr-rank">{esc(item.get("id", "-"))}</span>
         <span class="tr-tag">{esc(ref)}</span>
-        <a class="tr-title" href="#{esc(refs.get(ref, anchor(ref)))}">{esc(a.get("title"))}
+        <a class="tr-title" href="#{esc(refs.get(ref, anchor(ref)))}">{esc(item.get("title"))}
           {f'<span class="tr-note">{sub}</span>' if sub else ""}</a>
         {pill(st["label"], st["tone"])}
         <span class="tr-min">{f"{esc(mins)} min" if mins and not st["closed"] else ""}</span>
       </li>"""
-        )
+
+
+def render_track(tickets: list[dict], refs: dict[str, str]) -> str:
+    """The one list Rei works from: what is his, what is not, what is finished."""
+    rows = tracked(tickets)
+    if not rows:
+        return ('<div class="panel" style="padding:18px 22px"><p class="empty">'
+                "Nothing open across any ticket. Enjoy it.</p></div>")
+
+    counts = {"todo": 0, "hold": 0, "waiting": 0, "closed": 0}
+    live, shut = [], []
+    for ref, item, st in rows:
+        counts["closed" if st["closed"] else st["state"]] += 1
+        (shut if st["closed"] else live).append(track_row(ref, item, st, refs))
 
     summary = ", ".join(
         f"{n} {word}"
@@ -281,10 +286,21 @@ def render_track(tickets: list[dict], refs: dict[str, str]) -> str:
         )
         if n
     )
+    # Finished work folds away by default. It is a record, not a list.
+    closed_block = (
+        f"""
+    <details class="track-closed">
+      <summary>{len(shut)} finished</summary>
+      <ul style="list-style:none;margin:0;padding:0">{"".join(shut)}</ul>
+    </details>"""
+        if shut
+        else ""
+    )
     return f"""
   <div class="track">
     <div class="track-head"><h2>Where you are</h2><span>{esc(summary)}</span></div>
-    <ul style="list-style:none;margin:0;padding:0">{"".join(out)}</ul>
+    <ul style="list-style:none;margin:0;padding:0">{"".join(live)}</ul>
+    {closed_block}
   </div>"""
 
 
@@ -328,17 +344,12 @@ def render_threads(rows: list[dict]) -> str:
       </section>"""
 
 
-def render_changed(rows: list[dict], started: str) -> str:
-    """One chronological thread. Where it stood, then each move, in order."""
-    if not rows and not started:
-        return ""
-    out = []
-    for r in sorted(rows, key=lambda x: x.get("at", "")):
-        src = r.get("source_url", "")
-        out.append(
-            f"""
+def event_li(r: dict, show_date: bool) -> str:
+    src = r.get("source_url", "")
+    when = f'{r.get("on", "")[5:]} {r.get("at", "")}' if show_date else r.get("at", "")
+    return f"""
         <li class="ev">
-          <span class="ev-at">{esc(r.get("at", ""))}</span>
+          <span class="ev-at">{esc(when)}</span>
           <span class="ev-body">
             <span class="ev-who">{esc(r.get("who", ""))}</span>
             <span class="ev-what">{esc(r.get("what"))}</span>
@@ -346,17 +357,35 @@ def render_changed(rows: list[dict], started: str) -> str:
             <span class="ev-src">{esc(r.get("where", ""))} {link_btn(src, "Source") if src else ""}</span>
           </span>
         </li>"""
-        )
-    start = (
-        f'<p class="ev-start"><b>Where it stood this morning</b>{esc(started)}</p>'
-        if started
-        else ""
+
+
+def render_events(rows: list[dict]) -> str:
+    """One chronological thread per ticket. Today open, earlier folded."""
+    if not rows:
+        return ""
+    today = date.today().isoformat()
+    ordered = sorted(rows, key=lambda x: (x.get("on", ""), x.get("at", "")))
+    now = [r for r in ordered if r.get("on") == today]
+    before = [r for r in ordered if r.get("on") != today]
+
+    earlier = ""
+    if before:
+        earlier = f"""
+        <details class="evs-earlier">
+          <summary>{len(before)} earlier {"move" if len(before) == 1 else "moves"}</summary>
+          <ol class="evs">{"".join(event_li(r, True) for r in before)}</ol>
+        </details>"""
+    heading = "Today, in order" if now else "How this got here"
+    body = (
+        f'<ol class="evs">{"".join(event_li(r, False) for r in now)}</ol>'
+        if now
+        else '<p class="empty">Nothing moved today.</p>'
     )
     return f"""
       <section class="sub">
-        <h3>How today went, in order</h3>
-        {start}
-        <ol class="evs">{"".join(out)}</ol>
+        <h3>{heading}</h3>
+        {earlier}
+        {body}
       </section>"""
 
 
@@ -391,15 +420,16 @@ def render_draft(d: dict, st: dict | None = None) -> str:
     return f'<div class="act-draft">{inner}</div>'
 
 
-def render_actions(rows: list[dict]) -> str:
+def render_items(rows: list[dict]) -> str:
     if not rows:
         return """
       <section class="sub">
-        <h3>Actions</h3>
-        <p class="empty">Nothing to do on this one right now.</p>
+        <h3>Items</h3>
+        <p class="empty">Nothing on this one needs you. It is here because it is
+        still open in Asana.</p>
       </section>"""
     out = []
-    for r in sorted(rows, key=lambda x: (state_of(x)["order"], x.get("rank", 99))):
+    for r in sorted(rows, key=lambda x: (state_of(x)["order"], x.get("id", 99))):
         detail = "".join(f"<li>{esc(b)}</li>" for b in r.get("detail", []))
         mins = r.get("est_minutes")
         committed = r.get("committed_to")
@@ -446,7 +476,7 @@ def render_actions(rows: list[dict]) -> str:
             f"""
         <{tag} class="act {st["state"]} {"held" if hold and not done else ""} {"commit" if committed else ""}"{attrs}>
           <{head_tag} class="act-head">
-            <span class="act-rank">{esc(r.get("rank", "-"))}</span>
+            <span class="act-rank">{esc(r.get("id", "-"))}</span>
             <span class="act-title">{esc(r.get("title"))}
               {f'<span class="act-sub">{sub}</span>' if sub and not active else ""}</span>
             {state_pill}
@@ -470,7 +500,7 @@ def render_actions(rows: list[dict]) -> str:
         )
     return f"""
       <section class="sub">
-        <h3>Actions, and where each one sits</h3>
+        <h3>Items, and where each one sits</h3>
         {"".join(out)}
       </section>"""
 
@@ -497,6 +527,20 @@ def render_decisions(rows: list[dict]) -> str:
       </section>"""
 
 
+def asana_chips(t: dict) -> str:
+    """What Asana itself says about this ticket, not what the agent thinks."""
+    a = t.get("asana") or {}
+    bits = []
+    if a.get("status"):
+        bits.append(pill(a["status"], "blue"))
+    for key, prefix in (("section", ""), ("priority", "Priority "), ("category", "")):
+        if a.get(key):
+            bits.append(f'<span class="tk-chip">{esc(prefix)}{esc(a[key])}</span>')
+    if a.get("assignee") and "Rei" not in a["assignee"]:
+        bits.append(f'<span class="tk-chip warn">Assigned to {esc(a["assignee"])}</span>')
+    return "".join(bits)
+
+
 def render_ticket(t: dict, ident: str) -> str:
     internal = t.get("internal_ticket") or {}
     int_block = ""
@@ -506,11 +550,15 @@ def render_ticket(t: dict, ident: str) -> str:
             f'{esc(internal.get("name"))} {link_btn(internal.get("url", ""), "Open")}</p>'
         )
 
-    silent = (
-        '<span class="silent">Not reached at the standup</span>'
-        if t.get("raised_at_standup") is False
-        else ""
-    )
+    states = [state_of(i) for i in t.get("items", [])]
+    mine = sum(1 for s in states if s["state"] == "todo")
+    open_n = sum(1 for s in states if not s["closed"])
+    if mine:
+        posture = pill(f"{mine} with you", "red")
+    elif open_n:
+        posture = pill("Nothing on you", "blue")
+    else:
+        posture = pill("Clear", "green")
 
     return f"""
     <article class="tk" id="{esc(ident)}">
@@ -518,8 +566,8 @@ def render_ticket(t: dict, ident: str) -> str:
         <h2><span class="ix-tag">{esc(t.get("ref"))}</span> {esc(t.get("title_en"))}</h2>
         <p class="tk-ja">{esc(t.get("title_ja"))}</p>
         <p class="tk-meta">
-          {pill(t.get("status_label", "-"), t.get("status_tone", "grey"))}
-          {silent}
+          {posture}
+          {asana_chips(t)}
           {link_btn(t.get("asana_url", ""), "Asana ticket")}
         </p>
         {int_block}
@@ -532,8 +580,8 @@ def render_ticket(t: dict, ident: str) -> str:
         <p class="status">{esc(t.get("where_it_stands"))}</p>
       </section>
 
-      {render_changed(t.get("changed_today", []), t.get("started_the_day", ""))}
-      {render_actions(t.get("actions", []))}
+      {render_events(t.get("events", []))}
+      {render_items(t.get("items", []))}
       {render_decisions(t.get("open_decisions", []))}
       {render_threads(t.get("threads", []))}
     </article>"""
@@ -590,31 +638,52 @@ REFRESH_BUTTON = """
 </script>"""
 
 
-def render(data: dict) -> str:
-    global PROGRESS
-    meeting_date = data.get("meeting_date") or date.today().isoformat()
-    PROGRESS = load_progress(meeting_date)
+def checked_line(stamp: str) -> str:
+    """How long ago the board was last brought up to date, in plain words."""
+    if not stamp:
+        return "never checked"
     try:
-        pretty = datetime.strptime(meeting_date, "%Y-%m-%d").strftime("%A %-d %B")
+        then = datetime.fromisoformat(stamp)
     except ValueError:
-        pretty = meeting_date
+        return esc(stamp)
+    mins = int((datetime.now().astimezone() - then).total_seconds() // 60)
+    if mins < 2:
+        return "checked just now"
+    if mins < 60:
+        return f"checked {mins} min ago"
+    if mins < 24 * 60:
+        return f"checked {mins // 60}h ago, at {then:%H:%M}"
+    return f"last checked {then:%-d %B}"
 
-    tickets = data.get("tickets", [])
+
+def render(data: dict) -> str:
+    pretty = date.today().strftime("%A %-d %B")
+
+    # Tickets you owe something on come first. Everything open stays on the page.
+    def ticket_order(t: dict) -> tuple:
+        states = [state_of(i) for i in t.get("items", [])]
+        return (
+            0 if any(s["state"] == "todo" for s in states) else
+            1 if any(not s["closed"] for s in states) else 2,
+            min((i.get("id", 99) for i in t.get("items", [])), default=99),
+        )
+
+    tickets = sorted(data.get("tickets", []), key=ticket_order)
     refs = {t.get("ref", ""): anchor(t.get("ref", "")) for t in tickets}
     cards = "".join(render_ticket(t, refs[t.get("ref", "")]) for t in tickets)
 
     total = sum(
-        a.get("est_minutes") or 0
+        i.get("est_minutes") or 0
         for t in tickets
-        for a in t.get("actions", [])
-        if state_of(a)["state"] == "todo"
+        for i in t.get("items", [])
+        if state_of(i)["state"] == "todo"
     )
 
     held = [
-        (t.get("ref", ""), a)
+        (t.get("ref", ""), i)
         for t in tickets
-        for a in t.get("actions", [])
-        if state_of(a)["state"] == "hold"
+        for i in t.get("items", [])
+        if state_of(i)["state"] == "hold"
     ]
     hold_block = ""
     if held:
@@ -662,39 +731,40 @@ def render(data: dict) -> str:
 
     body = f"""
 <header class="top"><div class="top-in">
-  <h1>After the TG billing standup</h1>
-  <span class="date">{esc(pretty)}</span>
+  <h1>TG billing desk</h1>
+  <span class="date">{esc(pretty)} &middot; {esc(checked_line(data.get("checked_at", "")))}</span>
   <span style="margin-left:auto">{link_btn(data.get("notion_url", ""), "Meeting note")}</span>
   {REFRESH_BUTTON}
 </div></header>
 <div class="wrap">
-  <div class="headline"><p>{esc(data.get("headline"))}</p></div>
+  {f'<div class="headline"><p>{esc(data.get("headline"))}</p></div>' if data.get("headline") else ""}
   {skip_block}
   {render_track(tickets, refs)}
   <p class="foot" style="margin:0 0 22px">
-  {f"About {total} min of work left with you. " if total else ""}
-  Close something by telling the chat, or with <code>./tick.py</code>.</p>
+  {f"About {total} min of work sits with you. " if total else ""}
+  Close something by telling the chat, or with <code>tg &lt;number&gt;</code>.</p>
   {hold_block}
-  <h2 class="tickets-h">{len(tickets)} ticket{"s" if len(tickets) != 1 else ""}, everything for each one in one place</h2>
+  <h2 class="tickets-h">{len(tickets)} open ticket{"s" if len(tickets) != 1 else ""}, everything for each one in one place</h2>
   {cards}
   {watch_block}
   {gap_block}
   <p class="foot">Generated {esc(data.get("generated_at"))}</p>
 </div>"""
-    return shell(f"TG post-standup {meeting_date}", body)
+    return shell("TG billing desk", body)
 
 
 def render_error(message: str) -> str:
     body = f"""
 <div class="wrap" style="padding-top:40px">
   <div class="err">
-    <h1 style="margin:0 0 8px;font-size:20px">Post-standup list did not generate</h1>
-    <p style="margin:0">Run it by hand with <code>./run_post.sh --force</code>,
-    or read the Notion meeting note directly. Details below.</p>
+    <h1 style="margin:0 0 8px;font-size:20px">The desk did not build</h1>
+    <p style="margin:0">The board is still there. Rebuild with
+    <code>tg open</code>, or run <code>./run_post.sh --force</code> to start
+    again from the meeting note. Details below.</p>
     <pre>{esc(message)}</pre>
   </div>
 </div>"""
-    return shell("TG post-standup failed", body)
+    return shell("TG billing desk, build failed", body)
 
 
 def main() -> int:
@@ -720,8 +790,8 @@ def main() -> int:
         return 1
 
     dest.write_text(render(data), encoding="utf-8")
-    actions = sum(len(t.get("actions", [])) for t in data.get("tickets", []))
-    print(f"wrote {dest} ({len(data['tickets'])} tickets, {actions} actions)")
+    items = sum(len(t.get("items", [])) for t in data.get("tickets", []))
+    print(f"wrote {dest} ({len(data['tickets'])} tickets, {items} items)")
     return 0
 
 

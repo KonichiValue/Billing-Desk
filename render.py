@@ -60,50 +60,40 @@ def plain(raw: str) -> str:
     return RUBY.sub(r"\1", raw or "")
 
 
-def progress_path(meeting_date: str) -> Path:
-    return Path(__file__).resolve().parent / "state" / f"progress-{meeting_date}.json"
+def item_state(item: dict) -> dict:
+    """Where one item sits: its state, label, tone, and who is holding it.
 
-
-def load_progress(meeting_date: str) -> dict:
-    """What Rei has already done, keyed by action rank. Written by tick.py."""
-    path = progress_path(meeting_date)
-    if not path.exists():
-        return {}
-    try:
-        return json.loads(path.read_text(encoding="utf-8")).get("actions", {})
-    except (json.JSONDecodeError, OSError):
-        return {}
-
-
-def action_state(progress: dict, action: dict) -> dict:
-    """Where one action sits: its state, label, tone, and who is holding it.
-
-    tick.py wins, because Rei saying what he did beats anything the page assumed.
-    Failing that, an action can arrive already sitting with someone else.
+    The item carries its own state, because the board outlives the day it was
+    written on. A hold is inferred when nothing has been recorded yet.
     """
-    saved = dict(progress.get(str(action.get("rank")), {}))
-    sent_by_rei = saved.get("state") == "waiting"
-    waits = action.get("waits_on") or {}
-    if not saved and waits:
-        saved = {"state": "waiting", "who": waits.get("who", ""), "at": waits.get("since", "")}
-    state = saved.get("state") or ("hold" if action.get("hold") else "todo")
-    saved["sent"] = sent_by_rei
+    state = item.get("state") or ("hold" if item.get("hold") else "todo")
+    waits = item.get("waits_on") or {}
+    who = waits.get("who", "")
+    at = item.get("state_at") or waits.get("since", "")
     label, tone, order = LIFECYCLE.get(state, LIFECYCLE["todo"])
-    if state == "waiting" and saved.get("who"):
-        label = f"Waiting on {saved['who']}"
-    saved.update(state=state, label=label, tone=tone, order=order)
-    saved["closed"] = state in CLOSED_STATES
-    return saved
+    if state == "waiting" and who:
+        label = f"Waiting on {who}"
+    return {
+        "state": state,
+        "label": label,
+        "tone": tone,
+        "order": order,
+        "closed": state in CLOSED_STATES,
+        "who": who,
+        "at": at,
+        "note": item.get("state_note", ""),
+        "sent": bool(item.get("sent_by_you")),
+    }
 
 
-def tracked(tickets: list[dict], progress: dict) -> list[tuple[str, dict, dict]]:
-    """Every action as (ticket ref, action, state), yours first, finished last."""
+def tracked(tickets: list[dict]) -> list[tuple[str, dict, dict]]:
+    """Every item as (ticket ref, item, state), yours first, finished last."""
     rows = [
-        (t.get("ref", ""), a, action_state(progress, a))
+        (t.get("ref", ""), i, item_state(i))
         for t in tickets
-        for a in t.get("actions", [])
+        for i in t.get("items", [])
     ]
-    return sorted(rows, key=lambda r: (r[2]["order"], r[1].get("rank", 99)))
+    return sorted(rows, key=lambda r: (r[2]["order"], r[1].get("id", 99)))
 
 
 def pill(label: str, tone: str) -> str:

@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
-"""Push the post-standup actions into Apple Reminders.
+"""Push the open board items into Apple Reminders.
 
 The page is a good place to read the list and a bad place to remember it. This
-puts every action into a "TG standup" list with its rank, ticket and estimate,
-due today for anything actionable and on the chase date for anything held. Held
-items are titled so it is obvious they are waiting, and every reminder carries
-the link to act in.
+puts every item that is still with Rei into a "TG billing" list with its number,
+ticket and estimate, due today, or on the chase date when it is held or sitting
+with someone else. Every reminder carries the link to act in.
 
-Existing reminders for the same date are removed first, so re-running after a
-regenerate does not duplicate.
+Finished items are skipped, and existing reminders are cleared first, so
+re-running after a refresh does not duplicate.
 
 Usage:
-    python3 remind.py output/post-2026-08-24.json
-    python3 remind.py output/post-2026-08-24.json --list "Work"
-    python3 remind.py output/post-2026-08-24.json --dry-run
+    python3 remind.py state/board.json
+    python3 remind.py state/board.json --list "Work"
+    python3 remind.py state/board.json --dry-run
 """
 
 from __future__ import annotations
@@ -24,9 +23,9 @@ import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from render import plain
+from render import item_state, plain
 
-DEFAULT_LIST = "TG standup"
+DEFAULT_LIST = "TG billing"
 
 
 def applescript(script: str) -> str:
@@ -47,9 +46,17 @@ def quote(value: str) -> str:
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
+def clean_date(value: str) -> str:
+    """Chase dates are written for humans, as in '2026-08-26, at the onsite'."""
+    try:
+        return datetime.strptime((value or "")[:10], "%Y-%m-%d").strftime("%Y-%m-%d")
+    except ValueError:
+        return date.today().isoformat()
+
+
 def as_date(value: str) -> str:
     """An AppleScript date expression for 09:30 on the given ISO date."""
-    d = datetime.strptime(value, "%Y-%m-%d")
+    d = datetime.strptime(clean_date(value), "%Y-%m-%d")
     return (
         f'(current date) - (time of (current date)) + (9 * hours) + (30 * minutes) '
         f'+ ({(d.date() - date.today()).days} * days)'
@@ -57,21 +64,29 @@ def as_date(value: str) -> str:
 
 
 def build(data: dict) -> list[dict]:
-    meeting = data.get("meeting_date") or date.today().isoformat()
+    today = date.today().isoformat()
     out = []
     for ticket in data.get("tickets", []):
         ref = ticket.get("ref", "")
-        for action in ticket.get("actions", []):
+        for action in ticket.get("items", []):
+            state = item_state(action)
+            if state["closed"]:
+                continue
             hold = action.get("hold") or {}
+            waits = action.get("waits_on") or {}
             mins = action.get("est_minutes")
-            title = f"{action.get('rank', '?')}. {ref}: {action.get('title', '')}"
+            title = f"{action.get('id', '?')}. {ref}: {action.get('title', '')}"
             if hold:
-                title = f"{title} (waiting)"
-            due = hold.get("revisit") if hold else meeting
+                title = f"{title} (not yet)"
+            elif state["state"] == "waiting":
+                title = f"{title} (chase {state.get('who', 'them')})"
+            due = hold.get("revisit") or waits.get("chase_on") or today
             body = [action.get("why", "")]
             if hold:
                 body.append(f"On hold: {hold.get('why', '')}")
                 body.append(f"Waiting for: {hold.get('until', '')}")
+            elif waits.get("what"):
+                body.append(f"{waits.get('who', 'They')} owe: {waits['what']}")
             body += [b for b in action.get("detail", [])]
             if action.get("link"):
                 body.append(action["link"])
@@ -81,7 +96,7 @@ def build(data: dict) -> list[dict]:
             out.append(
                 {
                     "title": title,
-                    "due": due or meeting,
+                    "due": clean_date(due),
                     "body": "\n".join(b for b in body if b),
                     "minutes": mins,
                 }
@@ -133,7 +148,7 @@ def main() -> int:
         print("nothing to push")
         return 0
 
-    tag = f"[tg-standup {data.get('meeting_date', date.today().isoformat())}]"
+    tag = "[tg-billing-desk]"
 
     if dry:
         for item in items:
