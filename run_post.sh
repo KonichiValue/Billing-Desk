@@ -131,6 +131,14 @@ if ! python3 render_md.py "$JSON" "output/post-$TODAY.md" >>"$LOG" 2>&1; then
   log "WARNING: markdown render failed, HTML page is still fine"
 fi
 
+# Actions into Reminders, due today, or on the chase date when they are held.
+# Opt in with POST_REMIND=1; needs Reminders access granted once.
+if [[ "${POST_REMIND:-0}" == "1" ]]; then
+  if ! python3 remind.py "$JSON" >>"$LOG" 2>&1; then
+    log "WARNING: could not push reminders"
+  fi
+fi
+
 if [[ -f state/skip-next.json ]]; then
   log "next standup marked as skipped: $(python3 -c 'import json;print(json.load(open("state/skip-next.json")).get("skip_date",""))' 2>/dev/null)"
 fi

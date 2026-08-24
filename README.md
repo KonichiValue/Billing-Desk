@@ -81,6 +81,26 @@ note is missing, and the runner retries every five minutes until 11:45.
 `POST_MODEL`, `POST_TIMEOUT` (900), `POST_DEADLINE` (11:45) and `POST_RETRY`
 (300 seconds) all override.
 
+Every action has one number, unique across the page, and the running order is
+built from those numbers rather than written separately. So "do 4" always means
+the same thing, and the table and the ticket sections cannot disagree.
+
+## Reminders
+
+`POST_REMIND=1` pushes the actions into an Apple Reminders list called
+`TG standup` at the end of a run. Anything actionable is due that day, anything
+held is due on its chase date and titled "(waiting)". The note carries the why,
+the link and the draft. Re-running replaces that day's reminders rather than
+duplicating them.
+
+```sh
+python3 remind.py output/post-2026-08-24.json --dry-run
+python3 remind.py output/post-2026-08-24.json --list "Work"
+```
+
+macOS asks for Reminders access the first time, so run it once by hand before
+relying on it in the scheduled job.
+
 ## Cancelled standups
 
 Standups get skipped for onsites and workshops, and it is only ever said out

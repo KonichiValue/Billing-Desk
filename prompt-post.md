@@ -195,8 +195,19 @@ it the first action.
 
 ## Step 5: build each ticket's actions
 
-Rank actions inside a ticket by consequence, then rank tickets against each other
-in `index`.
+**One number per action, across the whole page.** `rank` is global and unique:
+rank 1 is the first thing Rei does today, rank 2 the second, wherever they sit.
+The running order at the top is built from these numbers, so an action can never
+be numbered two different ways. Rei says "do 4" and means rank 4.
+
+Every action carries a `why`: **one sentence, 15 words at most**, on what goes
+wrong if he skips it. It sits in the running order table, so it has to be
+scannable. "Nakayama is refining this today and is blocked on the answer" works.
+"Important for the ticket" does not, and neither does a paragraph. Longer
+reasoning belongs in `detail`. If you cannot write the why, the action does not
+belong on the page.
+
+Rank by consequence.
 
 1. Something Rei committed to in front of TG goes first. Breaking a commitment
    made an hour ago is the worst outcome available.
@@ -212,8 +223,15 @@ in `index`.
 X" is not an action. "Comment on the ticket confirming cases 1 and 2 keep the
 hold, and ask Tanaka who runs the filter query" is an action.
 
-Give every action an honest `est_minutes`. If a ticket has more than four
+Give every action an honest `est_minutes`. If a ticket has more than three
 actions, cut the weakest rather than shrinking estimates.
+
+Every `waiting_on` row needs the same treatment. `blocks` says what of Rei's
+cannot move until it lands, in concrete terms, because a row that only says what
+someone owes gives him no way to judge whether to chase. "The Databricks
+conditions" tells him nothing. "Until these arrive he cannot show TG where their
+patrol and the integrity check differ, which is the whole argument at the onsite"
+tells him why he is waiting.
 
 ## Step 6: say clearly when he should not act yet
 
@@ -268,6 +286,39 @@ the end when he needs a decision. No preamble, no recap of process, no "just
 wanted to check in". Warmth belongs in the first line to someone he knows, and
 nowhere else.
 
+### Claim only what you can stand behind
+
+Rei has to defend every sentence he sends, and a lot of what goes in these drafts
+is his reading of a long thread rather than established fact. So attribute and
+hedge where the certainty is not there:
+
+- Attribute what someone said to them by name. Never write an unsourced "charges
+  that are legitimately waiting" as though it is settled policy.
+- Use "my understanding is", "as I read it", "they seem to want" for anything
+  inferred. Save flat assertions for things you can quote.
+- Nothing to Kraken or TG is ever a hard requirement unless they wrote it that
+  way. Write "what they are asking for is X" rather than "X must happen".
+  Everything here is negotiable and a draft that closes the door removes Rei's
+  room to negotiate.
+- When somebody else is already carrying part of the conversation, bring them in
+  by @ mention and ask whether they see it the same way, rather than speaking for
+  them. Heqing in particular is often working the same ticket from the TG side.
+
+### Formatting that survives paste
+
+Markdown bullets do not render when pasted into Slack or Asana, so never use `-`
+or `*` for lists. Use these instead:
+
+- Slack, English: `•` for bullets, `1.` `2.` for numbers, `*bold*` with single
+  asterisks, `_italic_`. Never `**bold**`.
+- Asana, English: `•` for bullets, `1.` for numbers, no emphasis markers at all,
+  because they render literally.
+- Asana, Japanese: `・` for bullets, which is the convention TG already use in
+  these tickets.
+
+Put a real newline between list items. Keep paragraphs short enough to read in a
+Slack thread without expanding.
+
 Where you lack the information to draft something, say so in the action's
 `detail` and leave `draft` out. Do not guess at content Rei will send.
 
@@ -320,16 +371,6 @@ Write `output/post-<YYYY-MM-DD>.json` using today's date in JST.
     "skipped": false,
     "reason": "Why it is skipped. Empty string when it is going ahead."
   },
-  "index": [
-    {
-      "rank": 1,
-      "ticket_ref": "託送HOLD",
-      "action": "The single most important thing on that ticket, under 12 words.",
-      "urgency": "today | this-week | monitor",
-      "on_hold": false,
-      "est_minutes": 20
-    }
-  ],
   "tickets": [
     {
       "ref": "Short Japanese tag, 4 to 6 characters, matching the morning prep",
@@ -367,6 +408,7 @@ Write `output/post-<YYYY-MM-DD>.json` using today's date in JST.
         {
           "rank": 1,
           "title": "Imperative, under 12 words.",
+          "why": "One line on what goes wrong if he skips this. Never a restatement of the title.",
           "detail": [
             "One to three bullets on what actually needs doing.",
             "Concrete enough to start without rereading anything."
@@ -399,7 +441,7 @@ Write `output/post-<YYYY-MM-DD>.json` using today's date in JST.
           "what": "What they owe, in one sentence.",
           "due": "Date they said, or 'not stated'",
           "chase_on": "YYYY-MM-DD",
-          "blocks": "What of Rei's cannot move until this lands.",
+          "blocks": "Concretely, what of Rei's cannot move until this lands. This is the reason he is waiting, so make it say something.",
           "source_url": "Permalink"
         }
       ],
@@ -429,6 +471,6 @@ Write `output/post-<YYYY-MM-DD>.json` using today's date in JST.
 Omit `hold` entirely on anything he can act on now. Omit `draft` when you cannot
 write it honestly.
 
-`index` is the only thing ranked across tickets, because it is the running order.
-Everything else lives inside its ticket. Keep `ref` tags identical to the morning
-prep.
+There is no separate running order in the JSON. The renderer builds it from the
+global `rank` on every action, so rank once and rank carefully. Keep `ref` tags
+identical to the morning prep.

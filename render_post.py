@@ -94,6 +94,10 @@ color:#fff;display:grid;place-items:center;font-size:12px;font-weight:650}
 .act-title{flex:1;min-width:0;font-weight:600;font-size:15.5px}
 .act-min{color:var(--soft);font-size:12.5px;font-variant-numeric:tabular-nums}
 .act-body{padding:13px 15px}
+.act-why{margin:0 0 11px;font-size:14.5px;color:var(--ink)}
+.act-why b{display:inline-block;font-size:11px;text-transform:uppercase;
+letter-spacing:.07em;color:var(--soft);margin-right:8px;font-weight:650;
+vertical-align:1px}
 .act-body ul{margin:0;padding-left:19px}
 .act-body li{margin-bottom:5px;font-size:14.5px;color:var(--mut)}
 .act-where{margin:11px 0 0;display:flex;gap:9px;align-items:center;flex-wrap:wrap;
@@ -136,21 +140,27 @@ def anchor(ref: str) -> str:
     return f"t-{ascii_part}{digest}" if ascii_part else f"t-{digest}"
 
 
-def render_index(rows: list[dict], refs: dict[str, str]) -> str:
+def all_actions(tickets: list[dict]) -> list[tuple[str, dict]]:
+    """Every action on the page, in the order Rei should work through them."""
+    pairs = [(t.get("ref", ""), a) for t in tickets for a in t.get("actions", [])]
+    return sorted(pairs, key=lambda p: p[1].get("rank", 99))
+
+
+def render_index(tickets: list[dict], refs: dict[str, str]) -> str:
+    rows = all_actions(tickets)
     if not rows:
         return '<div class="panel" style="padding:18px 22px"><p class="empty">Nothing came out of this standup that needs action from you.</p></div>'
     out = []
-    for row in sorted(rows, key=lambda r: r.get("rank", 99)):
-        ref = row.get("ticket_ref", "")
-        mins = row.get("est_minutes")
-        u_label, u_tone = URGENCY.get(row.get("urgency", "monitor"), URGENCY["monitor"])
-        state = pill("Wait", "amber") if row.get("on_hold") else pill(u_label, u_tone)
+    for ref, a in rows:
+        mins = a.get("est_minutes")
+        u_label, u_tone = URGENCY.get(a.get("urgency", "monitor"), URGENCY["monitor"])
+        state = pill("Wait", "amber") if a.get("hold") else pill(u_label, u_tone)
         out.append(
             f"""
       <a class="ix" href="#{esc(refs.get(ref, anchor(ref)))}">
-        <span class="ix-rank">{esc(row.get("rank", "-"))}</span>
+        <span class="ix-rank">{esc(a.get("rank", "-"))}</span>
         <span class="ix-tag">{esc(ref)}</span>
-        <span class="ix-act">{esc(row.get("action"))}</span>
+        <span class="ix-act">{esc(a.get("title"))}</span>
         {state}
         <span class="ix-min">{f"{esc(mins)} min" if mins else ""}</span>
       </a>"""
@@ -261,6 +271,7 @@ def render_actions(rows: list[dict]) -> str:
             <span class="act-min">{f"{esc(mins)} min" if mins else ""}</span>
           </div>
           <div class="act-body">
+            {f'<p class="act-why"><b>Why</b>{esc(r.get("why"))}</p>' if r.get("why") else ""}
             {hold_block}
             {f"<ul>{detail}</ul>" if detail else ""}
             {f'<p class="act-commit">You committed this to {esc(committed)}</p>' if committed else ""}
@@ -455,7 +466,7 @@ def render(data: dict) -> str:
   {skip_block}
   {hold_block}
   <h2 class="board-h">Running order{f" &middot; about {total} min in total" if total else ""}</h2>
-  {render_index(data.get("index", []), refs)}
+  {render_index(tickets, refs)}
   <h2 class="tickets-h">{len(tickets)} ticket{"s" if len(tickets) != 1 else ""}, everything for each one in one place</h2>
   {cards}
   {watch_block}

@@ -87,6 +87,8 @@ def render_ticket(t: dict) -> list[str]:
             f"#### {a.get('rank', '-')}. {a.get('title', '')} [{state}{mins}]"
         )
         actions.append("")
+        if a.get("why"):
+            actions += [f"**Why:** {a['why']}", ""]
         if hold:
             revisit = f" Chase on {hold['revisit']}." if hold.get("revisit") else ""
             actions += [
@@ -187,22 +189,26 @@ def render(data: dict) -> str:
             )
         out.append("")
 
-    if data.get("index"):
+    ordered = sorted(
+        ((t.get("ref", ""), a) for t in tickets for a in t.get("actions", [])),
+        key=lambda p: p[1].get("rank", 99),
+    )
+    if ordered:
         out += [
             f"## Running order{f' ({total} min in total)' if total else ''}",
             "",
-            "| # | Ticket | Do this | When | Min |",
-            "|---|---|---|---|---|",
+            "| # | Ticket | Do this | Why | When | Min |",
+            "|---|---|---|---|---|---|",
         ]
-        for row in sorted(data["index"], key=lambda r: r.get("rank", 99)):
+        for ref, a in ordered:
             state = (
                 "wait"
-                if row.get("on_hold")
-                else URGENCY.get(row.get("urgency", "monitor"), "monitor")
+                if a.get("hold")
+                else URGENCY.get(a.get("urgency", "monitor"), "monitor")
             )
             out.append(
-                f"| {row.get('rank', '')} | {row.get('ticket_ref', '')} | "
-                f"{row.get('action', '')} | {state} | {row.get('est_minutes', '')} |"
+                f"| {a.get('rank', '')} | {ref} | {a.get('title', '')} | "
+                f"{a.get('why', '')} | {state} | {a.get('est_minutes', '')} |"
             )
         out.append("")
 

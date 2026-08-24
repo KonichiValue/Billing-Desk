@@ -305,11 +305,36 @@ support, a numbered list only when there are three or more things, and real
 questions at the end when he needs a decision. No preamble and no recap of
 process.
 
+**Claim only what you can stand behind.** Attribute what someone said to them by
+name, hedge anything you inferred with "my understanding is" or "as I read it",
+and never write a requirement as a hard rule unless they wrote it that way.
+Everything here is negotiable, and a draft that closes the door removes Rei's
+room to negotiate. Where a colleague is already carrying part of the
+conversation, Heqing especially, bring them in by @ mention and ask whether they
+see it the same way rather than speaking for them.
+
+**Formatting that survives paste.** Markdown bullets do not render in Slack or
+Asana, so never use `-` or `*` for lists. Slack English uses `•` and `1.` with
+`*bold*` in single asterisks. Asana English uses `•` and `1.` with no emphasis
+markers. Asana Japanese uses `・`, which is what TG already use in these tickets.
+
 Where you do **not** have enough information to draft a reply, do not guess. Put
 the missing piece in `unknowns` if Rei can find it, or in `open_questions` if
 only TG can answer it. A question in the script is more useful than a wrong draft.
 
 ## Step 9: pick up what was left hanging
+
+Read the most recent `output/post-*.json` before you write anything. That is the
+last standup's outcome and it is the baseline today's page moves from. It tells
+you what Rei was asked to do, what he was holding and why, what other people
+owed him, and which decisions were still open. Anything in there that has not
+been answered since is still live, and saying "no change since Monday" is a real
+and useful status.
+
+Check each of its actions against what you now see in Asana and Slack. An action
+that was done needs no space today. An action that was held and whose hold has
+now cleared is one of the most useful things you can put on the page, because
+nothing else will remind him.
 
 Read `state/open-loops.json` if it exists. The post-standup agent writes it, and
 each entry is something Rei is waiting on or deliberately holding, with a
