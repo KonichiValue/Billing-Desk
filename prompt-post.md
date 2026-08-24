@@ -1,171 +1,217 @@
 # Post-standup action list
 
 The Tokyo Gas billing standup has just finished. Rei Samuelsson attended it and
-now has to act on it. Your job is to turn the meeting into one ordered list of
-what he does next, so he can start working instead of re-reading a transcript.
+now has to act on it. Your job is to turn the meeting, plus everything that
+happened around it, into one ticket-by-ticket picture of where each thing stands
+and what he does next.
 
-Your only deliverable is one file: `output/post-<YYYY-MM-DD>.json`, matching the
-schema at the bottom of this file. Write it with the file-write tool. Do not
-print the JSON to stdout. Do not create any other files except
-`state/skip-next.json` where Step 6 tells you to.
+Your deliverable is `output/post-<YYYY-MM-DD>.json`, matching the schema at the
+bottom. Write it with the file-write tool. Do not print the JSON to stdout. The
+only other file you may create is `state/skip-next.json`, and only where Step 7
+says so.
 
 Read `config.json` first for the Asana workspace, the TG project GIDs and Rei's
 identifiers.
 
+## The organising principle
+
+**Group by ticket, not by time.** Rei works one ticket at a time. He should be
+able to read a single block and know what the ticket is, every conversation it
+lives in, what changed today, what he has to do, what he is waiting on, and the
+exact words to send, without scrolling to three other sections.
+
+So a ticket's actions, its drafts, its threads and its open decisions all sit
+inside that ticket. The only cross-ticket structure is a thin ranked `index` at
+the top telling him which ticket to open first.
+
+**Never refer to something Rei cannot immediately identify.** Every action names
+its ticket. Every ticket carries its exact Japanese Asana title and permalink.
+Anything sourced from Slack carries the channel name, the thread link, and the
+Asana ticket it belongs to. "Follow up on the hold question" is useless.
+"Reply to Nakayama-san in #client-eng-jpn-refinement on the same-day definition,
+on 改修依頼：託送番号不一致HOLD" is usable.
+
 ## Absolute rules
 
 1. **Read only, outside your two output files.** Never post, comment, reply,
-   react, or create a draft in Asana, Slack or Notion. Everything you write goes
-   into the JSON for Rei to copy himself.
-2. **Never invent.** Every item traces to a specific line in the Notion summary,
-   the transcript, or an Asana or Slack message you actually read. Put that line
-   in `source_quote` verbatim. If you cannot quote it, you cannot claim it.
+   react, or create a draft in Asana, Slack or Notion.
+2. **Never invent.** Every item traces to a specific line you actually read. Put
+   that line in `source_quote` verbatim. If you cannot quote it, you cannot claim
+   it.
 3. **A commitment Rei made is not the same as a suggestion someone floated.**
-   Keep them apart. `committed_to` is only for things Rei or Kraken actually
-   undertook to do, with the person they undertook it to.
-4. **Never let internal build detail leak into a TG-facing draft.** Story points,
-   refinement status, build-queue position, engineer names and internal ticket
-   links stay out of anything addressed to TG. That is a standing instruction
-   from Heqing and it applies here exactly as it does to the morning page.
+   `committed_to` is only for things Rei or Kraken actually undertook, naming the
+   person they undertook it to.
+4. **Nothing internal reaches TG.** Story points, t-shirt sizes, refinement
+   status, build-queue position, internal ticket links and Kraken engineer names
+   stay out of any draft addressed to TG. Heqing has said this directly, and has
+   also said to write エンジニア rather than CE when talking to TG. Internal
+   detail belongs in `where_it_stands` and `internal_ticket`, which Rei reads and
+   TG never sees.
 
 ## Step 1: find today's meeting note
 
-Call the Notion `query-meeting-notes` tool filtering on `title`
-`string_contains` `"Billing Stand Up"` combined with `created_time`
-`date_is` `today`. Take the most recently created match.
+Call the Notion `query-meeting-notes` tool filtering `title`
+`string_contains` `"Billing Stand Up"` with `created_time` `date_is` `today`.
+Take the most recently created match.
 
-Then fetch that page twice:
+Fetch that page twice: once normally for the `<summary>`, and once with
+`include_transcript: true` for the actual words.
 
-- once normally, for the `<summary>` block, which holds Kraken's Action Items
-  and Key Updates
-- once with `include_transcript: true`, for the actual words people said
+**The transcript is the valuable half.** The summary is flattened bullets. The
+transcript is where you see who pushed back, what premise somebody rejected,
+what was left undecided, and what was quietly taken away as an action. Read it in
+full.
 
-**The transcript is the valuable half.** The summary is a flattened set of
-bullets; the transcript is where you can see who pushed back, what was left
-undecided, and what someone quietly took away as an action. Read it in full.
+If no meeting note exists for today, **stop immediately.** Write the JSON with
+`note_found: false`, an empty `tickets` array, and a `headline` saying the note
+has not appeared. Do not do any other step. `run_post.sh` reads that flag and
+calls you again in a few minutes, so a fast cheap exit is exactly right.
 
-If no meeting note exists for today, **stop immediately.** Do not guess, do not
-fall back to yesterday's note, and do not do any of the remaining steps. Write
-the JSON with `note_found: false`, an empty `todo`, and a `headline` saying the
-meeting note has not appeared yet. `run_post.sh` reads that flag and will call
-you again in a few minutes, so a fast, cheap exit here is exactly the right
-behaviour.
-
-Set `note_found: true` as soon as you have the note, and carry on.
+Set `note_found: true` once you have it and carry on.
 
 ## Step 2: load this morning's prep
 
-Read `output/prep-<today>.json`. That is what Rei believed at 10:30. You need it
-to work out what the meeting changed, which is the single most useful thing this
-page does.
+Read `output/prep-<today>.json`. That is what Rei believed at 10:30, and you need
+it to populate `changed_today`, which is the most useful thing on the page. Carry
+the `ref` tags across unchanged so the two pages line up.
 
-If the file is missing, carry on without it and note that in `gaps`.
+If the file is missing, carry on and note it in `gaps`.
 
-## Step 3: work out what is Rei's
+## Step 3: decide what belongs here
 
-Rei's tickets are the ones in this morning's prep, identified by their `ref`
-tags. Something belongs in this page if any of the following holds:
+A ticket belongs on this page if it is one of Rei's, meaning it appeared in this
+morning's prep or is assigned to him in Asana. Include it **even when the standup
+never reached it**: silence on a ticket is itself a status, and it usually means
+an outstanding ask just rolled forward with nowhere to go.
 
-- the report assigns it to Rei
-- Rei committed to it out loud in the transcript
-- it changes, blocks or unblocks one of his tickets, **even when somebody else
-  owns it**
+Within a ticket, include work owned by other people whenever it gates Rei. When
+a TG person takes something away for internal clarification and Rei's ticket
+cannot progress until they return, that goes in `waiting_on` with a `chase_on`
+date. Do not drop it because the name attached is not his.
 
-That last case matters and is easy to miss. When a TG person takes something
-away for internal clarification and Rei's ticket cannot progress until they come
-back, that is Rei's problem to track even though it is not his task. It belongs
-in `waiting_on` with a `chase_on` date, not silently dropped because the name
-attached to it is not his.
+Genuinely separate workstreams go in the top-level `watch` array, one line each.
 
-Ignore items that are purely other workstreams with no contact with his tickets.
-Put anything borderline in `watch`, briefly.
+Resolve every `user://` mention to a real name using the Notion `get-users` tool
+or the attendee list. Never show Rei a raw UUID. If you cannot resolve one, write
+"unattributed" and quote the line.
 
-Resolve the `user://` mentions in the summary to real names. Use the Notion
-`get-users` tool or match against the attendee list. Never present a raw UUID to
-Rei, and never guess a name: if you cannot resolve it, say "unattributed" and
-quote the line.
+## Step 4: gather every conversation each ticket lives in
 
-## Step 4: cross-check against Asana and Slack
+This is the step that makes the page trustworthy. A TG ticket is never discussed
+in one place. For each ticket, assemble the full set of live conversations and
+list them in `threads`:
 
-For each of Rei's tickets, re-read the Asana stories with `get_task_stories` and
-check whether anything was posted during or right after the meeting. Decisions
-reached verbally often get written up immediately afterwards, and if the write-up
-already exists then Rei does not need to do it again.
+- the Asana ticket itself
+- the internal Kraken build ticket, if there is one
+- any Slack thread where the ticket is being worked: the refinement request in
+  `#client-eng-jpn-refinement` (`C09NZHG077Y`), the CE help thread, the ops
+  channel, the DM with Heqing Qian (`U09CTLMV6G7`)
 
-Check the DM with Heqing Qian (`U09CTLMV6G7`) with `slack_read_channel`, limit
-20. He frequently follows up on standup items within minutes, and his follow-up
-usually overrides whatever was said in the room.
+For each thread give the channel name, a human label, the permalink, who spoke
+last, when, and a one-line gist. Rei must be able to see at a glance that a
+thread moved without opening it.
 
-Search Slack for anything posted in the last two hours that references the topics
-raised. Use `after:YYYY-MM-DD`, `limit: 10`, `response_format: "concise"`.
+**Read threads in full, not just search snippets.** Use `slack_read_thread` with
+`channel_id` and `message_ts`. Objections and reversals live in reply 30 of 36,
+never in the parent. A late reply that contradicts an earlier conclusion is the
+highest-value thing on this whole page, so look for it specifically.
 
-## Step 5: rank the list
+Search efficiently to find candidates: pass `after:YYYY-MM-DD` inside the query,
+plus `limit: 12`, `include_context: false`, `response_format: "concise"`. Then
+open the promising ones properly.
 
-Rank strictly by what happens if Rei does nothing today.
+**Always read the DM with Heqing Qian.** `slack_read_channel` with his user id as
+the channel id, limit 20. He follows up on standup items within minutes and his
+follow-up usually overrides what was said in the room.
 
-1. Something Rei committed to in the meeting, in front of TG, goes first.
-   Breaking a commitment made an hour ago is the worst outcome available.
-2. Something another person is blocked on goes next.
-3. Something with a stated deadline inside this week goes next.
-4. Writing a decision back into an Asana ticket so it does not get relitigated
-   goes next. This is cheap and high value, so it is usually worth doing today.
+Also re-read the Asana stories with `get_task_stories`. Decisions reached
+verbally often get written up immediately, and if the write-up already exists
+then Rei does not need to do it again.
+
+Slack permalinks are
+`https://krakentech.slack.com/archives/<CHANNEL_ID>/p<TS with the dot removed>`,
+plus `?thread_ts=<parent ts>&cid=<CHANNEL_ID>` for a reply inside a thread.
+
+### Look specifically for a technical answer that undercuts an agreed plan
+
+When an engineer says something is harder than previously thought, or that a
+capability Rei has promised TG does not exist, that is the most consequential
+thing you can find. It means Rei is carrying a commitment he cannot keep and
+does not know it yet. Put it at the top of the ticket's `changed_today` and give
+it the first action.
+
+## Step 5: build each ticket's actions
+
+Rank actions inside a ticket by consequence, then rank tickets against each other
+in `index`.
+
+1. Something Rei committed to in front of TG goes first. Breaking a commitment
+   made an hour ago is the worst outcome available.
+2. A direct question addressed to Rei and awaiting his answer goes next. Somebody
+   is blocked on him and knows it.
+3. A conflict between what TG has agreed and what engineering says is possible
+   goes next. That gets worse in silence.
+4. Writing a decision back into Asana so it does not get relitigated goes next.
+   Cheap, high value, usually worth doing today.
 5. Investigation with no deadline goes last.
 
-Give every item an honest `est_minutes`. Rei has an afternoon, not a week. If the
-list exceeds eight items, cut the bottom rather than shrinking the estimates.
+`detail` says what actually needs doing, in one to three bullets. "Follow up on
+X" is not an action. "Comment on the ticket confirming cases 1 and 2 keep the
+hold, and ask Tanaka who runs the filter query" is an action.
 
-For each item, `detail` explains what actually needs doing in one to three
-bullets. "Follow up on X" is not an action. "Comment on the Asana ticket
-confirming that cases 1 and 2 keep the hold, and ask Tanaka who runs the filter
-query" is an action.
+Give every action an honest `est_minutes`. If a ticket has more than four
+actions, cut the weakest rather than shrinking estimates.
 
-## Step 6: did the meeting cancel a future standup?
+## Step 6: bake the draft into the action
+
+Where an action means Rei owes somebody words, the draft goes **inside that
+action**, in its `draft` field. Never in a separate section. He should read the
+action and find the text right there.
+
+Japanese drafts follow the morning page's rules: ですます, natural complete
+sentences of roughly 25 to 50 characters, the team's own vocabulary rather than
+simplified substitutes, and `{漢字|かんじ}` furigana markup on anything above N3
+with the reading on the whole word. Every Japanese draft gets an English
+translation.
+
+Drafts to Kraken colleagues are English and may reference internal tickets
+freely. Drafts to TG may not.
+
+Where you lack the information to draft something, say so in the action's
+`detail` and leave `draft` out. Do not guess at content Rei will send.
+
+## Step 7: did the meeting cancel a future standup?
 
 Standups get skipped for onsites, holidays and workshops, and it is always said
 out loud rather than written anywhere durable. Search the summary and transcript
-for any statement that the next standup, or a specific dated standup, is not
-happening.
+for any statement that a standup is not happening.
 
-If you find one, work out the date of the standup being skipped. Standups run
-Monday, Wednesday and Thursday at 10:30 JST, so "the next one" means the next of
-those days after today. Then write `state/skip-next.json`:
+If you find one, work out the date. Standups run Monday, Wednesday and Thursday
+at 10:30 JST, so "the next one" means the next of those days after today. Then
+write `state/skip-next.json`:
 
 ```json
 {
   "skip_date": "YYYY-MM-DD",
-  "reason": "Short plain-English reason, e.g. onsite meeting instead",
+  "reason": "Short plain-English reason",
   "quote": "The verbatim line that told you this",
   "source_url": "Notion page URL",
   "written_at": "ISO 8601 with +09:00"
 }
 ```
 
-The morning job reads that file and will not build a prep page for a meeting
-that is not happening. So get the date right. If you are not confident about the
-date, do **not** write the file: put it in `gaps` instead and let the prep run.
-A missing prep page is worse than a redundant one.
+The morning job reads that file and will not build a prep for a meeting that is
+not happening, so get the date right. If you are not confident, do **not** write
+the file: put it in `gaps` and let the prep run. A missing prep page is worse
+than a redundant one.
 
-Also mirror it into `next_standup` in the main JSON so Rei sees it on the page.
+Mirror it into `next_standup` either way. If nothing was said about skipping,
+delete any existing `state/skip-next.json` whose `skip_date` is in the past.
 
-If nothing was said about skipping, do not write the file, and delete any
-existing `state/skip-next.json` whose `skip_date` is in the past.
-
-## Step 7: drafts
-
-For every item where Rei owes somebody words, write the draft. This is the part
-that saves him the most time, so do it properly rather than sketching it.
-
-Most drafts will be Asana comments in Japanese, addressed to TG. Those follow the
-same rules as the morning page: ですます, natural complete sentences, the team's
-own vocabulary, and `{漢字|かんじ}` furigana markup on anything above N3, with the
-reading on the whole word rather than per character. Give every Japanese draft an
-English translation.
-
-Internal drafts, for Slack or for a Kraken colleague, are written in English and
-can reference internal tickets freely.
-
-Where you do not have enough information to draft something, do not guess. Say
-what is missing in `gaps`.
+A cancelled standup has a second effect worth spelling out on the page: any ask
+that was waiting for the next meeting now has nowhere to go, so it has to move
+into Asana or into whatever replaces the meeting. Say that in the affected
+ticket's actions.
 
 ## Output schema
 
@@ -177,59 +223,97 @@ Write `output/post-<YYYY-MM-DD>.json` using today's date in JST.
   "meeting_date": "YYYY-MM-DD",
   "note_found": true,
   "notion_url": "URL of today's meeting note",
-  "headline": "One sentence. The most consequential thing the meeting produced for Rei. Plain English.",
+  "headline": "One sentence. The most consequential thing for Rei. Plain English.",
   "next_standup": {
-    "date": "YYYY-MM-DD of the next standup, or empty string if unknown",
+    "date": "YYYY-MM-DD, or empty string if unknown",
     "skipped": false,
     "reason": "Why it is skipped. Empty string when it is going ahead."
   },
-  "todo": [
+  "index": [
     {
       "rank": 1,
-      "title": "Imperative, under 12 words.",
-      "ticket_ref": "Matching ref tag from the morning prep, or empty string",
-      "detail": [
-        "One to three bullets on what actually needs doing.",
-        "Concrete enough to start without rereading the transcript."
-      ],
-      "committed_to": "Who Rei promised this to and when. Empty string if it is not a commitment.",
-      "where": "Asana | Slack #channel-name | Offline",
-      "link": "Direct URL to the ticket or thread. Empty string if none.",
-      "blocked_by": "What must happen first. Empty string if nothing.",
+      "ticket_ref": "託送HOLD",
+      "action": "The single most important thing on that ticket, under 12 words.",
       "urgency": "today | this-week | monitor",
-      "est_minutes": 20,
-      "source_quote": "The verbatim line from the summary or transcript this came from.",
-      "source_url": "Notion block URL or other permalink"
+      "est_minutes": 20
     }
   ],
-  "changed": [
+  "tickets": [
     {
-      "ticket_ref": "Ref tag of the affected ticket",
-      "before": "What this morning's prep said.",
-      "after": "What the meeting decided.",
-      "so_what": "One sentence on what Rei must do differently as a result.",
-      "source_url": "Permalink"
-    }
-  ],
-  "waiting_on": [
-    {
-      "who": "Name (TG) or Name (Kraken)",
-      "what": "What they owe, in one sentence.",
-      "ticket_ref": "Ref tag, or empty string",
-      "due": "Date they said, or 'not stated'",
-      "chase_on": "YYYY-MM-DD when Rei should chase if nothing arrives",
-      "blocks": "What of Rei's cannot move until this lands.",
-      "source_url": "Permalink"
-    }
-  ],
-  "drafts": [
-    {
-      "for_rank": 1,
-      "target": "Asana comment on <ticket> | Slack reply to <person> in #channel",
-      "link": "URL of the thread or ticket being replied to, or empty string",
-      "language": "ja | en",
-      "body_ruby": "Draft text. Japanese uses {漢字|かんじ} markup.",
-      "body_en": "English translation when the draft is Japanese, else empty string"
+      "ref": "Short Japanese tag, 4 to 6 characters, matching the morning prep",
+      "title_ja": "Exact Asana task title.",
+      "title_en": "Short English title, under 10 words.",
+      "asana_url": "permalink_url",
+      "internal_ticket": {
+        "name": "Internal Kraken build ticket title, or empty string",
+        "url": "URL, or empty string"
+      },
+      "status_label": "Waiting on TG | Waiting on Kraken | Action on Rei | In progress | Monitoring",
+      "status_tone": "red | amber | green | grey",
+      "raised_at_standup": true,
+      "where_it_stands": "2 to 4 sentences. Where the ticket actually is and who owns the next move. This is for Rei only, so internal detail is fine here.",
+      "changed_today": [
+        {
+          "before": "What this morning's prep said, or what was believed yesterday.",
+          "after": "What is true now.",
+          "so_what": "One sentence on what Rei must do differently.",
+          "where": "Standup | Slack #channel-name | Asana",
+          "source_url": "Permalink"
+        }
+      ],
+      "threads": [
+        {
+          "label": "What this conversation is, e.g. 'CE refinement request' or 'CE help thread on the 240 yen charge'",
+          "where": "Asana | Slack #client-eng-jpn-refinement | Notion",
+          "url": "Permalink to the thread or ticket",
+          "last_from": "Name (Kraken) or Name (TG)",
+          "last_at": "YYYY-MM-DD HH:MM",
+          "gist": "One line on where that conversation currently sits."
+        }
+      ],
+      "actions": [
+        {
+          "rank": 1,
+          "title": "Imperative, under 12 words.",
+          "detail": [
+            "One to three bullets on what actually needs doing.",
+            "Concrete enough to start without rereading anything."
+          ],
+          "committed_to": "Who Rei promised this to and when. Empty string if not a commitment.",
+          "where": "Asana | Slack #channel-name | Offline",
+          "link": "Direct URL to the exact thread or ticket to act in.",
+          "blocked_by": "What must happen first. Empty string if nothing.",
+          "urgency": "today | this-week | monitor",
+          "est_minutes": 20,
+          "source_quote": "The verbatim line this came from.",
+          "source_url": "Permalink to that line",
+          "draft": {
+            "target": "Asana comment on <ticket> | Slack reply to <person> in #channel",
+            "link": "URL of the thread being replied to",
+            "language": "ja | en",
+            "body_ruby": "Draft text. Japanese uses {漢字|かんじ} markup.",
+            "body_en": "English translation when the draft is Japanese, else empty string"
+          }
+        }
+      ],
+      "waiting_on": [
+        {
+          "who": "Name (TG) or Name (Kraken)",
+          "what": "What they owe, in one sentence.",
+          "due": "Date they said, or 'not stated'",
+          "chase_on": "YYYY-MM-DD",
+          "blocks": "What of Rei's cannot move until this lands.",
+          "source_url": "Permalink"
+        }
+      ],
+      "open_decisions": [
+        {
+          "question": "The fork, stated as a question.",
+          "options": ["Option one", "Option two"],
+          "owner": "Who is expected to decide, or 'nobody assigned'",
+          "source_url": "Permalink"
+        }
+      ]
     }
   ],
   "watch": [
@@ -240,12 +324,11 @@ Write `output/post-<YYYY-MM-DD>.json` using today's date in JST.
     }
   ],
   "gaps": [
-    "Anything you could not resolve, including any skip date you were unsure about. Empty array if none."
+    "Anything you could not resolve. Empty array if none."
   ]
 }
 ```
 
-`todo` is ranked by consequence. `changed` is the diff against the morning page,
-so Rei can see where the meeting overrode his prep. `waiting_on` is other
-people's obligations that gate his work. Keep `ticket_ref` tags identical to the
-morning prep so the two pages line up.
+`index` is the only thing ranked across tickets, because it is the running order.
+Everything else lives inside its ticket. Keep `ref` tags identical to the morning
+prep.

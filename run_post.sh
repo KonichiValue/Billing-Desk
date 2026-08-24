@@ -126,6 +126,11 @@ if ! python3 render_post.py "$JSON" "$HTML" >>"$LOG" 2>&1; then
   fail "could not render $JSON into HTML. See $LOG"
 fi
 
+# The markdown is the version a Cursor chat reads when handing work back.
+if ! python3 render_md.py "$JSON" "output/post-$TODAY.md" >>"$LOG" 2>&1; then
+  log "WARNING: markdown render failed, HTML page is still fine"
+fi
+
 if [[ -f state/skip-next.json ]]; then
   log "next standup marked as skipped: $(python3 -c 'import json;print(json.load(open("state/skip-next.json")).get("skip_date",""))' 2>/dev/null)"
 fi

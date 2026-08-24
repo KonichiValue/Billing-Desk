@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Render the post-standup JSON into a single self-contained HTML page.
 
+Everything is grouped by ticket, because that is how the work gets done. The
+only cross-ticket structure is the running order at the top.
+
 Usage:
     python3 render_post.py output/post-2026-08-24.json output/post-2026-08-24.html
     python3 render_post.py --error "message" output/post-2026-08-24.html
@@ -8,7 +11,9 @@ Usage:
 
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 import sys
 from datetime import date, datetime
 from pathlib import Path
@@ -22,50 +27,87 @@ URGENCY = {
 }
 
 EXTRA_CSS = """
-.todo-list{list-style:none;margin:0;padding:0}
-.todo{background:var(--card);border:1px solid var(--line);border-radius:12px;
-padding:16px 18px;margin-bottom:12px;display:flex;gap:14px}
-.todo.commit{border-left:4px solid #b42318}
-.todo-rank{width:28px;height:28px;flex:none;border-radius:8px;background:var(--ink);
-color:#fff;display:grid;place-items:center;font-size:13.5px;font-weight:650}
-.todo-main{flex:1;min-width:0}
-.todo-top{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
-.todo-title{font-size:16.5px;font-weight:600;letter-spacing:-.01em}
-.todo-detail{margin:9px 0 0;padding-left:19px}
-.todo-detail li{margin-bottom:4px;font-size:14.5px;color:var(--mut)}
-.todo-meta{display:flex;gap:12px;flex-wrap:wrap;margin-top:10px;font-size:13px;
-color:var(--soft);align-items:center}
-.todo-meta .ref{font-weight:650;color:var(--accent)}
-.todo-meta .mins{margin-left:auto;font-variant-numeric:tabular-nums}
-.commit-note{margin:9px 0 0;padding:7px 12px;background:#fef3f2;border:1px solid #fecdca;
-border-radius:8px;font-size:13.5px;color:#b42318;font-weight:550}
-.blocked{margin:9px 0 0;padding:7px 12px;background:#fffaeb;border:1px solid #fedf89;
-border-radius:8px;font-size:13.5px;color:#b54708}
-.quote{margin:11px 0 0;padding-left:12px;border-left:3px solid var(--line);
-font-size:13.5px;color:var(--soft);font-style:italic}
-.diff{background:var(--card);border:1px solid var(--line);border-radius:12px;
-padding:0;overflow:hidden;margin-bottom:12px}
-.diff-head{padding:11px 16px;background:#fcfcfc;border-bottom:1px solid var(--line);
-display:flex;gap:10px;align-items:center;font-size:13px}
-.diff-body{padding:14px 16px}
-.diff-line{display:flex;gap:11px;margin-bottom:7px;font-size:14.5px}
-.diff-line .k{flex:none;width:56px;font-size:12px;font-weight:650;
-text-transform:uppercase;letter-spacing:.05em;padding-top:3px}
-.diff-line.was .k{color:var(--soft)}
-.diff-line.was .v{color:var(--soft);text-decoration:line-through;
+.panel{background:var(--card);border:1px solid var(--line);border-radius:12px}
+.tk .sub:last-of-type{border-bottom:0;padding-bottom:0}
+.index{list-style:none;margin:0;padding:0;background:var(--card);
+border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.ix{display:flex;gap:13px;padding:13px 16px;border-bottom:1px solid var(--line);
+align-items:center;text-decoration:none;color:inherit}
+.ix:last-child{border-bottom:0}
+.ix:hover{background:var(--accent-bg)}
+.ix-rank{width:25px;height:25px;flex:none;border-radius:7px;background:var(--ink);
+color:#fff;display:grid;place-items:center;font-size:12.5px;font-weight:650}
+.ix-tag{flex:none;font-size:13px;font-weight:650;padding:2px 9px;border-radius:6px;
+background:#f2f4f7;color:var(--mut)}
+.ix-act{flex:1;min-width:0;font-weight:550}
+.ix-min{flex:none;color:var(--soft);font-size:13px;font-variant-numeric:tabular-nums}
+.tk{background:var(--card);border:1px solid var(--line);border-radius:14px;
+padding:22px;margin-bottom:22px;scroll-margin-top:80px}
+.tk-head{padding-bottom:15px;border-bottom:1px solid var(--line)}
+.tk-head h2{margin:0;font-size:19px;letter-spacing:-.015em;line-height:1.35}
+.tk-ja{margin:5px 0 0;font-size:15px;color:var(--mut)}
+.tk-meta{margin:10px 0 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+font-size:12.5px;color:var(--soft)}
+.tk-int{margin:9px 0 0;font-size:12.5px;color:var(--soft)}
+.tk-int b{color:#b54708;font-weight:650}
+.silent{color:#b54708;font-weight:600}
+.thr{list-style:none;margin:0;padding:0;display:grid;gap:1px;background:var(--line);
+border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.thr li{background:#fff;padding:10px 13px;display:flex;gap:12px;
+align-items:baseline;flex-wrap:wrap}
+.thr-where{flex:none;font-size:12px;font-weight:650;color:var(--accent);
+min-width:190px}
+.thr-body{flex:1;min-width:220px}
+.thr-label{font-weight:600;font-size:14px}
+.thr-gist{font-size:13.5px;color:var(--mut);margin-top:2px}
+.thr-when{flex:none;font-size:12px;color:var(--soft);text-align:right;
+font-variant-numeric:tabular-nums}
+.thr-when b{display:block;color:var(--mut);font-weight:600}
+.chg{border-left:3px solid #067647;padding:2px 0 2px 13px;margin-bottom:14px}
+.chg-line{display:flex;gap:10px;font-size:14.5px;margin-bottom:5px}
+.chg-line .k{flex:none;width:44px;font-size:11.5px;font-weight:650;
+text-transform:uppercase;letter-spacing:.05em;padding-top:3px;color:var(--soft)}
+.chg-line.was .v{color:var(--soft);text-decoration:line-through;
 text-decoration-color:#d0d5dd}
-.diff-line.now .k{color:#067647}
-.so-what{margin:11px 0 0;padding:9px 13px;background:var(--accent-bg);
+.chg-so{margin:8px 0 0;padding:9px 13px;background:var(--accent-bg);
 border-radius:8px;font-size:14.5px;color:#194185;font-weight:550}
-.wait{display:flex;gap:14px;padding:13px 16px;border-bottom:1px solid var(--line);
-align-items:flex-start}
-.wait:last-child{border-bottom:0}
-.wait-who{flex:none;width:150px;font-weight:600;font-size:14.5px}
-.wait-main{flex:1;min-width:0;font-size:14.5px}
-.wait-blocks{color:var(--soft);font-size:13px;margin-top:3px}
-.wait-chase{flex:none;text-align:right;font-size:12.5px;color:#b54708;font-weight:600}
-.panel{background:var(--card);border:1px solid var(--line);border-radius:12px;
+.chg-src{font-size:12px;color:var(--soft);margin-top:6px}
+.act{border:1px solid var(--line);border-radius:11px;margin-bottom:13px;overflow:hidden}
+.act.commit{border-color:#fecdca}
+.act-head{display:flex;gap:11px;padding:12px 15px;align-items:center;
+flex-wrap:wrap;background:#fcfcfc;border-bottom:1px solid var(--line)}
+.act-rank{width:24px;height:24px;flex:none;border-radius:6px;background:var(--ink);
+color:#fff;display:grid;place-items:center;font-size:12px;font-weight:650}
+.act-title{flex:1;min-width:0;font-weight:600;font-size:15.5px}
+.act-min{color:var(--soft);font-size:12.5px;font-variant-numeric:tabular-nums}
+.act-body{padding:13px 15px}
+.act-body ul{margin:0;padding-left:19px}
+.act-body li{margin-bottom:5px;font-size:14.5px;color:var(--mut)}
+.act-where{margin:11px 0 0;display:flex;gap:9px;align-items:center;flex-wrap:wrap;
+font-size:13px;color:var(--soft)}
+.act-commit{margin:11px 0 0;padding:8px 12px;background:#fef3f2;
+border:1px solid #fecdca;border-radius:8px;font-size:13.5px;color:#b42318;
+font-weight:550}
+.act-block{margin:11px 0 0;padding:8px 12px;background:#fffaeb;
+border:1px solid #fedf89;border-radius:8px;font-size:13.5px;color:#b54708}
+.act-quote{margin:11px 0 0;padding-left:12px;border-left:3px solid var(--line);
+font-size:13px;color:var(--soft);font-style:italic}
+.act-draft{margin:13px 0 0;border:1px solid var(--line);border-radius:9px;
 overflow:hidden}
+.wait{list-style:none;margin:0;padding:0}
+.wait li{display:flex;gap:13px;padding:11px 0;border-bottom:1px dashed var(--line);
+align-items:flex-start}
+.wait li:last-child{border-bottom:0}
+.wait-who{flex:none;width:170px;font-weight:600;font-size:14.5px}
+.wait-main{flex:1;min-width:0;font-size:14.5px}
+.wait-sub{color:var(--soft);font-size:13px;margin-top:2px}
+.wait-chase{flex:none;font-size:12.5px;color:#b54708;font-weight:600;
+white-space:nowrap}
+.dec{background:#fffaeb;border:1px solid #fedf89;border-radius:10px;
+padding:12px 15px;margin-bottom:11px}
+.dec-q{font-weight:600;font-size:14.5px;color:#93370d}
+.dec ul{margin:7px 0 0;padding-left:19px;font-size:14px;color:var(--mut)}
+.dec-owner{margin:8px 0 0;font-size:13px;color:#b54708;font-weight:600}
 .skip{background:#fffaeb;border:1px solid #fedf89;border-left:4px solid #b54708;
 border-radius:12px;padding:16px 20px;margin-bottom:24px}
 .skip strong{color:#b54708}
@@ -74,127 +116,234 @@ border-radius:12px;padding:16px 20px;margin-bottom:24px}
 """
 
 
-def render_todo(item: dict) -> str:
-    u_label, u_tone = URGENCY.get(item.get("urgency", "monitor"), URGENCY["monitor"])
-    detail = "".join(f"<li>{esc(b)}</li>" for b in item.get("detail", []))
-    mins = item.get("est_minutes")
-    committed = item.get("committed_to")
-    blocked = item.get("blocked_by")
-    quote = item.get("source_quote")
+def anchor(ref: str) -> str:
+    """A stable URL-safe id for a mostly-Japanese tag."""
+    ascii_part = re.sub(r"[^0-9A-Za-z]+", "", ref)
+    digest = hashlib.md5(ref.encode("utf-8")).hexdigest()[:6]
+    return f"t-{ascii_part}{digest}" if ascii_part else f"t-{digest}"
 
+
+def render_index(rows: list[dict], refs: dict[str, str]) -> str:
+    if not rows:
+        return '<div class="panel" style="padding:18px 22px"><p class="empty">Nothing came out of this standup that needs action from you.</p></div>'
+    out = []
+    for row in sorted(rows, key=lambda r: r.get("rank", 99)):
+        ref = row.get("ticket_ref", "")
+        mins = row.get("est_minutes")
+        u_label, u_tone = URGENCY.get(row.get("urgency", "monitor"), URGENCY["monitor"])
+        out.append(
+            f"""
+      <a class="ix" href="#{esc(refs.get(ref, anchor(ref)))}">
+        <span class="ix-rank">{esc(row.get("rank", "-"))}</span>
+        <span class="ix-tag">{esc(ref)}</span>
+        <span class="ix-act">{esc(row.get("action"))}</span>
+        {pill(u_label, u_tone)}
+        <span class="ix-min">{f"{esc(mins)} min" if mins else ""}</span>
+      </a>"""
+        )
+    return f'<div class="index">{"".join(out)}</div>'
+
+
+def render_threads(rows: list[dict]) -> str:
+    if not rows:
+        return ""
+    out = []
+    for r in rows:
+        out.append(
+            f"""
+        <li>
+          <span class="thr-where">{esc(r.get("where"))}</span>
+          <span class="thr-body">
+            <span class="thr-label">{esc(r.get("label"))}</span>
+            <span class="thr-gist">{esc(r.get("gist"))}</span>
+          </span>
+          <span class="thr-when"><b>{esc(r.get("last_from"))}</b>{esc(r.get("last_at"))}</span>
+          {link_btn(r.get("url", ""), "Open")}
+        </li>"""
+        )
     return f"""
-    <li class="todo {"commit" if committed else ""}">
-      <div class="todo-rank">{esc(item.get("rank", "-"))}</div>
-      <div class="todo-main">
-        <div class="todo-top">
-          <span class="todo-title">{esc(item.get("title"))}</span>
-          {pill(u_label, u_tone)}
-        </div>
-        {f'<ul class="todo-detail">{detail}</ul>' if detail else ""}
-        {f'<p class="commit-note">You committed this to {esc(committed)}</p>' if committed else ""}
-        {f'<p class="blocked">Blocked by: {esc(blocked)}</p>' if blocked else ""}
-        <div class="todo-meta">
-          {f'<span class="ref">{esc(item.get("ticket_ref"))}</span>' if item.get("ticket_ref") else ""}
-          <span>{esc(item.get("where"))}</span>
-          {link_btn(item.get("link", ""), "Open")}
-          {f'<span class="mins">{esc(mins)} min</span>' if mins else ""}
-        </div>
-        {f'<p class="quote">{esc(quote)}</p>' if quote else ""}
-      </div>
-    </li>"""
+      <section class="sub">
+        <h3>Every conversation this lives in</h3>
+        <ul class="thr">{"".join(out)}</ul>
+      </section>"""
 
 
 def render_changed(rows: list[dict]) -> str:
     if not rows:
         return ""
     out = []
-    for row in rows:
+    for r in rows:
+        src = r.get("source_url", "")
+        where = r.get("where", "")
         out.append(
             f"""
-      <div class="diff">
-        <div class="diff-head">
-          <span class="ref" style="font-weight:650;color:var(--accent)">{esc(row.get("ticket_ref"))}</span>
-          {link_btn(row.get("source_url", ""), "Source")}
-        </div>
-        <div class="diff-body">
-          <div class="diff-line was"><span class="k">Was</span><span class="v">{esc(row.get("before"))}</span></div>
-          <div class="diff-line now"><span class="k">Now</span><span class="v">{esc(row.get("after"))}</span></div>
-          {f'<p class="so-what">{esc(row.get("so_what"))}</p>' if row.get("so_what") else ""}
-        </div>
-      </div>"""
+        <div class="chg">
+          <div class="chg-line was"><span class="k">Was</span><span class="v">{esc(r.get("before"))}</span></div>
+          <div class="chg-line"><span class="k">Now</span><span class="v">{esc(r.get("after"))}</span></div>
+          {f'<p class="chg-so">{esc(r.get("so_what"))}</p>' if r.get("so_what") else ""}
+          <div class="chg-src">{esc(where)} {link_btn(src, "Source") if src else ""}</div>
+        </div>"""
         )
     return f"""
-  <h2 class="board-h">What the meeting changed since this morning</h2>
-  {"".join(out)}"""
+      <section class="sub">
+        <h3>What changed today</h3>
+        {"".join(out)}
+      </section>"""
+
+
+def render_draft(d: dict) -> str:
+    if not d:
+        return ""
+    body = d.get("body_ruby", "")
+    is_ja = d.get("language") == "ja"
+    rendered = furi(body) if is_ja else esc(body)
+    trans = (
+        f'<p class="draft-en">{esc(d.get("body_en"))}</p>'
+        if is_ja and d.get("body_en")
+        else ""
+    )
+    return f"""
+        <div class="act-draft">
+          <div class="draft-head">
+            <span>{esc(d.get("target"))}</span>
+            {link_btn(d.get("link", ""), "Go there")}
+            <button class="copy" data-copy="{esc(plain(body))}">copy</button>
+          </div>
+          <div class="draft-body {"ja" if is_ja else ""}">{rendered}</div>
+          {trans}
+        </div>"""
+
+
+def render_actions(rows: list[dict]) -> str:
+    if not rows:
+        return """
+      <section class="sub">
+        <h3>To do</h3>
+        <p class="empty">Nothing to do on this one right now.</p>
+      </section>"""
+    out = []
+    for r in sorted(rows, key=lambda x: x.get("rank", 99)):
+        u_label, u_tone = URGENCY.get(r.get("urgency", "monitor"), URGENCY["monitor"])
+        detail = "".join(f"<li>{esc(b)}</li>" for b in r.get("detail", []))
+        mins = r.get("est_minutes")
+        committed = r.get("committed_to")
+        blocked = r.get("blocked_by")
+        quote = r.get("source_quote")
+        out.append(
+            f"""
+        <div class="act {"commit" if committed else ""}">
+          <div class="act-head">
+            <span class="act-rank">{esc(r.get("rank", "-"))}</span>
+            <span class="act-title">{esc(r.get("title"))}</span>
+            {pill(u_label, u_tone)}
+            <span class="act-min">{f"{esc(mins)} min" if mins else ""}</span>
+          </div>
+          <div class="act-body">
+            {f"<ul>{detail}</ul>" if detail else ""}
+            {f'<p class="act-commit">You committed this to {esc(committed)}</p>' if committed else ""}
+            {f'<p class="act-block">Blocked by: {esc(blocked)}</p>' if blocked else ""}
+            <div class="act-where">
+              <span>{esc(r.get("where"))}</span>
+              {link_btn(r.get("link", ""), "Act here")}
+            </div>
+            {f'<p class="act-quote">{esc(quote)} {link_btn(r.get("source_url", ""), "Source") if r.get("source_url") else ""}</p>' if quote else ""}
+            {render_draft(r.get("draft") or {})}
+          </div>
+        </div>"""
+        )
+    return f"""
+      <section class="sub">
+        <h3>To do, hardest consequence first</h3>
+        {"".join(out)}
+      </section>"""
 
 
 def render_waiting(rows: list[dict]) -> str:
     if not rows:
         return ""
     out = []
-    for row in rows:
-        due = row.get("due") or "not stated"
-        chase = row.get("chase_on")
+    for r in rows:
+        chase = r.get("chase_on")
         out.append(
             f"""
-      <li class="wait">
-        <div class="wait-who">{esc(row.get("who"))}</div>
-        <div class="wait-main">
-          {esc(row.get("what"))}
-          {f'<div class="wait-blocks">Blocks: {esc(row.get("blocks"))}</div>' if row.get("blocks") else ""}
-          <div class="wait-blocks">Due {esc(due)}</div>
-        </div>
-        <div class="wait-chase">{f"chase {esc(chase)}" if chase else ""}</div>
-      </li>"""
+        <li>
+          <span class="wait-who">{esc(r.get("who"))}</span>
+          <span class="wait-main">{esc(r.get("what"))}
+            {f'<span class="wait-sub">Blocks: {esc(r.get("blocks"))}</span>' if r.get("blocks") else ""}
+            <span class="wait-sub">Due {esc(r.get("due") or "not stated")}
+            {link_btn(r.get("source_url", ""), "Source") if r.get("source_url") else ""}</span>
+          </span>
+          <span class="wait-chase">{f"chase {esc(chase)}" if chase else ""}</span>
+        </li>"""
         )
     return f"""
-  <h2 class="board-h">Waiting on other people</h2>
-  <ul class="panel" style="list-style:none;margin:0;padding:0">{"".join(out)}</ul>"""
+      <section class="sub">
+        <h3>Waiting on someone else</h3>
+        <ul class="wait">{"".join(out)}</ul>
+      </section>"""
 
 
-def render_drafts(drafts: list[dict]) -> str:
-    if not drafts:
-        return ""
-    out = []
-    for d in drafts:
-        body = d.get("body_ruby", "")
-        is_ja = d.get("language") == "ja"
-        rendered = furi(body) if is_ja else esc(body)
-        trans = (
-            f'<p class="draft-en">{esc(d.get("body_en"))}</p>'
-            if is_ja and d.get("body_en")
-            else ""
-        )
-        rank = d.get("for_rank")
-        out.append(
-            f"""
-      <div class="draft">
-        <div class="draft-head">
-          {f'<span style="font-weight:650">#{esc(rank)}</span>' if rank else ""}
-          <span>{esc(d.get("target"))}</span>
-          {link_btn(d.get("link", ""), "Go there")}
-          <button class="copy" data-copy="{esc(plain(body))}">copy</button>
-        </div>
-        <div class="draft-body {"ja" if is_ja else ""}">{rendered}</div>
-        {trans}
-      </div>"""
-        )
-    return f"""
-  <h2 class="board-h">Drafts, ready to copy</h2>
-  {"".join(out)}"""
-
-
-def render_watch(rows: list[dict]) -> str:
+def render_decisions(rows: list[dict]) -> str:
     if not rows:
         return ""
-    items = "".join(
-        f'<li><strong>{esc(r.get("topic"))}</strong> &mdash; {esc(r.get("why"))} '
-        f'{link_btn(r.get("source_url", ""), "Source")}</li>'
-        for r in rows
-    )
+    out = []
+    for r in rows:
+        opts = "".join(f"<li>{esc(o)}</li>" for o in r.get("options", []))
+        out.append(
+            f"""
+        <div class="dec">
+          <div class="dec-q">{esc(r.get("question"))}</div>
+          {f"<ul>{opts}</ul>" if opts else ""}
+          <p class="dec-owner">Decided by: {esc(r.get("owner"))}
+          {link_btn(r.get("source_url", ""), "Source") if r.get("source_url") else ""}</p>
+        </div>"""
+        )
     return f"""
-  <details class="gaps"><summary><h2>Not mine, but adjacent ({len(rows)})</h2></summary>
-  <ul class="watch-list">{items}</ul></details>"""
+      <section class="sub">
+        <h3>Still undecided</h3>
+        {"".join(out)}
+      </section>"""
+
+
+def render_ticket(t: dict, ident: str) -> str:
+    internal = t.get("internal_ticket") or {}
+    int_block = ""
+    if internal.get("name"):
+        int_block = (
+            f'<p class="tk-int"><b>Internal, never to TG:</b> '
+            f'{esc(internal.get("name"))} {link_btn(internal.get("url", ""), "Open")}</p>'
+        )
+
+    silent = (
+        '<span class="silent">Not reached at the standup</span>'
+        if t.get("raised_at_standup") is False
+        else ""
+    )
+
+    return f"""
+    <article class="tk" id="{esc(ident)}">
+      <header class="tk-head">
+        <h2><span class="ix-tag">{esc(t.get("ref"))}</span> {esc(t.get("title_en"))}</h2>
+        <p class="tk-ja">{esc(t.get("title_ja"))}</p>
+        <p class="tk-meta">
+          {pill(t.get("status_label", "-"), t.get("status_tone", "grey"))}
+          {silent}
+          {link_btn(t.get("asana_url", ""), "Asana ticket")}
+        </p>
+        {int_block}
+      </header>
+
+      <section class="sub">
+        <h3>Where it stands</h3>
+        <p class="status">{esc(t.get("where_it_stands"))}</p>
+      </section>
+
+      {render_changed(t.get("changed_today", []))}
+      {render_actions(t.get("actions", []))}
+      {render_waiting(t.get("waiting_on", []))}
+      {render_decisions(t.get("open_decisions", []))}
+      {render_threads(t.get("threads", []))}
+    </article>"""
 
 
 def shell(title: str, body: str) -> str:
@@ -214,51 +363,55 @@ def render(data: dict) -> str:
     except ValueError:
         pretty = meeting_date
 
-    todo = sorted(data.get("todo", []), key=lambda i: i.get("rank", 99))
-    total = sum(i.get("est_minutes") or 0 for i in todo)
+    tickets = data.get("tickets", [])
+    refs = {t.get("ref", ""): anchor(t.get("ref", "")) for t in tickets}
+    cards = "".join(render_ticket(t, refs[t.get("ref", "")]) for t in tickets)
 
-    if todo:
-        items = "".join(render_todo(i) for i in todo)
-        todo_block = f"""
-  <h2 class="board-h">{len(todo)} thing{"s" if len(todo) != 1 else ""} to do, hardest consequence first
-  {f"&middot; about {total} min" if total else ""}</h2>
-  <ol class="todo-list">{items}</ol>"""
-    else:
-        todo_block = """
-  <h2 class="board-h">To do</h2>
-  <div class="panel" style="padding:18px 22px"><p class="empty">Nothing came out of
-  this standup that needs action from you.</p></div>"""
+    total = sum(
+        a.get("est_minutes") or 0 for t in tickets for a in t.get("actions", [])
+    )
 
     nxt = data.get("next_standup") or {}
     skip_block = ""
     if nxt.get("skipped"):
-        when = nxt.get("date")
         skip_block = f"""
-  <div class="skip"><strong>No standup on {esc(when)}.</strong>
-  {esc(nxt.get("reason"))} The morning prep will not build that day.</div>"""
+  <div class="skip"><strong>No standup on {esc(nxt.get("date"))}.</strong>
+  {esc(nxt.get("reason"))} Anything that was waiting for that meeting now has to
+  move into Asana. The morning prep will not build that day.</div>"""
+
+    watch = data.get("watch", [])
+    watch_block = ""
+    if watch:
+        items = "".join(
+            f'<li><strong>{esc(w.get("topic"))}</strong> &mdash; {esc(w.get("why"))} '
+            f'{link_btn(w.get("source_url", ""), "Source")}</li>'
+            for w in watch
+        )
+        watch_block = (
+            f'<details class="gaps"><summary><h2>Not mine, but adjacent '
+            f'({len(watch)})</h2></summary><ul class="watch-list">{items}</ul></details>'
+        )
 
     gaps = data.get("gaps", [])
     gap_block = ""
     if gaps:
-        gitems = "".join(f"<li>{esc(g)}</li>" for g in gaps)
-        gap_block = f'<section class="gaps"><h2>Open gaps</h2><ul>{gitems}</ul></section>'
-
-    notion = link_btn(data.get("notion_url", ""), "Meeting note")
+        items = "".join(f"<li>{esc(g)}</li>" for g in gaps)
+        gap_block = f'<section class="gaps"><h2>Open gaps</h2><ul>{items}</ul></section>'
 
     body = f"""
 <header class="top"><div class="top-in">
   <h1>After the TG billing standup</h1>
   <span class="date">{esc(pretty)}</span>
-  <span style="margin-left:auto">{notion}</span>
+  <span style="margin-left:auto">{link_btn(data.get("notion_url", ""), "Meeting note")}</span>
 </div></header>
 <div class="wrap">
   <div class="headline"><p>{esc(data.get("headline"))}</p></div>
   {skip_block}
-  {todo_block}
-  {render_changed(data.get("changed", []))}
-  {render_waiting(data.get("waiting_on", []))}
-  {render_drafts(data.get("drafts", []))}
-  {render_watch(data.get("watch", []))}
+  <h2 class="board-h">Running order{f" &middot; about {total} min in total" if total else ""}</h2>
+  {render_index(data.get("index", []), refs)}
+  <h2 class="tickets-h">{len(tickets)} ticket{"s" if len(tickets) != 1 else ""}, everything for each one in one place</h2>
+  {cards}
+  {watch_block}
   {gap_block}
   <p class="foot">Generated {esc(data.get("generated_at"))}</p>
 </div>"""
@@ -296,12 +449,13 @@ def main() -> int:
     except json.JSONDecodeError as exc:
         print(f"invalid JSON in {src}: {exc}", file=sys.stderr)
         return 1
-    if not isinstance(data, dict) or "todo" not in data:
-        print(f"{src} is missing the 'todo' key", file=sys.stderr)
+    if not isinstance(data, dict) or "tickets" not in data:
+        print(f"{src} is missing the 'tickets' key", file=sys.stderr)
         return 1
 
     dest.write_text(render(data), encoding="utf-8")
-    print(f"wrote {dest} ({len(data.get('todo', []))} actions)")
+    actions = sum(len(t.get("actions", [])) for t in data.get("tickets", []))
+    print(f"wrote {dest} ({len(data['tickets'])} tickets, {actions} actions)")
     return 0
 
 

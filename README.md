@@ -12,6 +12,12 @@ The split is deliberate. Before the standup you have 30 minutes and you spend
 them reading, so the morning page is for preparing, not working. Replies,
 investigation and ticket updates all wait for the afternoon page.
 
+The afternoon page is also written as markdown, `output/post-<date>.md`. That is
+the version to hand work back from: open a Cursor chat in this repo and say
+"draft the reply to Nakayama-san" or "check the codebase for X", and `AGENTS.md`
+points the agent at today's file so it starts with the full picture. The HTML is
+for reading, the markdown is for delegating, and both come from the same JSON.
+
 ## Morning prep
 
 1. Finds every open Asana ticket assigned to Rei in the two TG shared projects,
@@ -45,12 +51,22 @@ TG will raise it at 10:30 and you cannot answer cold.
    summary and the **full transcript**. The transcript is the valuable half:
    pushback, undecided forks and quiet takeaways only exist there.
 2. Loads the morning JSON so it can show what the meeting changed.
-3. Re-reads Asana and the Heqing DM, because decisions reached verbally often get
-   written up within minutes and then you do not need to do it again.
+3. For each ticket, gathers **every conversation it lives in**: the Asana ticket,
+   the internal build ticket, the CE refinement thread, the CE help thread, the
+   Heqing DM. Threads get read in full, because a reversal lands in reply 30 and
+   an engineer saying "actually this is harder than I thought" outranks anything
+   said in the room.
 4. Ranks everything by what happens if you do nothing today, commitments made in
    front of TG first.
-5. Records anything other people owe you, with a chase date.
-6. Writes the Japanese replies you now owe, ready to copy.
+5. Records anything other people owe you, with a chase date, and the forks nobody
+   has been assigned to decide.
+6. Writes the replies you now owe, each one sitting inside the action it belongs
+   to.
+
+**Everything is grouped by ticket.** One block per ticket holds where it stands,
+what changed today, what to do, the drafts, who you are waiting on, what is
+undecided, and every thread it lives in. The only cross-ticket structure is the
+running order at the top, which tells you which ticket to open first.
 
 The Notion note lands about five minutes after the meeting ends, but meetings
 overrun. So each attempt is a cheap agent run that exits immediately when the
@@ -86,7 +102,9 @@ If the agent is not confident about the date it writes nothing and flags it in
 - The amber **Check before 10:30** box holds unknowns and hard cautions,
   including anything you must not say to TG.
 - **Script only** strips the morning page back to the Japanese at a larger size.
-- On the afternoon page, a red left border means you committed to it out loud.
+- On the afternoon page, the running order links straight down to the ticket, a
+  red action border means you committed to it out loud, and a draft always sits
+  inside the action that needs it.
 - Both pages are plain HTML. Keep them, mail them, print them.
 
 ## Pieces
@@ -95,13 +113,15 @@ If the agent is not confident about the date it writes nothing and flags it in
 |---|---|
 | `prompt.md` | Morning agent instructions and output schema. |
 | `prompt-post.md` | Post-standup agent instructions and output schema. |
+| `AGENTS.md` | How a Cursor chat in this repo picks up today's list and acts on it. |
 | `config.json` | Project GIDs, user GIDs, meeting time, Slack channel hints. |
 | `render.py` | Morning JSON into HTML, plus the shared CSS, the error page and the cancelled-standup notice. No network, no LLM. |
 | `render_post.py` | Post-standup JSON into HTML. Imports the shared styling from `render.py`. |
+| `render_md.py` | Post-standup JSON into markdown, for handing work back in chat. |
 | `run_prep.sh` | Morning entry point. Guards, skip check, timeout, error page. |
 | `run_post.sh` | Afternoon entry point. Polls for the Notion note. |
 | `launchd/` | The two schedules. |
-| `output/` | One JSON and one HTML per page per day. |
+| `output/` | Per day: the morning JSON and HTML, the afternoon JSON, HTML and markdown. |
 | `state/` | `skip-next.json`, when a standup has been cancelled. |
 | `logs/` | `run.log` for both runners, `agent-<date>.log` and `agent-post-<date>.log` for raw agent transcripts. |
 
