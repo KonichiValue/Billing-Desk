@@ -13,9 +13,14 @@ standup is one of the things that moves it, not the reason it exists.
 come and go, the standup happens or it does not, but an item keeps its number
 until it is closed. Everything in `output/` is rendered from the board.
 
-The page has two views off that one file. The desk is what he does; the standup
-view is what he says at 10:30, from each ticket's `prep` block. Neither carries
-its own status, so a script cannot contradict the list.
+The page has two views off that one file. *My work* is what he does; *what I say*
+is the words for the next session, from each ticket's `prep` block. Neither
+carries its own status, so a script cannot contradict the list.
+
+`sessions` on the board is every room he still has to speak in, soonest first,
+and `script.for_date` says which one the current script was written for. That
+session may be an onsite rather than the 10:30 standup, which changes how much
+preparation a ticket needs, so read it before writing anything for a meeting.
 
 ## When Rei asks you to act on his work
 
@@ -57,9 +62,11 @@ so use that when he only wants to know where he is.
 ## "prep" or "build the script"
 
 **Read `prompt-prep.md` and follow it exactly.** Same routine as the Build script
-button and `tg prep`: the refresh sweep first, then the standup half. It writes
-each ticket's `prep` block and nothing else, so item states stay where the sweep
-left them.
+button and `tg prep`: the refresh sweep first, then the speaking half. It writes
+each ticket's `prep` block, `sessions` and `script`, and nothing else, so item
+states stay where the sweep left them. Check which session you are writing for
+before you start: an onsite needs decisions to land and answers to pushback, a
+standup needs two sentences per ticket.
 
 ## When Rei says he has done something
 
@@ -120,7 +127,7 @@ but cannot change it; the board is the only truth about what is closed.
 ## Changing what lands on the pages
 
 Edit the prompts, not the output. `prompt-refresh.md` is the sweep behind
-"refresh", `prompt-prep.md` writes the standup script on top of that sweep, and
+"refresh", `prompt-prep.md` writes the script on top of that sweep, and
 `prompt-post.md` folds the meeting note in. The shape in `board.py` is the
 contract the renderers expect, so if you add a field, update `render_desk.py`,
 `render_standup.py` and `render_desk_md.py` in the same change.

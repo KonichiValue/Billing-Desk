@@ -1,4 +1,4 @@
-# TG billing desk
+# Billing desk
 
 The to-do list for the Tokyo Gas billing work. Every ticket open in your name in
 the two TG Asana projects, the Slack threads it is argued out in, what has
@@ -11,13 +11,17 @@ finished, and it keeps its number until it closes, so "do 4" means the same
 thing next week. Everything else in the repo either writes to the board or draws
 it.
 
-**One page, two views.** The desk answers "what do I do". The standup view
-answers "what do I say at 10:30", in the order the meeting walks the board, with
-the Japanese script. Same tickets, same file, and `1` and `2` switch between
-them. A ticket that needs airtime carries a *raise at standup* pill on the desk
-and appears under its script; a ticket in the script links back to its open items
-on the desk. Neither view has a status of its own, so a script can never
+**One page, two views.** *My work* answers "what do I do". *What I say* answers
+"what comes out of my mouth in the next meeting", in the order that meeting walks
+the board, with the Japanese script. Same tickets, same file, and `1` and `2`
+switch between them. A ticket that needs airtime carries a *raise at* pill on the
+work view and appears under its script; a ticket in the script links back to its
+open items. Neither view has a status of its own, so a script can never
 contradict the list.
+
+The colour means one thing everywhere: red is with you, amber is blocked, blue is
+with somebody else, green is closed. The speaking view runs on warmer paper with a
+plum accent, so you can see which view you are in without reading the tab.
 
 Three things put work on the board, and the standup is the day's forcing
 function:
@@ -25,19 +29,19 @@ function:
 | | When | What it does |
 |---|---|---|
 | **Refresh** | any time you press it | Sweeps every open ticket and thread, moves what changed. |
-| **Build script** | when you sit down on a standup day | Refresh, then writes what you say at 10:30. |
+| **Build script** | when you sit down before a meeting | Refresh, then writes what you say in the next session. |
 | **Standup fold-in** | from 11:00, Mon/Wed/Thu | Reads the meeting note and moves the board. Scheduled, because the note appears while you are still in meetings. |
 
-Before the standup you have 20 minutes and you spend them reading, so the
-standup view is for preparing. Replies, investigation and ticket updates wait for
-the desk afterwards.
+Before a standup you have 20 minutes and you spend them reading, so the speaking
+view is for preparing. Replies, investigation and ticket updates wait for the
+work view afterwards.
 
 The desk is written twice: `output/desk.html` to read, `output/desk.md` to hand
 work back from. Open a Cursor chat in this repo and say "draft the reply to
 Nakayama-san" or "check the codebase for X", and `AGENTS.md` points the agent at
 the markdown so it starts with the full picture.
 
-## The standup script
+## The script
 
 Press **Build script** in the app, or run `tg prep`. Nothing is scheduled for the
 morning, deliberately: you build it when you sit down, so it is written against
@@ -100,7 +104,7 @@ note is missing, and the runner retries every five minutes until 11:45.
 
 ## Getting at it during the day
 
-Run `./install.sh` once. It puts **TG Billing Desk** in `~/Applications`, which you
+Run `./install.sh` once. It puts **Billing Desk** in `~/Applications`, which you
 drag to the Dock, and links `tg` into `~/.local/bin`. Both point at this
 checkout, so pulling changes updates them; rerun it after any change to `bin/tg`.
 
@@ -128,7 +132,7 @@ tg 4            item 4 is finished
 tg 2 -w Kevin   sent, now sitting with Kevin
 tg 2 --mine     he replied, it is yours again
 tg refresh      sweep every open ticket and thread, rebuild, open
-tg prep         sweep, then write today's standup script
+tg prep         sweep, then write the script for the next session
 tg chat         open the folder in Cursor to hand work over
 tg build        re-render the page from the board, no agent
 tg post         fold today's Notion meeting note in again
@@ -187,27 +191,38 @@ python3 remind.py state/board.json --list "Work"
 macOS asks for Reminders access the first time, so run it once by hand before
 relying on it in the scheduled job.
 
-## Cancelled standups
+## Onsites, and standups that are not happening
 
-Standups get skipped for onsites and workshops, and it is only ever said out
-loud. The fold-in agent listens for it and records the date on the board, and both
-views say so at the top. The script still builds if you press the button, since
-the work does not stop because the meeting did.
+The next meeting is not always the 10:30 standup. Onsites and workshops replace
+it, and it is only ever said out loud in the room, so both agents listen for it
+and keep `sessions` on the board: what kind of session, when, what it is for, and
+which standup it displaces.
 
-If the agent is not confident about the date it records nothing and flags it,
-because a missing warning is better than a wrong one.
+An onsite is a day rather than fifteen minutes, so the speaking view carries more
+for one: the shape of the day and what to have ready at the top, then per ticket
+what has to be **settled before you leave the room**, up to six script blocks
+instead of four, and the answer ready for the pushback you can see coming. The
+work view says what is next and, when the script in the app was written for a
+different session, says that too rather than letting you walk in with the wrong
+one.
+
+A skipped standup stays visible, because any ask that was waiting for it now has
+to move into Asana instead. If an agent is not confident about a date it records
+nothing and flags it, since a missing warning beats a wrong one.
 
 ## Reading the page
 
-- `1` shows the desk, `2` the standup, `s` strips everything but the Japanese at
-  a larger size. The tab you were on survives a reload; each morning opens on the
-  script when one has been built and the standup has not started yet.
-- On the desk, **Where you are** is one list: yours at the top, then what you may
-  not send yet, then what sits with someone else, with finished work folded away
-  behind a count. Each ticket header carries what Asana currently says about it,
-  and a draft always sits inside the item that needs it.
-- On the standup view, cards run in board order: the issue in 20 seconds, where
-  it stands, what the fix does not cover, then the script.
+- `1` shows your work, `2` what you say, `s` strips everything but the Japanese
+  at a larger size. The tab you were on survives a reload, each view remembers
+  where you had scrolled to, and the morning of a session opens on the script
+  when one has been built and the meeting has not started yet.
+- On the work view, **Where you are** is one list: yours at the top, then what you
+  may not send yet, then what sits with someone else, with finished work folded
+  away behind a count. Each ticket header carries what Asana currently says about
+  it, and a draft always sits inside the item that needs it.
+- On the speaking view, cards run in board order: the issue in 20 seconds, where
+  it stands, what the fix does not cover, what has to be settled today, then the
+  script.
 - **What I say** is meant to be read aloud verbatim. Furigana sits above the
   kanji, English underneath, and each block copies the Japanese without the
   markup.
@@ -221,23 +236,23 @@ because a missing warning is better than a wrong one.
 |---|---|
 | `board.py` | The board: what it holds, how state moves, where numbers come from. |
 | `prompt-refresh.md` | What "refresh" means, for the button, `tg refresh` and a chat alike. |
-| `prompt-prep.md` | The standup script: the sweep, then what goes in `prep`. |
+| `prompt-prep.md` | The script: the sweep, then what goes in `prep`, standup or onsite. |
 | `prompt-post.md` | How the standup gets folded into the board. |
 | `AGENTS.md` | How a Cursor chat in this repo picks up the list and acts on it. |
 | `config.json` | Project GIDs, user GIDs, meeting time, Slack channel hints. |
 | `render.py` | Shared styling, furigana, item lifecycle and the common blocks. No network, no LLM. |
 | `render_desk.py` | The board into `output/desk.html`, both views in one file. |
-| `render_standup.py` | The standup view inside that file. |
+| `render_standup.py` | The speaking view inside that file, standups and onsites. |
 | `render_desk_md.py` | The board into `output/desk.md`, for handing work back in chat. |
 | `tick.py` | Move items along and rebuild. The only way state gets recorded. |
 | `serve.py` | The local page server: renders on every load, runs an agent when a button asks, and walks the sign-in when something is not authorised. Loopback only, keyed. |
 | `bin/tg` | The one command. Opens the window, moves items along, starts a run. |
 | `install.sh` | Links `tg`, builds the Dock app, keeps the server running. Safe to rerun. |
-| `app/` | The icon generator and the Tokyo Gas mark. The Kraken mark is read from `~/Projects/kraken-core` at build time. |
+| `app/` | The icon generator: the Kraken mark over a ticked list, read from `~/Projects/kraken-core` at build time. No client mark, so the app fits whoever the work is for. |
 | `run_post.sh` | The fold-in entry point. Polls for the Notion note, then folds it in. |
 | `launchd/` | The fold-in schedule and the page server. |
 | `output/` | `desk.html` and `desk.md`, both rendered from the board. |
-| `state/` | `board.json`, the one durable file, and `skip-next.json` when a standup has been cancelled. |
+| `state/` | `board.json`, the one durable file. |
 | `logs/` | `refresh-<date>.log`, `prep-<date>.log` and the fold-in logs. |
 
 ## Furigana markup

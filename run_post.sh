@@ -138,9 +138,22 @@ if [[ "${POST_REMIND:-0}" == "1" ]]; then
   fi
 fi
 
-if [[ -f state/skip-next.json ]]; then
-  log "next standup marked as skipped: $(python3 -c 'import json;print(json.load(open("state/skip-next.json")).get("skip_date",""))' 2>/dev/null)"
-fi
+# Say what is coming, since a skipped standup or an onsite changes his week.
+log "$(python3 - "$BOARD" <<'PY' 2>/dev/null || true
+import json, sys
+from render import sessions
+board = json.load(open(sys.argv[1], encoding="utf-8"))
+rows = sessions(board)
+if not rows:
+    print("no session on the board")
+else:
+    print("next: " + "; ".join(
+        f"{s.get('title') or s.get('name')} {s.get('date')}"
+        + (" (skipped)" if s.get("skipped") else "")
+        for s in rows[:3]
+    ))
+PY
+)"
 
 log "built $HTML"
 [[ $OPEN -eq 1 ]] && open "$HTML"

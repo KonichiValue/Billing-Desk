@@ -12,7 +12,8 @@ Shape of `state/board.json`:
       "version": 1,
       "checked_at": "2026-08-24T18:20:00+09:00",
       "next_id": 8,
-              "standup": {"date", "at", "built_at", "headline"},
+              "sessions": [ ...see below... ],
+              "script": {"for_date", "at", "built_at", "headline"},
               "tickets": [
                 {
                   "id": "1217430352217964",        Asana gid, so nothing is duplicated
@@ -29,10 +30,20 @@ Shape of `state/board.json`:
               ]
             }
 
-`prep` is what the ticket sounds like out loud, and only the standup view reads
+`sessions` is every room Rei still has to speak in, soonest first. A list,
+because an onsite on Wednesday and a standup on Thursday are two different
+rooms, and `script.for_date` says which one the current script was written for.
+A standup that is not running stays in the list with `skipped` set, since "no
+standup Wednesday" changes what has to move into Asana instead.
+
+    [{"kind": "standup|onsite|workshop", "date": "2026-08-26", "at": "10:30",
+      "label", "title", "place", "focus", "skipped", "reason", "quote",
+      "agenda": [{"topic", "why", "owner"}], "bring": ["..."]}]
+
+`prep` is what the ticket sounds like out loud, and only the speaking view reads
 it. It is rebuilt whenever Rei presses Build script, and it deliberately holds no
-status of its own: the standup view takes `where_it_stands` from the ticket, so a
-script can never contradict the desk.
+status of its own: that view takes `where_it_stands` from the ticket, so a script
+can never contradict the desk.
 
     {"order": 1, "board_position": "3 of 14 on the board",
      "issue": ["plain English, two or three lines"], "why_it_matters",
@@ -41,11 +52,17 @@ script can never contradict the desk.
      "open_questions": [{"en", "ja_ruby", "who"}],
      "script": [{"heading": "現状", "heading_en": "Where it stands",
                  "lines": [{"ja_ruby": "{託送|たくそう}...", "en": "..."}]}],
+     "decisions": [{"need", "why", "fallback"}],      onsite only
+     "pushback": [{"they_say", "say_ja", "say_en"}],   onsite only
      "tg_ask_needed": true, "estimate": "", "unknowns": [], "built_at"}
 
+`decisions` and `pushback` are what an onsite needs and a 15 minute standup does
+not: what has to be settled before everyone leaves the room, and the sentence
+ready for the objection that stops it being settled.
+
 An item with `at_standup` true is work that has to be spoken about rather than
-only done, so it shows on both views: on the desk with a "raise at standup" pill,
-in the script under the ticket it belongs to.
+only done, so it shows on both views: on the desk with a "raise at" pill naming
+the session, in the script under the ticket it belongs to.
 
 An item is an action with a life:
 

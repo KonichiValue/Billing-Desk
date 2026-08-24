@@ -41,14 +41,14 @@ BOARD = ROOT / "state" / "board.json"
 # Chrome reads this when you install the page as an app, and takes the Dock icon
 # from it. Without it the installed app wears the Chrome logo.
 MANIFEST = {
-    "name": "TG Billing Desk",
-    "short_name": "TG Desk",
-    "description": "Every open Tokyo Gas billing ticket and what is left to do on it.",
+    "name": "Billing Desk",
+    "short_name": "Desk",
+    "description": "Every open billing ticket, what is left to do, and what to say.",
     "start_url": "/",
     "scope": "/",
     "display": "standalone",
-    "background_color": "#fafafa",
-    "theme_color": "#fafafa",
+    "background_color": "#f4f6fa",
+    "theme_color": "#0d1524",
     "icons": [
         {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
         {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},

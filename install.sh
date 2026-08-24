@@ -9,10 +9,13 @@
 set -euo pipefail
 
 DIR="${0:A:h}"
-APP="$HOME/Applications/TG Billing Desk.app"
+APP="$HOME/Applications/Billing Desk.app"
 BIN="$HOME/.local/bin"
 
 mkdir -p "$BIN" "$HOME/Applications"
+
+# The app used to carry the client's name. The work does, the tool does not.
+rm -rf "$HOME/Applications/TG Billing Desk.app"
 
 chmod +x "$DIR/bin/tg" "$DIR/tick.py" "$DIR/run_post.sh"
 ln -sf "$DIR/bin/tg" "$BIN/tg"

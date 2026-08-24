@@ -15,8 +15,8 @@ Your deliverable is `state/board.json`, which already exists and is described in
 - A ticket that is no longer open in Asana comes off, and its open items close
   as `dropped` with a note.
 
-Write the file with the file-write tool. Do not print JSON to stdout. The only
-other file you may create is `state/skip-next.json`, where the last step says so.
+Write the file with the file-write tool. Do not print JSON to stdout, and do not
+create any other file.
 
 Read `config.json` first for the Asana workspace, the TG project GIDs and Rei's
 identifiers.
@@ -497,33 +497,36 @@ Slack thread without expanding.
 Where you lack the information to draft something, say so in the item's
 `detail` and leave `draft` out. Do not guess at content Rei will send.
 
-## Step 9: did the meeting cancel a future standup?
+## Step 9: what is the next room, and is it the usual one?
 
 Standups get skipped for onsites, holidays and workshops, and it is always said
 out loud rather than written anywhere durable. Search the summary and transcript
-for any statement that a standup is not happening.
+for anything about a session not happening, or a different kind of session
+happening instead.
 
-If you find one, work out the date. Standups run Monday, Wednesday and Thursday
-at 10:30 JST, so "the next one" means the next of those days after today. Then
-write `state/skip-next.json`:
+Keep `sessions` on the board true, soonest first. Standups run Monday, Wednesday
+and Thursday at 10:30 JST, so "the next one" means the next of those days after
+today. Drop entries whose date has passed.
+
+An onsite or a workshop is a session in its own right, not a hole where a standup
+was, so write both: the replacement with its own `kind`, and the standup it
+displaces with `skipped` set. Give the replacement a `focus` sentence, an
+`agenda` if the meeting said anything about the shape of the day, and a `bring`
+list of anything Rei committed to having ready. He prepares differently for a day
+in the room than for fifteen minutes, and this is what tells him which he is
+facing.
 
 ```json
-{
-  "skip_date": "YYYY-MM-DD",
-  "reason": "Short plain-English reason",
-  "quote": "The verbatim line that told you this",
-  "source_url": "Notion page URL",
-  "written_at": "ISO 8601 with +09:00"
-}
+"sessions": [
+  {"kind": "onsite", "date": "YYYY-MM-DD", "at": "", "title": "Billing onsite",
+   "focus": "What the day is for.", "quote": "The verbatim line that told you",
+   "agenda": [{"topic": "", "why": "", "owner": ""}], "bring": [""]},
+  {"kind": "standup", "date": "YYYY-MM-DD", "at": "10:30", "skipped": true,
+   "reason": "Short plain-English reason"}
+]
 ```
 
-The morning job reads that file and will not build a prep for a meeting that is
-not happening, so get the date right. If you are not confident, do **not** write
-the file: put it in `gaps` and let the prep run. A missing prep page is worse
-than a redundant one.
-
-Mirror it into `next_standup` either way. If nothing was said about skipping,
-delete any existing `state/skip-next.json` whose `skip_date` is in the past.
+If you are not confident about a date, leave the entry out and put it in `gaps`.
 
 A cancelled standup has a second effect worth spelling out on the page: any ask
 that was waiting for the next meeting now has nowhere to go, so it has to move
@@ -547,11 +550,9 @@ everything you are not changing.
     "found": true,
     "url": "Notion URL"
   },
-  "next_standup": {
-    "date": "YYYY-MM-DD, or empty string if unknown",
-    "skipped": false,
-    "reason": "Why it is skipped. Empty string when it is going ahead."
-  },
+  "sessions": [
+    {"kind": "standup", "date": "YYYY-MM-DD", "at": "10:30"}
+  ],
   "tickets": [
     {
       "id": "Asana task gid. This is what stops a ticket being added twice.",

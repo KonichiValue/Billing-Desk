@@ -1,7 +1,7 @@
-# Write today's standup script
+# Write the script for the next session
 
 Rei presses **Build script** when he sits down, and this is what runs. It has two
-halves: bring the board up to date, then write what he says at 10:30 into it.
+halves: bring the board up to date, then write what he says out loud into it.
 
 He has 20 minutes with what you produce and he will be speaking Japanese to
 Tokyo Gas within the hour. Everything you write is for someone who needs to sound
@@ -28,11 +28,44 @@ there. `board.py` documents the shape.
 
 ## Half two: what he says
 
-Only the standup half is yours to write now. Do not touch item states, and do not
-rewrite `events` or `where_it_stands` beyond what the sweep already did.
+Only the speaking half is yours to write now. Do not touch item states, and do
+not rewrite `events` or `where_it_stands` beyond what the sweep already did.
 
 Read `config.json` first for the Asana workspace, the two TG project GIDs, Rei's
 user GID and the Slack channel hints.
+
+### Which room are you writing for
+
+Read `sessions` on the board before anything else and write for the soonest one
+that is not `skipped`. Set `script.for_date` to its date. Everything below is
+written for a standup unless the session says otherwise, and an onsite is not a
+longer standup.
+
+Keep `sessions` true as you go. The last meeting note or a Slack announcement may
+have moved something, added an onsite, or cancelled a standup. When you learn of
+a session, write it in with its `kind`, `date`, `at` when known, a `focus`
+sentence saying what the session is actually for, and, for anything that is not a
+standup, the `agenda` and what he has to `bring`. A standup that is not running
+stays in the list with `skipped` and a `reason`, because "no standup Wednesday"
+changes what has to move into Asana instead.
+
+**When the session is an onsite**, four things change:
+
+1. **Depth.** A standup is 15 minutes for the whole board and he gets two
+   sentences per ticket. An onsite is a day, TG are in the room, and thin
+   preparation shows. Up to six script blocks per ticket, and cover the ground
+   properly.
+2. **`prep.decisions`.** What has to be settled before people leave the room, why
+   it cannot wait, and the fallback if TG will not settle it today. This is the
+   point of an onsite: decisions that die in a standup because there is no time.
+3. **`prep.pushback`.** The objection you can see coming, and the Japanese
+   sentence that answers it. Take these from what TG have actually said in the
+   threads, not from imagination. Two or three per contested ticket, none for the
+   quiet ones.
+4. **What to bring.** Anything he promised to have ready, or that the argument
+   cannot be had without, goes in the session's `bring` list. Check his own
+   commitments in the threads: promising to bring something and arriving without
+   it is the failure mode.
 
 ### The order the meeting walks
 
@@ -98,7 +131,8 @@ Style:
   only restates the one before it.
 - Lead each block with the topic, not the wind-up. 「請求未発行の恒久対応についてです。」
   beats 「請求未発行の恒久対応について、お話しさせていただきたいと思います。」
-- Two to five lines per block, at most four blocks per ticket.
+- Two to five lines per block. At most four blocks per ticket at a standup, six
+  at an onsite.
 
 **Furigana.** Wrap kanji above N3 as `{漢字|かんじ}`, reading on the whole word,
 not per character. Words he knows (今日, 問題, 対応, 確認, 請求) need none. Err
@@ -189,6 +223,16 @@ Per ticket, one `prep` object, replacing whatever was there:
     {"heading": "現状", "heading_en": "Where it stands",
      "lines": [{"ja_ruby": "...", "en": "..."}]}
   ],
+  "decisions": [
+    {"need": "What has to be agreed today.",
+     "why": "Why it cannot wait for the next standup.",
+     "fallback": "What he asks for instead if they will not settle it."}
+  ],
+  "pushback": [
+    {"they_say": "The objection, in English, taken from what they have said before.",
+     "say_ja": "The answer in Japanese with {漢字|かんじ} markup.",
+     "say_en": "The same answer in English."}
+  ],
   "tg_ask_needed": true,
   "estimate": "Only if already agreed with TG. Otherwise omit.",
   "unknowns": ["What he should check before he speaks. Also anything he must not say."],
@@ -196,26 +240,29 @@ Per ticket, one `prep` object, replacing whatever was there:
 }
 ```
 
+`decisions` and `pushback` are for an onsite. Leave them out for a standup.
+
 And once at board level:
 
 ```json
-"standup": {
-  "date": "YYYY-MM-DD",
+"script": {
+  "for_date": "YYYY-MM-DD, the session you wrote for",
   "at": "10:30",
   "built_at": "ISO 8601 with +09:00",
-  "headline": "One sentence. The single most important thing about today."
-}
+  "headline": "One sentence. The single most important thing about this session."
+},
+"sessions": [
+  {"kind": "onsite", "date": "YYYY-MM-DD", "at": "", "title": "Billing onsite",
+   "place": "", "focus": "What this session is for, in one or two sentences.",
+   "agenda": [{"topic": "", "why": "", "owner": ""}],
+   "bring": ["Anything he promised to have ready."]},
+  {"kind": "standup", "date": "YYYY-MM-DD", "at": "10:30",
+   "skipped": true, "reason": "Why not, if it is not running."}
+]
 ```
 
-Do not write `where_it_stands` inside `prep`. The standup view reads it from the
+Do not write `where_it_stands` inside `prep`. The speaking view reads it from the
 ticket, so there is one status and the script can never contradict the desk.
-
-## Is the standup even happening?
-
-Check `standup.skipped` and `next_standup` on the board. The last meeting may have
-announced a cancellation, usually for an onsite. If today is that date, write the
-prep anyway but put it in `standup.headline`, in one clause, so the page says so
-at the top.
 
 ## Then rebuild and report
 
@@ -224,10 +271,10 @@ python3 render_desk.py    state/board.json output/desk.html
 python3 render_desk_md.py state/board.json output/desk.md
 ```
 
-Finish with a few lines: which tickets have an ask on the table, which are status
-only, and anything he should check before 10:30. Always write this, even when the
-answer is dull, because a silent run cannot be told apart from a dead one. Never
-restate the whole script back to him.
+Finish with a few lines: which session you wrote for, which tickets have an ask
+on the table, which are status only, and anything he should check before he
+speaks. Always write this, even when the answer is dull, because a silent run
+cannot be told apart from a dead one. Never restate the whole script back to him.
 
 The rules in `AGENTS.md` apply throughout, particularly: never send anything, and
 never draft around a hold.

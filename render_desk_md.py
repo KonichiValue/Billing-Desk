@@ -18,7 +18,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from render import item_state as state_of
-from render import plain, tracked
+from render import next_live, plain, sessions, tracked, when_words
 
 
 def link(label: str, url: str) -> str:
@@ -221,7 +221,7 @@ def render_prep(prep: dict) -> list[str]:
     if prep.get("unknowns"):
         rows.append("")
         rows += [f"- Check first: {u}" for u in prep["unknowns"]]
-    return block("What I say at standup", rows)
+    return block("What I say in the room", rows)
 
 
 def render(data: dict) -> str:
@@ -235,7 +235,7 @@ def render(data: dict) -> str:
     )
 
     out = [
-        f"# TG billing desk, {pretty}",
+        f"# Billing desk, {pretty}",
         "",
         data.get("headline", ""),
         "",
@@ -245,13 +245,21 @@ def render(data: dict) -> str:
         "",
     ]
 
-    nxt = data.get("next_standup") or {}
-    if nxt.get("skipped"):
-        out += [
-            f"> **No standup on {nxt.get('date', '')}.** {nxt.get('reason', '')} "
-            "Anything that was waiting for that meeting has to move into Asana.",
-            "",
-        ]
+    live = next_live(data)
+    if live.get("date"):
+        when = when_words(live.get("date", ""), live.get("at", ""))
+        line = f"> **Next up: {live.get('title') or live.get('name')}, {when}.**"
+        if live.get("focus"):
+            line += f" {live['focus']}"
+        out += [line, ""]
+    for sess in sessions(data):
+        if sess.get("skipped"):
+            out += [
+                f"> **No {sess.get('name', 'standup').lower()} on "
+                f"{sess.get('date', '')}.** {sess.get('reason', '')} "
+                "Anything that was waiting for it has to move into Asana.",
+                "",
+            ]
 
     rows = tracked(tickets)
     if rows:

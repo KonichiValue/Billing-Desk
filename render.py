@@ -11,17 +11,20 @@ from __future__ import annotations
 
 import html
 import re
+from datetime import date
 from typing import Any
 
 RUBY = re.compile(r"\{([^|{}]+)\|([^|{}]+)\}")
 KANJI = re.compile(r"[\u4e00-\u9fff]")
 
+# Same four meanings everywhere on the page: yours, blocked, somebody else's,
+# closed. Kept in step with the CSS variables of the same names.
 TONES = {
-    "red": ("#b42318", "#fef3f2", "#fecdca"),
-    "amber": ("#b54708", "#fffaeb", "#fedf89"),
-    "green": ("#067647", "#ecfdf3", "#abefc6"),
-    "grey": ("#414651", "#f5f5f5", "#e0e0e0"),
-    "blue": ("#175cd3", "#eff8ff", "#b2ddff"),
+    "red": ("#b42318", "#fef4f2", "#fbd2cd"),
+    "amber": ("#b25309", "#fff9ed", "#f9dda3"),
+    "green": ("#046c46", "#effaf4", "#a8e7c5"),
+    "grey": ("#4e5666", "#f4f6fa", "#e5e8ee"),
+    "blue": ("#1257c9", "#f0f6ff", "#bedaff"),
 }
 
 # An action is with Rei, with somebody else, or finished. Sending a message
@@ -99,6 +102,111 @@ def tracked(tickets: list[dict]) -> list[tuple[str, dict, dict]]:
         for i in t.get("items", [])
     ]
     return sorted(rows, key=lambda r: (r[2]["order"], r[1].get("id", 99)))
+
+
+# What Rei is preparing for. Usually the 10:30 standup, sometimes an onsite,
+# which is the same tickets with a great deal more riding on each one.
+KINDS = {
+    "standup": {
+        "name": "Standup",
+        "tab": "Standup",
+        "at": "10:30",
+        "what": "the 15 minutes at 10:30",
+    },
+    "onsite": {
+        "name": "Onsite",
+        "tab": "Onsite",
+        "at": "",
+        "what": "a day in the room with TG",
+    },
+    "workshop": {
+        "name": "Workshop",
+        "tab": "Workshop",
+        "at": "",
+        "what": "the session",
+    },
+}
+
+
+def a_session(raw: dict) -> dict:
+    """Fill in what the kind of session implies, leaving what was written."""
+    out = dict(raw)
+    kind = out.get("kind") or "standup"
+    spec = KINDS.get(kind, KINDS["standup"])
+    out["kind"] = kind
+    out["name"] = out.get("label") or spec["name"]
+    out["tab"] = spec["tab"]
+    out["at"] = out.get("at") or spec["at"]
+    out["what"] = spec["what"]
+    return out
+
+
+def sessions(board: dict) -> list[dict]:
+    """Everything Rei still has to speak at, soonest first.
+
+    A list rather than one field, because an onsite on Wednesday and a standup
+    on Thursday are two different rooms with two different scripts, and a board
+    that can only hold one of them forgets whichever is further away.
+
+    Boards written before this change said `next_standup` and `standup`, so
+    those are read too and nothing has to be regenerated to render.
+    """
+    raw = board.get("sessions")
+    if raw is None:
+        raw = []
+        old = board.get("next_standup") or {}
+        if old.get("date"):
+            raw.append({"kind": "standup", **old})
+        built = board.get("standup") or {}
+        if built.get("date") and built.get("date") != old.get("date"):
+            raw.append({"kind": "standup", "date": built["date"], "at": built.get("at")})
+    today = date.today().isoformat()
+    live = [a_session(s) for s in raw if (s.get("date") or "") >= today]
+    return sorted(live, key=lambda s: (s.get("date", ""), s.get("at", "")))
+
+
+def next_live(board: dict) -> dict:
+    """The next session that is actually happening."""
+    return next((s for s in sessions(board) if not s.get("skipped")), {})
+
+
+def script_meta(board: dict) -> dict:
+    """When the script was written, and the line it opens on."""
+    meta = dict(board.get("script") or board.get("standup") or {})
+    meta.setdefault("for_date", meta.get("date", ""))
+    return meta
+
+
+def script_session(board: dict) -> dict:
+    """The session the current script was written for.
+
+    If the script names a date, that is the room it describes, even when a
+    different session is now sooner. Otherwise, the next live one.
+    """
+    wanted = script_meta(board).get("for_date")
+    if wanted:
+        match = next((s for s in sessions(board) if s.get("date") == wanted), None)
+        if match:
+            return match
+        return a_session({"kind": "standup", "date": wanted})
+    return next_live(board)
+
+
+def when_words(iso: str, at: str = "") -> str:
+    """2026-08-26 becomes "Wed 26 Aug", with the time when there is one."""
+    if not iso:
+        return ""
+    try:
+        day = date.fromisoformat(iso)
+    except ValueError:
+        return iso
+    words = day.strftime("%a %-d %b")
+    today = date.today()
+    if day == today:
+        words = "today"
+    elif (day - today).days == 1:
+        words = "tomorrow"
+    return f"{words}, {at}" if at else words
 
 
 def pill(label: str, tone: str) -> str:
@@ -228,160 +336,192 @@ def render_consequences(c: dict) -> str:
 
 
 CSS = """
-:root{--ink:#181d27;--mut:#535862;--soft:#717680;--line:#e9eaeb;--bg:#fafafa;
---card:#fff;--accent:#0b5cd5;--accent-bg:#eff6ff}
+/* One neutral ramp, one accent that changes with the view, and four semantic
+   colours that only ever mean one thing: red is yours, amber is blocked, blue
+   is with somebody else, green is closed. Nothing else gets to be coloured, so
+   colour on this page always carries information. */
+:root{
+--ink:#151a23;--mut:#4e5666;--soft:#79818f;--line:#e5e8ee;--hair:#f1f3f7;
+--card:#fff;--page:#f4f6fa;--head:#0d1524;--head-2:#1a2740;
+--accent:#0b5cd5;--accent-bg:#eff5ff;--accent-line:#c3daff;--accent-ink:#0a3d94;
+--red:#b42318;--red-bg:#fef4f2;--red-line:#fbd2cd;
+--amber:#b25309;--amber-bg:#fff9ed;--amber-line:#f9dda3;--amber-ink:#8a3d05;
+--green:#046c46;--green-bg:#effaf4;--green-line:#a8e7c5;
+--blue:#1257c9;--blue-bg:#f0f6ff;--blue-line:#bedaff;
+--shadow:0 1px 2px rgba(16,24,40,.05),0 1px 3px rgba(16,24,40,.06);
+--lift:0 2px 4px rgba(16,24,40,.06),0 8px 20px rgba(16,24,40,.06)}
+/* The script view is a different room: warmer paper, plum accent. You can tell
+   which view you are in from across the desk, without reading a tab. */
+body[data-view="standup"]{--accent:#9c1b85;--accent-bg:#fdf1fa;--accent-line:#f1c3e6;
+--accent-ink:#78116a;--page:#faf6f9}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);
-font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans",
+[hidden]{display:none!important}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+.views button:focus-visible{outline-color:#fff}
+body{margin:0;background:var(--page);color:var(--ink);
+font:15.5px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans",
 "Noto Sans JP",sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:860px;margin:0 auto;padding:0 20px 80px}
-header.top{position:sticky;top:0;z-index:20;background:rgba(250,250,250,.92);
-backdrop-filter:blur(8px);border-bottom:1px solid var(--line);margin-bottom:24px}
-.top-in{max-width:860px;margin:0 auto;padding:14px 20px;display:flex;
-align-items:center;gap:16px;flex-wrap:wrap}
-.top h1{font-size:16px;margin:0;font-weight:650;letter-spacing:-.01em}
-.top .date{color:var(--soft);font-size:14px}
-#countdown{margin-left:auto;font-variant-numeric:tabular-nums;font-weight:650;
-font-size:14px;padding:5px 11px;border-radius:7px;background:#fff;
-border:1px solid var(--line)}
-#countdown.soon{background:#fef3f2;border-color:#fecdca;color:#b42318}
-.toggle{font:inherit;font-size:13px;padding:5px 11px;border-radius:7px;
-border:1px solid var(--line);background:#fff;cursor:pointer;color:var(--mut)}
-.toggle:hover{border-color:var(--accent);color:var(--accent)}
-.headline{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--accent);
-border-radius:12px;padding:18px 22px;margin-bottom:24px}
-.headline p{margin:0;font-size:19px;line-height:1.45;font-weight:550;letter-spacing:-.01em}
-h2.board-h,h2.tickets-h{font-size:13px;text-transform:uppercase;letter-spacing:.08em;
-color:var(--soft);margin:32px 0 12px;font-weight:650}
-.action-list{list-style:none;margin:0;padding:0;background:var(--card);
-border:1px solid var(--line);border-radius:12px;overflow:hidden}
-.action{display:flex;gap:14px;padding:14px 16px;border-bottom:1px solid var(--line);
-align-items:flex-start}
-.action:last-child{border-bottom:0}
-.action-rank{width:26px;height:26px;flex:none;border-radius:7px;background:var(--ink);
-color:#fff;display:grid;place-items:center;font-size:13px;font-weight:650}
-.action-body{flex:1;min-width:0}
-.action-top{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
-.action-text{font-weight:600}
-.action-meta{display:flex;gap:12px;flex-wrap:wrap;color:var(--soft);font-size:13px;margin-top:3px}
-.action-meta .ref{font-weight:650;color:var(--accent)}
-.action-meta .why{font-style:italic}
-.action-meta .mins{margin-left:auto}
-.pill{display:inline-block;font-size:11.5px;font-weight:650;padding:2px 8px;
+.wrap{max-width:920px;margin:0 auto;padding:22px 20px 90px}
+/* The script is read out loud, so it gets a narrower column than the desk. */
+body[data-view="standup"] .wrap{max-width:840px}
+
+/* Header. Dark, because the switcher has to be the most findable thing here. */
+header.top{position:sticky;top:0;z-index:30;
+background:linear-gradient(180deg,var(--head-2),var(--head));color:#e6ecf7;
+box-shadow:inset 0 -1px 0 rgba(255,255,255,.06),0 4px 16px rgba(9,14,26,.14)}
+/* Wider than the page it sits over: this row is navigation, not prose, and it
+   has to hold the tabs and the buttons without wrapping. */
+.top-in{max-width:1180px;margin:0 auto;padding:9px 20px;display:flex;
+align-items:center;gap:11px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:9px}
+.brand img{width:24px;height:24px;border-radius:7px;display:block}
+.top h1{font-size:13.5px;margin:0;font-weight:650;color:#fff;letter-spacing:-.005em;
+white-space:nowrap}
+.top .date{color:#8a9bb8;font-size:12px;white-space:nowrap}
+/* Hours old means a reply may have landed unseen, which is worth a colour. */
+.top .date.old{color:#f4c27a}
+.top .btn{color:#c9d6ea;border-color:rgba(255,255,255,.16);
+background:rgba(255,255,255,.07);font-size:12px;padding:6px 10px}
+.top .btn:hover{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.28);
+color:#fff}
+.acts{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+justify-content:flex-end}
+#countdown{font-variant-numeric:tabular-nums;font-weight:650;font-size:12.5px;
+padding:6px 11px;border-radius:8px;color:#dae4f5;background:rgba(255,255,255,.09);
+border:1px solid rgba(255,255,255,.14)}
+#countdown:empty{display:none}
+#countdown.soon{background:#fee4e2;border-color:#fda29b;color:#912018}
+.toggle{font:600 12px/1 inherit;padding:7px 11px;border-radius:8px;
+border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.07);
+cursor:pointer;color:#c9d6ea}
+.toggle:hover{background:rgba(255,255,255,.14);color:#fff}
+/* Stripping the page back to the Japanese is only a thing you want while
+   speaking, so the button lives in that view. */
+body[data-view="desk"] #scriptonly{display:none}
+
+/* Two views, one page. Big target, live count, and the key that switches it. */
+.views{display:flex;gap:4px;padding:4px;background:rgba(255,255,255,.08);
+border:1px solid rgba(255,255,255,.10);border-radius:12px}
+.views button{display:flex;align-items:center;gap:9px;font:inherit;padding:7px 13px;
+border:0;border-radius:9px;background:none;color:#a9b8d2;cursor:pointer;
+text-align:left}
+.views button:hover{color:#fff;background:rgba(255,255,255,.07)}
+.views button[aria-selected="true"]{background:#fff;color:#0d1524;
+box-shadow:0 1px 3px rgba(9,14,26,.4)}
+.views .lbl{display:block;font-size:13.5px;font-weight:650;letter-spacing:-.005em}
+.views .sub{display:block;font-size:10.5px;font-weight:550;letter-spacing:.04em;
+text-transform:uppercase;opacity:.7;margin-top:2px}
+.views .k{flex:none;font:700 10px/15px inherit;min-width:15px;text-align:center;
+border-radius:4px;background:rgba(255,255,255,.13);color:#c2cee3}
+.views button[aria-selected="true"] .k{background:#eef1f6;color:#6b7789}
+.views .badge{flex:none;min-width:19px;padding:0 6px;border-radius:10px;
+background:#e0483b;color:#fff;font:700 11px/19px inherit;text-align:center}
+.views button[aria-selected="true"] .badge{background:var(--red);color:#fff}
+.views .badge.quiet{background:rgba(255,255,255,.16);color:#dbe4f2}
+body[data-view="desk"] #view-standup,body[data-view="standup"] #view-desk{display:none}
+
+/* Cards. Every panel on both views is the same object. */
+.tk,.st-tk,.track,.panel,.st-run,.st-empty,.gaps{background:var(--card);
+border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+.headline,.st-lead{background:var(--card);border:1px solid var(--line);
+border-left:4px solid var(--accent);border-radius:13px;padding:16px 20px;
+margin-bottom:20px;box-shadow:var(--shadow)}
+.headline p,.st-lead p{margin:0;font-size:17px;line-height:1.5;font-weight:550;
+letter-spacing:-.01em}
+h2.tickets-h{font-size:11.5px;text-transform:uppercase;letter-spacing:.09em;
+color:var(--soft);margin:28px 0 11px;font-weight:700}
+.pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;
 border-radius:20px;border:1px solid;letter-spacing:.01em;white-space:nowrap}
-.btn{font-size:13px;text-decoration:none;color:var(--accent);border:1px solid var(--line);
-background:#fff;padding:4px 10px;border-radius:7px;white-space:nowrap}
-.btn:hover{border-color:var(--accent);background:var(--accent-bg)}
-.ticket{background:var(--card);border:1px solid var(--line);border-radius:14px;
-padding:22px;margin-bottom:20px}
-.t-head{display:flex;gap:14px;align-items:flex-start;padding-bottom:16px;
-border-bottom:1px solid var(--line);margin-bottom:4px}
-.t-ref{width:30px;height:30px;flex:none;border-radius:8px;background:var(--accent-bg);
-color:var(--accent);display:grid;place-items:center;font-size:13px;font-weight:700}
-.t-titles{flex:1;min-width:0}
-.t-titles h2{margin:0;font-size:19px;letter-spacing:-.015em;line-height:1.35}
-.tag{display:inline-block;font-size:12.5px;font-weight:650;padding:2px 8px;
-border-radius:6px;background:#f2f4f7;color:var(--mut);margin-right:9px;
-vertical-align:2px;letter-spacing:0}
-.est{color:#067647;font-weight:600}
-.noask{margin:0 0 13px;padding:9px 13px;background:#ecfdf3;border:1px solid #abefc6;
-border-radius:8px;color:#067647;font-size:14.5px;font-weight:550}
-.t-ja{margin:3px 0 0;color:var(--mut);font-size:14px}
-.t-meta{margin:9px 0 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap;
-font-size:12.5px;color:var(--soft)}
-.stale{color:#b54708;font-weight:600}
-.sub{padding:16px 0;border-bottom:1px solid var(--line)}
-.ticket>*:last-child{border-bottom:0;padding-bottom:0}
-.sub h3{font-size:12.5px;text-transform:uppercase;letter-spacing:.07em;
-color:var(--soft);margin:0 0 9px;font-weight:650;display:inline}
-details>summary{cursor:pointer;list-style:none;padding:16px 0 9px}
+.btn{font-size:12.5px;text-decoration:none;color:var(--accent);
+border:1px solid var(--line);background:#fff;padding:4px 10px;border-radius:7px;
+white-space:nowrap;font-weight:550}
+.btn:hover{border-color:var(--accent-line);background:var(--accent-bg)}
+.tag{display:inline-block;font-size:12.5px;font-weight:700;padding:2px 9px;
+border-radius:6px;background:var(--accent-bg);color:var(--accent-ink);
+margin-right:8px;vertical-align:2px;letter-spacing:0}
+.est{color:var(--green);font-weight:600}
+
+/* Sections inside a card, and the fold-away ones. */
+.sub{padding:15px 0;border-bottom:1px solid var(--hair)}
+.tk>*:last-child,.st-tk>*:last-child{border-bottom:0;padding-bottom:0}
+.sub h3{font-size:11.5px;text-transform:uppercase;letter-spacing:.08em;
+color:var(--soft);margin:0 0 8px;font-weight:700;display:inline-block}
+details>summary{cursor:pointer;list-style:none;padding:15px 0 8px}
 details>summary::-webkit-details-marker{display:none}
-details>summary::before{content:"\\25B8";color:var(--soft);font-size:11px;
+details>summary::before{content:"\\25B8";color:var(--soft);font-size:10px;
 margin-right:7px;display:inline-block;transition:transform .15s}
 details[open]>summary::before{transform:rotate(90deg)}
 details.sub{padding-top:0}
-.issue{margin:0;padding-left:19px}
-.issue li{margin-bottom:5px}
-.matters{margin:11px 0 0;padding:9px 13px;background:var(--accent-bg);
-border-radius:8px;font-size:14.5px;color:#194185}
-.status{margin:0}
-.position{margin:9px 0 0;color:var(--mut);font-size:15px}
+.status,.st-stands{margin:0;font-size:15px;color:var(--ink)}
+.matters{margin:10px 0 0;padding:9px 13px;background:var(--accent-bg);
+border:1px solid var(--accent-line);border-radius:8px;font-size:14px;
+color:var(--accent-ink)}
 .cons-list{margin:0;display:grid;gap:1px;background:var(--line);
 border:1px solid var(--line);border-radius:10px;overflow:hidden}
-.cons-row{display:flex;gap:0;background:#fff;align-items:baseline}
-.cons-row dt{flex:none;width:158px;padding:9px 13px;font-size:12.5px;
-font-weight:650;color:var(--soft);background:#fcfcfc}
-.cons-row dd{flex:1;min-width:0;margin:0;padding:9px 13px;font-size:14.5px}
-.cons-row:last-child dd{color:#b54708;font-weight:550}
-.timeline{list-style:none;margin:0;padding:0}
-.tl-item{display:flex;gap:13px;padding:7px 0;border-left:2px solid var(--line);
-padding-left:14px;margin-left:4px}
-.tl-item.tg{border-left-color:#f7b27a}
-.tl-item.kraken{border-left-color:#84caff}
-.tl-date{flex:none;width:76px;color:var(--soft);font-size:13px;
-font-variant-numeric:tabular-nums}
-.tl-who{font-size:13px;font-weight:600}
-.tl-where{color:var(--soft);font-weight:400}
-.tl-what{font-size:14.5px;color:var(--mut)}
-.src{font-size:12px;color:var(--accent);text-decoration:none;margin-left:5px}
-.jp-block{margin-bottom:18px}
-.jp-heading{display:flex;align-items:baseline;gap:10px;margin-bottom:9px;
-padding-bottom:5px;border-bottom:1px dashed var(--line)}
-.jp-h-ja{font-size:16px;font-weight:650}
-.jp-h-en{font-size:12.5px;color:var(--soft);text-transform:uppercase;letter-spacing:.05em}
-.copy{margin-left:auto;font:inherit;font-size:11.5px;color:var(--soft);background:none;
-border:1px solid var(--line);border-radius:6px;padding:2px 8px;cursor:pointer}
-.copy:hover{color:var(--accent);border-color:var(--accent)}
-.jp-line{margin-bottom:11px;padding-left:13px;border-left:3px solid #eaecf0}
-.jp{margin:0;font-size:21px;line-height:2.1;letter-spacing:.01em}
-ruby rt{font-size:.5em;color:var(--accent);font-weight:600;letter-spacing:0}
-.en{margin:1px 0 0;font-size:14px;color:var(--mut)}
+.cons-row{display:flex;background:#fff;align-items:baseline}
+.cons-row dt{flex:none;width:152px;padding:9px 13px;font-size:11.5px;
+font-weight:700;color:var(--soft);background:#fbfcfe;text-transform:uppercase;
+letter-spacing:.04em}
+.cons-row dd{flex:1;min-width:0;margin:0;padding:9px 13px;font-size:14px}
+.cons-row:last-child dd{color:var(--amber);font-weight:550}
+
+/* The spoken script. Smaller than it was: this is read at speed, and 19px with
+   a reading above it is already taller than a normal line. */
+.jp-block{margin-bottom:16px}
+.jp-heading{display:flex;align-items:baseline;gap:10px;margin-bottom:8px;
+padding-bottom:5px;border-bottom:1px solid var(--accent-line)}
+.jp-h-ja{font-size:15px;font-weight:700;color:var(--accent-ink)}
+.jp-h-en{font-size:11.5px;color:var(--soft);text-transform:uppercase;
+letter-spacing:.06em;font-weight:600}
+.copy{margin-left:auto;font:600 11px/1 inherit;color:var(--soft);background:#fff;
+border:1px solid var(--line);border-radius:6px;padding:4px 8px;cursor:pointer}
+.copy:hover{color:var(--accent);border-color:var(--accent-line)}
+.jp-line{margin-bottom:10px;padding-left:12px;border-left:3px solid var(--accent-line)}
+.jp{margin:0;font-size:19px;line-height:1.95;letter-spacing:.005em}
+ruby rt{font-size:.46em;color:var(--accent);font-weight:600;letter-spacing:0}
+.en{margin:2px 0 0;font-size:13px;color:var(--soft);line-height:1.45}
 .qlist{list-style:none;margin:0;padding:0}
 .q{padding:9px 0;border-bottom:1px dashed var(--line)}
 .q:last-child{border-bottom:0}
-.q-en{font-weight:550;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.q-ja{font-size:18px;line-height:2;margin-top:3px;color:var(--mut)}
-.draft{border:1px solid var(--line);border-radius:10px;margin-bottom:11px;overflow:hidden}
-.draft-head{display:flex;gap:9px;align-items:center;padding:8px 13px;
-background:#fafafa;border-bottom:1px solid var(--line);font-size:13px;color:var(--mut)}
-.draft-body{padding:13px;white-space:pre-wrap}
-.draft-body.ja{font-size:17px;line-height:2}
-.draft-en{margin:0;padding:0 13px 13px;font-size:13.5px;color:var(--soft)}
-.warn{background:#fffaeb;border:1px solid #fedf89;border-radius:10px;
-padding:13px 16px;margin-top:16px}
-.warn h3{color:#b54708}
-.warn ul{margin:7px 0 0;padding-left:19px}
-.empty{color:var(--soft);font-style:italic;margin:0}
-.gaps{background:var(--card);border:1px solid var(--line);border-radius:12px;
-padding:18px 22px;margin-top:24px}
-.gaps h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;
-color:var(--soft);margin:0 0 9px}
-.gaps ul{margin:0;padding-left:19px}
-.foot{text-align:center;color:var(--soft);font-size:12.5px;margin-top:32px}
-/* Two views, one page. The desk is what to do, the standup is what to say, and
-   they share the same tickets, so switching must never feel like navigating. */
-.views{display:flex;gap:2px;padding:3px;background:#f0f1f3;border-radius:9px}
-.views button{font:600 13px/1 inherit;padding:7px 13px;border:0;border-radius:7px;
-background:none;color:var(--mut);cursor:pointer}
-.views button[aria-selected="true"]{background:#fff;color:var(--ink);
-box-shadow:0 1px 2px rgba(16,24,40,.09)}
-.views .badge{display:inline-block;margin-left:6px;min-width:17px;padding:0 5px;
-border-radius:9px;background:#b42318;color:#fff;font-size:11px;line-height:17px;
-font-weight:700;vertical-align:1px}
-.views button[aria-selected="true"] .badge{background:var(--ink)}
-body[data-view="desk"] #view-standup,body[data-view="standup"] #view-desk{display:none}
-.keys{color:var(--soft);font-size:11.5px;margin-left:8px}
+.q-en{font-weight:600;font-size:14.5px;display:flex;gap:8px;align-items:center;
+flex-wrap:wrap}
+.q-ja{font-size:17px;line-height:1.9;margin-top:3px;color:var(--mut)}
+
+/* Drafts. Monospace-free, but plain enough that pasting is the obvious move. */
+.draft{border:1px solid var(--line);border-radius:10px;margin-bottom:11px;
+overflow:hidden}
+.draft-head{display:flex;gap:9px;align-items:center;padding:8px 12px;
+background:#fbfcfe;border-bottom:1px solid var(--line);font-size:12.5px;
+color:var(--mut);font-weight:550}
+.draft-body{padding:13px;white-space:pre-wrap;font-size:14.5px;line-height:1.6}
+.draft-body.ja{font-size:16px;line-height:1.95}
+.draft-en{margin:0;padding:0 13px 13px;font-size:13px;color:var(--soft)}
+.warn{background:var(--amber-bg);border:1px solid var(--amber-line);
+border-radius:10px;padding:12px 15px;margin-top:15px}
+.warn h3{color:var(--amber)}
+.warn ul{margin:6px 0 0;padding-left:18px;font-size:14px;color:var(--amber-ink)}
+.empty{color:var(--soft);font-style:italic;margin:0;font-size:14.5px}
+.gaps{padding:16px 20px;margin-top:22px}
+.gaps h2{font-size:11.5px;text-transform:uppercase;letter-spacing:.09em;
+color:var(--soft);margin:0;display:inline-block;font-weight:700}
+.gaps ul{margin:8px 0 0;padding-left:18px}
+.foot{text-align:center;color:var(--soft);font-size:12px;margin-top:28px}
+.keys{color:#7b8cab;font-size:11px}
+
+/* Script-only: everything that is not Japanese gets out of the way. */
 body.script-only .sub:not(.script),body.script-only .st-head .pos,
 body.script-only details,body.script-only .st-brief,body.script-only .st-raise,
-body.script-only .st-warn,body.script-only .st-cons{display:none}
-body.script-only .jp{font-size:26px}
+body.script-only .st-warn,body.script-only .st-cons,body.script-only .st-land,
+body.script-only .st-run,body.script-only .sess{display:none}
+body.script-only .jp{font-size:23px;line-height:2.05}
+body.script-only .en{font-size:13.5px}
 body.script-only .st-tk{padding:18px 22px}
-.err{background:#fef3f2;border:1px solid #fecdca;border-radius:12px;padding:22px;
-color:#b42318}
+.err{background:var(--red-bg);border:1px solid var(--red-line);border-radius:12px;
+padding:22px;color:var(--red)}
 .err pre{white-space:pre-wrap;font-size:13px;background:#fff;padding:13px;
 border-radius:8px;margin:13px 0 0;color:var(--ink)}
-@media print{header.top,.btn,.copy,.toggle{display:none}
-body{background:#fff}.ticket{break-inside:avoid;border-color:#ccc}
+@media print{header.top,.btn,.copy,.toggle,.views{display:none}
+body{background:#fff}.tk,.st-tk{break-inside:avoid;border-color:#ccc;box-shadow:none}
 details{display:block}details>summary{display:none}}
 """
 
@@ -389,11 +529,12 @@ JS = """
 (function(){
   var el=document.getElementById('countdown');
   var target=new Date(document.body.dataset.meeting);
+  var what=(document.body.dataset.meetingLabel||'standup').toLowerCase();
   function tick(){
     var d=Math.floor((target-new Date())/1000);
-    if(d<=0){el.textContent='Standup started';el.classList.add('soon');return}
+    if(d<=0){el.textContent=what+' started';el.classList.add('soon');return}
     var h=Math.floor(d/3600),m=Math.floor(d%3600/60);
-    el.textContent=(h?h+'h ':'')+m+'m to standup';
+    el.textContent=(h?h+'h ':'')+m+'m to '+what;
     if(d<1800)el.classList.add('soon');
   }
   if(el&&!isNaN(target)){tick();setInterval(tick,20000)}
@@ -430,11 +571,17 @@ JS = """
   // A hash link from one view to the other lands on the right ticket because we
   // switch first and let the browser scroll after.
   var tabs=[].slice.call(document.querySelectorAll('.views button'));
+  var where={};
   function show(view,remember){
     if(!tabs.length)return;
+    var from=document.body.dataset.view;
+    if(from&&from!==view)where[from]=window.scrollY;
     document.body.dataset.view=view;
     tabs.forEach(function(b){b.setAttribute('aria-selected',b.dataset.view===view)});
     if(remember!==false)try{sessionStorage.setItem('desk-view',view)}catch(e){}
+    // Coming back to a view lands where you left it. Arriving for the first
+    // time starts at the top, not halfway down because the other view was.
+    if(from&&from!==view&&!location.hash)window.scrollTo(0,where[view]||0);
   }
   tabs.forEach(function(b){
     b.addEventListener('click',function(){show(b.dataset.view)});
