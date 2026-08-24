@@ -58,9 +58,8 @@ work all afternoon.
 
 Read `state/progress-<today>.json` before answering "what's left". If Rei
 mentions doing something that is not on the list, say so rather than inventing a
-number for it. He may also tick boxes in the HTML page, which only lives in his
-browser until he runs the command it shows, so trust the state file and ask if
-the two disagree.
+number for it. The pages show status but cannot change it, so the state file is
+the only truth about what is closed.
 
 ## Hard rules that carry over from the source material
 

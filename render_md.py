@@ -231,21 +231,22 @@ def render(data: dict) -> str:
             "",
         ]
         for ref, a, st in rows:
-            box = "[x]" if st["closed"] else "[ ]"
             bits = []
             if st["state"] == "waiting":
                 bits.append(f"sent {st.get('at', '')}, with {st.get('who', 'them')}")
             elif st["closed"]:
                 bits.append(f"{st['label'].lower()} {st.get('at', '')}")
             elif st["state"] == "hold":
-                bits.append(f"wait for {(a.get('hold') or {}).get('until', '')}")
-            elif a.get("est_minutes"):
-                bits.append(f"{a['est_minutes']} min")
+                bits.append(f"not yet, wait for {(a.get('hold') or {}).get('until', '')}")
+            else:
+                bits.append("with you")
+                if a.get("est_minutes"):
+                    bits.append(f"{a['est_minutes']} min")
             if st.get("note"):
                 bits.append(st["note"])
-            tail = f" ({'; '.join(b for b in bits if b)})" if bits else ""
+            tail = "; ".join(b for b in bits if b)
             out.append(
-                f"- {box} **{a.get('rank', '')}. {ref}: {a.get('title', '')}**{tail}"
+                f"- **{a.get('rank', '')}. {ref}: {a.get('title', '')}** ({tail})"
             )
         out.append("")
         mine = [(r, a) for r, a, s in rows if s["state"] == "todo"]

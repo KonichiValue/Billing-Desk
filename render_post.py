@@ -90,7 +90,6 @@ font-variant-numeric:tabular-nums}
 .tr{display:flex;gap:12px;padding:11px 18px;border-bottom:1px solid var(--line);
 align-items:center}
 .tr:last-child{border-bottom:0}
-.tr-box{flex:none;width:17px;height:17px;margin:0;accent-color:#067647;cursor:pointer}
 .tr-rank{flex:none;width:23px;font-size:12.5px;font-weight:650;color:var(--soft);
 font-variant-numeric:tabular-nums}
 .tr-tag{flex:none;font-size:12.5px;font-weight:650;padding:2px 8px;border-radius:6px;
@@ -102,13 +101,8 @@ text-decoration:none}
 margin-top:1px}
 .tr-min{flex:none;font-size:12.5px;color:var(--soft);font-variant-numeric:tabular-nums;
 width:46px;text-align:right}
-.tr.shut .tr-title,.tr.ticked .tr-title{text-decoration:line-through;
-text-decoration-color:#98a2b3}
-.tr.shut,.tr.ticked{opacity:.6}
-.track-sync{display:flex;gap:10px;align-items:center;padding:10px 18px;
-background:#fffaeb;border-top:1px solid #fedf89;font-size:13px;color:#93370d}
-.track-sync code{background:#fff;border:1px solid #fedf89;border-radius:6px;
-padding:2px 7px;font-size:12.5px}
+.tr.shut .tr-title{text-decoration:line-through;text-decoration-color:#98a2b3}
+.tr.shut{opacity:.6}
 .act.done{opacity:.62}
 .act.waiting{opacity:.85}
 .sent-note{margin:0 0 11px;padding:8px 12px;background:#eff8ff;
@@ -210,7 +204,7 @@ def sub_line(st: dict) -> str:
     return " &middot; ".join(esc(b) for b in bits)
 
 
-def render_track(tickets: list[dict], refs: dict[str, str], meeting_date: str) -> str:
+def render_track(tickets: list[dict], refs: dict[str, str]) -> str:
     """The one list Rei works from all afternoon: what is his, what is not."""
     rows = tracked(tickets, PROGRESS)
     if not rows:
@@ -225,9 +219,6 @@ def render_track(tickets: list[dict], refs: dict[str, str], meeting_date: str) -
         out.append(
             f"""
       <li class="tr {"shut" if st["closed"] else ""}">
-        <input class="tr-box" type="checkbox" value="{esc(a.get("rank"))}"
-               data-closed="{"1" if st["closed"] else "0"}"
-               {"checked disabled" if st["closed"] else ""}>
         <span class="tr-rank">{esc(a.get("rank", "-"))}</span>
         <span class="tr-tag">{esc(ref)}</span>
         <a class="tr-title" href="#{esc(refs.get(ref, anchor(ref)))}">{esc(a.get("title"))}
@@ -251,42 +242,7 @@ def render_track(tickets: list[dict], refs: dict[str, str], meeting_date: str) -
   <div class="track">
     <div class="track-head"><h2>Where you are</h2><span>{esc(summary)}</span></div>
     <ul style="list-style:none;margin:0;padding:0">{"".join(out)}</ul>
-    <div class="track-sync" id="sync" hidden>
-      <span>Ticked here but not saved:</span><code id="synccmd"></code>
-      <button class="copy" id="synccopy" data-copy="">copy</button>
-    </div>
-  </div>
-  <script>
-  (function(){{
-    var K='tgtick-{meeting_date}';
-    var saved=JSON.parse(localStorage.getItem(K)||'[]');
-    var bar=document.getElementById('sync'),cmd=document.getElementById('synccmd');
-    var btn=document.getElementById('synccopy');
-    var boxes=[].slice.call(document.querySelectorAll('.tr-box'));
-    boxes.forEach(function(b){{
-      if(b.dataset.closed==='1'){{
-        saved=saved.filter(function(r){{return r!==b.value}});
-        return;
-      }}
-      if(saved.indexOf(b.value)>-1){{b.checked=true;b.closest('.tr').classList.add('ticked')}}
-      b.addEventListener('change',function(){{
-        var i=saved.indexOf(b.value);
-        if(b.checked&&i<0)saved.push(b.value);
-        if(!b.checked&&i>-1)saved.splice(i,1);
-        b.closest('.tr').classList.toggle('ticked',b.checked);
-        sync();
-      }});
-    }});
-    function sync(){{
-      localStorage.setItem(K,JSON.stringify(saved));
-      var line='./tick.py '+saved.slice().sort(function(a,b){{return a-b}}).join(' ');
-      bar.hidden=!saved.length;
-      cmd.textContent=line;
-      btn.dataset.copy=line;
-    }}
-    sync();
-  }})();
-  </script>"""
+  </div>"""
 
 
 def render_terms(rows: list[dict]) -> str:
@@ -624,10 +580,10 @@ def render(data: dict) -> str:
 <div class="wrap">
   <div class="headline"><p>{esc(data.get("headline"))}</p></div>
   {skip_block}
-  {render_track(tickets, refs, meeting_date)}
-  <p class="foot" style="margin:0 0 22px">Tick as you go. To make it stick for
-  the next rebuild, run the command that appears, or just tell the chat.
-  {f"About {total} min of work left with you." if total else ""}</p>
+  {render_track(tickets, refs)}
+  <p class="foot" style="margin:0 0 22px">
+  {f"About {total} min of work left with you. " if total else ""}
+  Close something by telling the chat, or with <code>./tick.py</code>.</p>
   {hold_block}
   <h2 class="tickets-h">{len(tickets)} ticket{"s" if len(tickets) != 1 else ""}, everything for each one in one place</h2>
   {cards}

@@ -105,9 +105,11 @@ what you are not allowed to send yet, then what sits with someone else, then
 what is finished. Each line carries how it got there, so a waiting row says who
 has it and since when. The minutes count only the work still with you.
 
-The checkboxes on the HTML page are live. Ticking one is remembered in that
-browser and the page shows the `./tick.py` line that makes it stick, since the
-page cannot write to disk on its own. Telling the chat works just as well.
+The pages are read-only about status, deliberately. A page opened from disk
+cannot write to disk, so a checkbox on it could only ever remember a tick inside
+one browser, and a control that looks authoritative while the chat and the state
+file know nothing about it is worse than no control. Close things by saying so in
+chat, or with `tick.py`.
 
 Progress lives in `state/progress-<date>.json`, not in the report, so
 regenerating the report keeps it. That file is also how a chat in this repo knows
