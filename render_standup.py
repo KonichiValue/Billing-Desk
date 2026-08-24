@@ -168,15 +168,24 @@ def render_ticket(t: dict, ident: str, desk_id: str) -> str:
         {render_script(prep.get("script", []))}
       </section>
 
-      {render_questions(prep.get("open_questions", []))}
+      {render_questions(
+          prep.get("open_questions", []),
+          any(b.get("heading") == "質問" for b in prep.get("script", [])),
+      )}
       {warn}
       {secret}
     </article>"""
 
 
-def render_questions(questions: list[dict]) -> str:
-    """Kept here rather than shared: at standup a question is a thing he asks
-    out loud, so it renders with the Japanese underneath."""
+def render_questions(questions: list[dict], spoken: bool) -> str:
+    """The asks that are not already in the script.
+
+    When the script has a 質問 block, the questions for TG are in it, and
+    printing them again underneath just makes the card longer than the meeting.
+    What survives is anything aimed elsewhere: a colleague, or himself.
+    """
+    if spoken:
+        questions = [q for q in questions if q.get("who") not in ("TG", "")]
     if not questions:
         return ""
     rows = []
@@ -193,7 +202,7 @@ def render_questions(questions: list[dict]) -> str:
         )
     return f"""
       <section class="sub">
-        <h3>Questions I need answered</h3>
+        <h3>Also need answering, off the script</h3>
         <ul class="qlist">{"".join(rows)}</ul>
       </section>"""
 

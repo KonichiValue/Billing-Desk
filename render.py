@@ -14,6 +14,7 @@ import re
 from typing import Any
 
 RUBY = re.compile(r"\{([^|{}]+)\|([^|{}]+)\}")
+KANJI = re.compile(r"[\u4e00-\u9fff]")
 
 TONES = {
     "red": ("#b42318", "#fef3f2", "#fecdca"),
@@ -39,8 +40,20 @@ CLOSED_STATES = {"done", "sent", "dropped"}
 
 
 def furi(raw: str) -> str:
-    """Escape text, then turn {漢字|かんじ} into real ruby annotations."""
-    return RUBY.sub(r"<ruby>\1<rt>\2</rt></ruby>", html.escape(raw or ""))
+    """Escape text, then turn {漢字|かんじ} into real ruby annotations.
+
+    Only kanji get a reading. Models reliably over-apply the markup and wrap
+    katakana in it too, and ステートメント with すてーとめんと printed above it is
+    noise on a line Rei is reading out loud at speed. Dropping the annotation
+    here rather than in the prompt means it cannot come back with the next model.
+    """
+    def one(match: re.Match) -> str:
+        base, reading = match.group(1), match.group(2)
+        if not KANJI.search(base):
+            return base
+        return f"<ruby>{base}<rt>{reading}</rt></ruby>"
+
+    return RUBY.sub(one, html.escape(raw or ""))
 
 
 def esc(raw: Any) -> str:

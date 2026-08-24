@@ -107,6 +107,15 @@ towards adding it for technical and market vocabulary.
 Correct: `{託送番号|たくそうばんごう}が{一致|いっち}しません。`
 Wrong: `{託|たく}{送|そう}{番|ばん}{号|ごう}`
 
+**Only kanji.** Never wrap katakana, hiragana or latin text. `ステートメント`,
+`パトロール`, `ケース`, `どちら` already read themselves, and a reading printed
+above them is noise on a line he is speaking at speed. The renderer drops these,
+so writing them only wastes your output.
+
+**Get the reading right.** 不一致 is ふいっち. A wrong reading is worse than no
+reading, because he will say it out loud. If you are not certain of a compound,
+leave it unwrapped.
+
 Every line needs a natural English translation in `en`. Translate the meaning,
 not the grammar.
 
@@ -125,6 +134,12 @@ thing to report in one breath.
 Never invent a question to fill the 質問 block. A weak question wastes standup
 time. A missing one is worse: TG raise it instead and he answers cold on his own
 ticket.
+
+**Do not say the same thing twice.** A question he asks TG out loud belongs in
+the 質問 block and nowhere else. `open_questions` is only for asks that do not
+belong in the spoken script: something a Kraken colleague owes him, or something
+he has to settle himself. The page hides a TG question that is already in the
+script, so writing it in both places only wastes your output.
 
 Where a delivery estimate exists **and has already been shared with TG**, put it
 in `prep.estimate`. If none has been agreed, leave it out rather than hedging
