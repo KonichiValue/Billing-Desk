@@ -87,21 +87,27 @@ the same thing, and the table and the ticket sections cannot disagree.
 
 ## Keeping the list honest
 
-A list that still shows finished work is worse than no list, so closing an item
-is one command that also rebuilds both pages.
+An action is with you, with somebody else, or finished. Sending a message
+usually moves it to the middle one, because the reply comes back on the same
+number and the work is not over.
 
 ```sh
-./tick.py                 # what is left, what is closed
-./tick.py 1 3             # close 1 and 3
-./tick.py 2 -n "asked Kevin, waiting on the answer"
-./tick.py 4 --sent        # sent rather than done
+./tick.py                            # where everything is
+./tick.py 4                          # finished, nothing comes back
+./tick.py 2 -w "Kevin"               # sent, ball is with Kevin
+./tick.py 2 --mine                   # they replied, it is yours again
 ./tick.py 5 --dropped -n "TG answered it themselves"
-./tick.py 1 --undo        # reopen
+./tick.py 1 --undo                   # forget the state entirely
 ```
 
-The running order becomes **Still to do**, with the minutes left rather than the
-minutes planned, and closed items collect underneath with the time and your
-note. Held items drop out of "Wait before you send" once closed.
+Both pages open with **Where you are**: one checklist, yours at the top, then
+what you are not allowed to send yet, then what sits with someone else, then
+what is finished. Each line carries how it got there, so a waiting row says who
+has it and since when. The minutes count only the work still with you.
+
+The checkboxes on the HTML page are live. Ticking one is remembered in that
+browser and the page shows the `./tick.py` line that makes it stick, since the
+page cannot write to disk on its own. Telling the chat works just as well.
 
 Progress lives in `state/progress-<date>.json`, not in the report, so
 regenerating the report keeps it. That file is also how a chat in this repo knows

@@ -33,21 +33,34 @@ because the context is in the file:
 
 ## When Rei says he has done something
 
-Run `./tick.py <numbers>` and nothing else. It records the state in
-`state/progress-<date>.json` and rebuilds both pages, so the list stops claiming
-work that is finished. Never hand-edit the report to mark something done.
+Run `./tick.py` and nothing else. It records the state in
+`state/progress-<date>.json` and rebuilds both pages. Never hand-edit the report
+to mark something done.
 
 ```
-./tick.py              # what is left
-./tick.py 1 3          # close 1 and 3
-./tick.py 2 -n "note"  # close with a note
-./tick.py 4 --dropped  # closed because it stopped being needed
-./tick.py 1 --undo     # reopen
+./tick.py                  # where everything is
+./tick.py 4                # finished, nothing comes back
+./tick.py 2 -w "Kevin"     # sent, ball is with Kevin
+./tick.py 2 --mine         # they replied, it is his again
+./tick.py 5 --dropped -n "TG answered it themselves"
+./tick.py 1 --undo         # forget the state entirely
 ```
+
+**Sending a message is not finishing an action.** If a reply is expected, the
+action goes to `-w <who>`, so the page shows it sitting with them rather than
+pretending it is closed. Use plain `./tick.py <n>` only when nothing comes back.
+
+When the reply arrives, the follow-up stays on the same number: run `--mine`,
+then edit that action in the JSON with the new draft and a `progress_note`
+saying what already happened. Never add a new numbered action for the next leg
+of a conversation he is already in, because the numbers are how he refers to his
+work all afternoon.
 
 Read `state/progress-<today>.json` before answering "what's left". If Rei
 mentions doing something that is not on the list, say so rather than inventing a
-number for it.
+number for it. He may also tick boxes in the HTML page, which only lives in his
+browser until he runs the command it shows, so trust the state file and ask if
+the two disagree.
 
 ## Hard rules that carry over from the source material
 

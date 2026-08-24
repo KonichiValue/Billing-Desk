@@ -23,7 +23,21 @@ TONES = {
     "amber": ("#b54708", "#fffaeb", "#fedf89"),
     "green": ("#067647", "#ecfdf3", "#abefc6"),
     "grey": ("#414651", "#f5f5f5", "#e0e0e0"),
+    "blue": ("#175cd3", "#eff8ff", "#b2ddff"),
 }
+
+# An action is with Rei, with somebody else, or finished. Sending a message
+# moves it to the middle state rather than closing it, because the reply comes
+# back on the same number. Third value is the sort order of the group.
+LIFECYCLE = {
+    "todo": ("With you", "red", 0),
+    "hold": ("Not yet", "amber", 1),
+    "waiting": ("Waiting", "blue", 2),
+    "done": ("Done", "green", 3),
+    "sent": ("Sent", "green", 3),
+    "dropped": ("Dropped", "grey", 3),
+}
+CLOSED_STATES = {"done", "sent", "dropped"}
 
 URGENCY = {
     "today": ("Today", "red"),
@@ -59,6 +73,28 @@ def load_progress(meeting_date: str) -> dict:
         return json.loads(path.read_text(encoding="utf-8")).get("actions", {})
     except (json.JSONDecodeError, OSError):
         return {}
+
+
+def action_state(progress: dict, action: dict) -> dict:
+    """Where one action sits: its state, label, tone, and who is holding it."""
+    saved = dict(progress.get(str(action.get("rank")), {}))
+    state = saved.get("state") or ("hold" if action.get("hold") else "todo")
+    label, tone, order = LIFECYCLE.get(state, LIFECYCLE["todo"])
+    if state == "waiting" and saved.get("who"):
+        label = f"Waiting on {saved['who']}"
+    saved.update(state=state, label=label, tone=tone, order=order)
+    saved["closed"] = state in CLOSED_STATES
+    return saved
+
+
+def tracked(tickets: list[dict], progress: dict) -> list[tuple[str, dict, dict]]:
+    """Every action as (ticket ref, action, state), yours first, finished last."""
+    rows = [
+        (t.get("ref", ""), a, action_state(progress, a))
+        for t in tickets
+        for a in t.get("actions", [])
+    ]
+    return sorted(rows, key=lambda r: (r[2]["order"], r[1].get("rank", 99)))
 
 
 def pill(label: str, tone: str) -> str:

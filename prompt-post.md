@@ -264,6 +264,20 @@ hold, and ask Tanaka who runs the filter query" is an action.
 Give every action an honest `est_minutes`. If a ticket has more than three
 actions, cut the weakest rather than shrinking estimates.
 
+An action is a piece of work, not a message. It stays on its number until the
+work is finished, so when Rei has already sent something and the answer landed,
+the follow-up belongs on the same number with `progress_note` saying what
+happened. Never open a fresh number for the next leg of a conversation he is
+already having. Numbers are how he refers to work all afternoon, and a list that
+grows a new one every time somebody replies stops being a list.
+
+Never write an action whose content is telling a Kraken colleague something they
+can already read. Everyone on the Kraken side of these tickets, CDL and CE
+included, has the same Asana access Rei has, so relaying TG's answer to them is
+work that does not need doing. Check who can see the source before you draft a
+message about it. Reply to a colleague when they asked Rei something, or when he
+knows something that is genuinely not written down anywhere they look.
+
 Every `waiting_on` row needs the same treatment. `blocks` says what of Rei's
 cannot move until it lands, in concrete terms, because a row that only says what
 someone owes gives him no way to judge whether to chase. "The Databricks
@@ -503,6 +517,7 @@ Write `output/post-<YYYY-MM-DD>.json` using today's date in JST.
             "Concrete enough to start without rereading anything."
           ],
           "committed_to": "Who Rei promised this to and when. Empty string if not a commitment.",
+          "progress_note": "What has already happened on this same number today, when the action has come back to him. Empty string otherwise.",
           "where": "Asana | Slack #channel-name | Offline",
           "link": "Direct URL to the exact thread or ticket to act in.",
           "blocked_by": "What must happen first. Empty string if nothing.",

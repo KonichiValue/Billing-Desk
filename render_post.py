@@ -18,20 +18,24 @@ import sys
 from datetime import date, datetime
 from pathlib import Path
 
-from render import CSS, JS, esc, furi, link_btn, load_progress, pill, plain
+from render import (
+    CSS,
+    JS,
+    action_state,
+    esc,
+    furi,
+    link_btn,
+    load_progress,
+    pill,
+    plain,
+    tracked,
+)
 
-DONE_LABEL = {"done": "Done", "sent": "Sent", "dropped": "Dropped"}
 PROGRESS: dict = {}
 
 
-def status_of(rank) -> dict:
-    return PROGRESS.get(str(rank), {})
-
-URGENCY = {
-    "today": ("Today", "red"),
-    "this-week": ("This week", "amber"),
-    "monitor": ("Monitor", "grey"),
-}
+def state_of(action: dict) -> dict:
+    return action_state(PROGRESS, action)
 
 EXTRA_CSS = """
 .panel{background:var(--card);border:1px solid var(--line);border-radius:12px}
@@ -76,7 +80,41 @@ border-radius:10px;overflow:hidden}
 flex-wrap:wrap}
 .terms dt{flex:none;min-width:150px;font-weight:650;font-size:14px;color:var(--accent)}
 .terms dd{flex:1;min-width:240px;margin:0;font-size:14px;color:var(--mut)}
+.track{background:var(--card);border:1px solid var(--line);border-radius:12px;
+overflow:hidden;margin-bottom:8px}
+.track-head{display:flex;gap:12px;align-items:baseline;padding:14px 18px 12px;
+border-bottom:1px solid var(--line)}
+.track-head h2{margin:0;font-size:15px;letter-spacing:-.01em}
+.track-head span{font-size:13px;color:var(--soft);margin-left:auto;
+font-variant-numeric:tabular-nums}
+.tr{display:flex;gap:12px;padding:11px 18px;border-bottom:1px solid var(--line);
+align-items:center}
+.tr:last-child{border-bottom:0}
+.tr-box{flex:none;width:17px;height:17px;margin:0;accent-color:#067647;cursor:pointer}
+.tr-rank{flex:none;width:23px;font-size:12.5px;font-weight:650;color:var(--soft);
+font-variant-numeric:tabular-nums}
+.tr-tag{flex:none;font-size:12.5px;font-weight:650;padding:2px 8px;border-radius:6px;
+background:#f2f4f7;color:var(--mut)}
+.tr-title{flex:1;min-width:0;font-size:14.5px;font-weight:550;color:inherit;
+text-decoration:none}
+.tr-title:hover{color:var(--accent)}
+.tr-note{display:block;font-size:12.5px;color:var(--soft);font-weight:400;
+margin-top:1px}
+.tr-min{flex:none;font-size:12.5px;color:var(--soft);font-variant-numeric:tabular-nums;
+width:46px;text-align:right}
+.tr.shut .tr-title,.tr.ticked .tr-title{text-decoration:line-through;
+text-decoration-color:#98a2b3}
+.tr.shut,.tr.ticked{opacity:.6}
+.track-sync{display:flex;gap:10px;align-items:center;padding:10px 18px;
+background:#fffaeb;border-top:1px solid #fedf89;font-size:13px;color:#93370d}
+.track-sync code{background:#fff;border:1px solid #fedf89;border-radius:6px;
+padding:2px 7px;font-size:12.5px}
 .act.done{opacity:.62}
+.act.waiting{opacity:.85}
+.sent-note{margin:0 0 11px;padding:8px 12px;background:#eff8ff;
+border:1px solid #b2ddff;border-radius:8px;font-size:13.5px;color:#175cd3}
+.sent-note b{display:inline-block;font-size:11px;text-transform:uppercase;
+letter-spacing:.06em;margin-right:8px}
 .act.done .act-title{text-decoration:line-through;text-decoration-color:#98a2b3}
 .ix.done .ix-act{text-decoration:line-through;text-decoration-color:#98a2b3}
 .ix.done{opacity:.6}
@@ -160,38 +198,95 @@ def anchor(ref: str) -> str:
     return f"t-{ascii_part}{digest}" if ascii_part else f"t-{digest}"
 
 
-def all_actions(tickets: list[dict]) -> list[tuple[str, dict]]:
-    """Every action on the page, in the order Rei should work through them."""
-    pairs = [(t.get("ref", ""), a) for t in tickets for a in t.get("actions", [])]
-    return sorted(pairs, key=lambda p: p[1].get("rank", 99))
+def sub_line(st: dict) -> str:
+    """The one line under a title saying what has already happened to it."""
+    bits = []
+    if st["state"] == "waiting":
+        bits.append(f"sent {st.get('at', '')}, with {st.get('who', 'them')}")
+    elif st["closed"]:
+        bits.append(f"{st['label'].lower()} {st.get('at', '')}")
+    if st.get("note"):
+        bits.append(st["note"])
+    return " &middot; ".join(esc(b) for b in bits)
 
 
-def render_index(tickets: list[dict], refs: dict[str, str]) -> str:
-    rows = all_actions(tickets)
+def render_track(tickets: list[dict], refs: dict[str, str], meeting_date: str) -> str:
+    """The one list Rei works from all afternoon: what is his, what is not."""
+    rows = tracked(tickets, PROGRESS)
     if not rows:
         return '<div class="panel" style="padding:18px 22px"><p class="empty">Nothing came out of this standup that needs action from you.</p></div>'
+
+    counts = {"todo": 0, "hold": 0, "waiting": 0, "closed": 0}
     out = []
-    for ref, a in rows:
+    for ref, a, st in rows:
+        counts["closed" if st["closed"] else st["state"]] += 1
         mins = a.get("est_minutes")
-        u_label, u_tone = URGENCY.get(a.get("urgency", "monitor"), URGENCY["monitor"])
-        done = status_of(a.get("rank"))
-        if done:
-            state = pill(DONE_LABEL.get(done.get("state", "done"), "done"), "green")
-        elif a.get("hold"):
-            state = pill("Wait", "amber")
-        else:
-            state = pill(u_label, u_tone)
+        sub = sub_line(st)
         out.append(
             f"""
-      <a class="ix {"done" if done else ""}" href="#{esc(refs.get(ref, anchor(ref)))}">
-        <span class="ix-rank">{esc(a.get("rank", "-"))}</span>
-        <span class="ix-tag">{esc(ref)}</span>
-        <span class="ix-act">{esc(a.get("title"))}</span>
-        {state}
-        <span class="ix-min">{f"{esc(mins)} min" if mins else ""}</span>
-      </a>"""
+      <li class="tr {"shut" if st["closed"] else ""}">
+        <input class="tr-box" type="checkbox" value="{esc(a.get("rank"))}"
+               data-closed="{"1" if st["closed"] else "0"}"
+               {"checked disabled" if st["closed"] else ""}>
+        <span class="tr-rank">{esc(a.get("rank", "-"))}</span>
+        <span class="tr-tag">{esc(ref)}</span>
+        <a class="tr-title" href="#{esc(refs.get(ref, anchor(ref)))}">{esc(a.get("title"))}
+          {f'<span class="tr-note">{sub}</span>' if sub else ""}</a>
+        {pill(st["label"], st["tone"])}
+        <span class="tr-min">{f"{esc(mins)} min" if mins and not st["closed"] else ""}</span>
+      </li>"""
         )
-    return f'<div class="index">{"".join(out)}</div>'
+
+    summary = ", ".join(
+        f"{n} {word}"
+        for n, word in (
+            (counts["todo"], "with you"),
+            (counts["hold"], "not yet"),
+            (counts["waiting"], "with someone else"),
+            (counts["closed"], "finished"),
+        )
+        if n
+    )
+    return f"""
+  <div class="track">
+    <div class="track-head"><h2>Where you are</h2><span>{esc(summary)}</span></div>
+    <ul style="list-style:none;margin:0;padding:0">{"".join(out)}</ul>
+    <div class="track-sync" id="sync" hidden>
+      <span>Ticked here but not saved:</span><code id="synccmd"></code>
+      <button class="copy" id="synccopy" data-copy="">copy</button>
+    </div>
+  </div>
+  <script>
+  (function(){{
+    var K='tgtick-{meeting_date}';
+    var saved=JSON.parse(localStorage.getItem(K)||'[]');
+    var bar=document.getElementById('sync'),cmd=document.getElementById('synccmd');
+    var btn=document.getElementById('synccopy');
+    var boxes=[].slice.call(document.querySelectorAll('.tr-box'));
+    boxes.forEach(function(b){{
+      if(b.dataset.closed==='1'){{
+        saved=saved.filter(function(r){{return r!==b.value}});
+        return;
+      }}
+      if(saved.indexOf(b.value)>-1){{b.checked=true;b.closest('.tr').classList.add('ticked')}}
+      b.addEventListener('change',function(){{
+        var i=saved.indexOf(b.value);
+        if(b.checked&&i<0)saved.push(b.value);
+        if(!b.checked&&i>-1)saved.splice(i,1);
+        b.closest('.tr').classList.toggle('ticked',b.checked);
+        sync();
+      }});
+    }});
+    function sync(){{
+      localStorage.setItem(K,JSON.stringify(saved));
+      var line='./tick.py '+saved.slice().sort(function(a,b){{return a-b}}).join(' ');
+      bar.hidden=!saved.length;
+      cmd.textContent=line;
+      btn.dataset.copy=line;
+    }}
+    sync();
+  }})();
+  </script>"""
 
 
 def render_terms(rows: list[dict]) -> str:
@@ -289,36 +384,38 @@ def render_actions(rows: list[dict]) -> str:
       </section>"""
     out = []
     for r in sorted(rows, key=lambda x: x.get("rank", 99)):
-        u_label, u_tone = URGENCY.get(r.get("urgency", "monitor"), URGENCY["monitor"])
         detail = "".join(f"<li>{esc(b)}</li>" for b in r.get("detail", []))
         mins = r.get("est_minutes")
         committed = r.get("committed_to")
         blocked = r.get("blocked_by")
         quote = r.get("source_quote")
         hold = r.get("hold") or {}
-        done = status_of(r.get("rank"))
-        hold_block = ""
+        st = state_of(r)
+        done = st["closed"]
+        status_block = ""
         if done:
-            note = f" {esc(done['note'])}" if done.get("note") else ""
-            hold_block = (
-                f'<p class="closed"><b>{esc(DONE_LABEL.get(done.get("state", "done"), "done"))}'
-                f'</b>{esc(done.get("at", ""))}.{note}</p>'
+            note = f" {esc(st['note'])}" if st.get("note") else ""
+            status_block = (
+                f'<p class="closed"><b>{esc(st["label"])}</b>'
+                f'{esc(st.get("at", ""))}.{note}</p>'
+            )
+        elif st["state"] == "waiting":
+            note = f" {esc(st['note'])}" if st.get("note") else ""
+            status_block = (
+                f'<p class="sent-note"><b>Sent {esc(st.get("at", ""))}</b>'
+                f'Nothing more from you until {esc(st.get("who", "they"))} '
+                f"come back.{note}</p>"
             )
         elif hold:
             revisit = hold.get("revisit")
-            hold_block = f"""
+            status_block = f"""
             <p class="hold"><b>Do not send this yet</b>{esc(hold.get("why"))}
             <span class="hold-until">Wait for: {esc(hold.get("until"))}</span>
             {f'<span class="hold-until"> Chase on {esc(revisit)}.</span>' if revisit else ""}</p>"""
-        if done:
-            state_pill = pill(DONE_LABEL.get(done.get("state", "done"), "done"), "green")
-        elif hold:
-            state_pill = pill("Wait", "amber")
-        else:
-            state_pill = pill(u_label, u_tone)
+        state_pill = pill(st["label"], st["tone"])
         out.append(
             f"""
-        <div class="act {"done" if done else ""} {"held" if hold and not done else ""} {"commit" if committed else ""}">
+        <div class="act {st["state"]} {"held" if hold and not done else ""} {"commit" if committed else ""}">
           <div class="act-head">
             <span class="act-rank">{esc(r.get("rank", "-"))}</span>
             <span class="act-title">{esc(r.get("title"))}</span>
@@ -327,7 +424,8 @@ def render_actions(rows: list[dict]) -> str:
           </div>
           <div class="act-body">
             {f'<p class="act-why"><b>Why</b>{esc(r.get("why"))}</p>' if r.get("why") else ""}
-            {hold_block}
+            {status_block}
+            {f'<p class="act-quote">Already happened: {esc(r.get("progress_note"))}</p>' if r.get("progress_note") else ""}
             {f"<ul>{detail}</ul>" if detail else ""}
             {f'<p class="act-commit">You committed this to {esc(committed)}</p>' if committed else ""}
             {f'<p class="act-block">Blocked by: {esc(blocked)}</p>' if blocked else ""}
@@ -464,14 +562,14 @@ def render(data: dict) -> str:
         a.get("est_minutes") or 0
         for t in tickets
         for a in t.get("actions", [])
-        if not status_of(a.get("rank"))
+        if state_of(a)["state"] == "todo"
     )
 
     held = [
         (t.get("ref", ""), a)
         for t in tickets
         for a in t.get("actions", [])
-        if a.get("hold") and not status_of(a.get("rank"))
+        if state_of(a)["state"] == "hold"
     ]
     hold_block = ""
     if held:
@@ -526,9 +624,11 @@ def render(data: dict) -> str:
 <div class="wrap">
   <div class="headline"><p>{esc(data.get("headline"))}</p></div>
   {skip_block}
+  {render_track(tickets, refs, meeting_date)}
+  <p class="foot" style="margin:0 0 22px">Tick as you go. To make it stick for
+  the next rebuild, run the command that appears, or just tell the chat.
+  {f"About {total} min of work left with you." if total else ""}</p>
   {hold_block}
-  <h2 class="board-h">Running order{f" &middot; about {total} min in total" if total else ""}</h2>
-  {render_index(tickets, refs)}
   <h2 class="tickets-h">{len(tickets)} ticket{"s" if len(tickets) != 1 else ""}, everything for each one in one place</h2>
   {cards}
   {watch_block}

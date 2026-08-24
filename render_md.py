@@ -16,17 +16,14 @@ import json
 import sys
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any
 
-from render import load_progress, plain
+from render import action_state, load_progress, plain, tracked
 
-URGENCY = {"today": "TODAY", "this-week": "this week", "monitor": "monitor"}
-DONE_LABEL = {"done": "done", "sent": "sent", "dropped": "dropped"}
 PROGRESS: dict = {}
 
 
-def status_of(rank: Any) -> dict:
-    return PROGRESS.get(str(rank), {})
+def state_of(action: dict) -> dict:
+    return action_state(PROGRESS, action)
 
 
 def link(label: str, url: str) -> str:
@@ -102,17 +99,22 @@ def render_ticket(t: dict) -> list[str]:
     for a in sorted(t.get("actions", []), key=lambda x: x.get("rank", 99)):
         mins = f", {a['est_minutes']} min" if a.get("est_minutes") else ""
         hold = a.get("hold") or {}
-        done = status_of(a.get("rank"))
-        state = "WAIT" if hold else URGENCY.get(a.get("urgency", "monitor"), "monitor")
-        if done:
-            state = DONE_LABEL.get(done.get("state", "done"), "done").upper()
+        st = state_of(a)
         actions.append(
-            f"#### {a.get('rank', '-')}. {a.get('title', '')} [{state}{mins}]"
+            f"#### {a.get('rank', '-')}. {a.get('title', '')} [{st['label'].upper()}{mins}]"
         )
         actions.append("")
-        if done:
-            note = f" {done['note']}" if done.get("note") else ""
-            actions += [f"> Closed {done.get('at', '')}.{note}", ""]
+        note = f" {st['note']}" if st.get("note") else ""
+        if st["closed"]:
+            actions += [f"> {st['label']} {st.get('at', '')}.{note}", ""]
+        elif st["state"] == "waiting":
+            actions += [
+                f"> Sent {st.get('at', '')}. Nothing more from you until "
+                f"{st.get('who', 'they')} come back.{note}",
+                "",
+            ]
+        if a.get("progress_note"):
+            actions += [f"> Already happened: {a['progress_note']}", ""]
         if a.get("why"):
             actions += [f"**Why:** {a['why']}", ""]
         if hold:
@@ -184,7 +186,7 @@ def render(data: dict) -> str:
         a.get("est_minutes") or 0
         for t in tickets
         for a in t.get("actions", [])
-        if not status_of(a.get("rank"))
+        if state_of(a)["state"] == "todo"
     )
 
     out = [
@@ -205,61 +207,58 @@ def render(data: dict) -> str:
             "",
         ]
 
-    held = [
-        (t.get("ref", ""), a)
-        for t in tickets
-        for a in t.get("actions", [])
-        if a.get("hold") and not status_of(a.get("rank"))
-    ]
-    if held:
-        out += ["## Wait before you send", ""]
-        for ref, a in held:
-            hold = a["hold"]
-            revisit = f" Chase on {hold['revisit']}." if hold.get("revisit") else ""
-            out.append(
-                f"- **{ref}: {a.get('title', '')}.** {hold.get('why', '')} "
-                f"Wait for: {hold.get('until', '')}.{revisit}"
+    rows = tracked(tickets, PROGRESS)
+    if rows:
+        counts: dict[str, int] = {}
+        for _, _, st in rows:
+            key = "finished" if st["closed"] else st["state"]
+            counts[key] = counts.get(key, 0) + 1
+        summary = ", ".join(
+            f"{counts[k]} {word}"
+            for k, word in (
+                ("todo", "with you"),
+                ("hold", "not yet"),
+                ("waiting", "with someone else"),
+                ("finished", "finished"),
             )
-        out.append("")
-
-    ordered = sorted(
-        ((t.get("ref", ""), a) for t in tickets for a in t.get("actions", [])),
-        key=lambda p: p[1].get("rank", 99),
-    )
-    left = [(r, a) for r, a in ordered if not status_of(a.get("rank"))]
-    closed = [(r, a) for r, a in ordered if status_of(a.get("rank"))]
-    if left:
+            if counts.get(k)
+        )
         out += [
-            f"## Still to do{f' ({total} min left)' if total else ''}",
+            "## Where you are",
             "",
-            "| # | Ticket | Do this | Why | When | Min |",
-            "|---|---|---|---|---|---|",
+            f"**{summary}.**"
+            + (f" About {total} min of work still with you." if total else ""),
+            "",
         ]
-        for ref, a in left:
-            state = (
-                "wait"
-                if a.get("hold")
-                else URGENCY.get(a.get("urgency", "monitor"), "monitor")
-            )
+        for ref, a, st in rows:
+            box = "[x]" if st["closed"] else "[ ]"
+            bits = []
+            if st["state"] == "waiting":
+                bits.append(f"sent {st.get('at', '')}, with {st.get('who', 'them')}")
+            elif st["closed"]:
+                bits.append(f"{st['label'].lower()} {st.get('at', '')}")
+            elif st["state"] == "hold":
+                bits.append(f"wait for {(a.get('hold') or {}).get('until', '')}")
+            elif a.get("est_minutes"):
+                bits.append(f"{a['est_minutes']} min")
+            if st.get("note"):
+                bits.append(st["note"])
+            tail = f" ({'; '.join(b for b in bits if b)})" if bits else ""
             out.append(
-                f"| {a.get('rank', '')} | {ref} | {a.get('title', '')} | "
-                f"{first_sentence(a.get('why', ''))} | {state} | "
-                f"{a.get('est_minutes', '')} |"
+                f"- {box} **{a.get('rank', '')}. {ref}: {a.get('title', '')}**{tail}"
             )
         out.append("")
-    if closed:
-        out += [f"## Closed ({len(closed)} of {len(ordered)})", ""]
-        for ref, a in closed:
-            st = status_of(a.get("rank"))
-            note = f" {st['note']}" if st.get("note") else ""
-            out.append(
-                f"- ~~{a.get('rank', '')}. {ref}: {a.get('title', '')}~~ "
-                f"{DONE_LABEL.get(st.get('state', 'done'), 'done')} "
-                f"{st.get('at', '')}.{note}"
-            )
-        out.append("")
-    if ordered and not left:
-        out += ["Everything on today's list is closed.", ""]
+        mine = [(r, a) for r, a, s in rows if s["state"] == "todo"]
+        if not mine:
+            out += ["Nothing is with you right now.", ""]
+        else:
+            out += ["**With you, in order:**", ""]
+            for ref, a in mine:
+                out.append(
+                    f"{a.get('rank', '')}. **{ref}: {a.get('title', '')}** "
+                    f"{first_sentence(a.get('why', ''))}"
+                )
+            out.append("")
 
     for t in tickets:
         out += render_ticket(t)
