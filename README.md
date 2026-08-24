@@ -85,6 +85,29 @@ Every action has one number, unique across the page, and the running order is
 built from those numbers rather than written separately. So "do 4" always means
 the same thing, and the table and the ticket sections cannot disagree.
 
+## Keeping the list honest
+
+A list that still shows finished work is worse than no list, so closing an item
+is one command that also rebuilds both pages.
+
+```sh
+./tick.py                 # what is left, what is closed
+./tick.py 1 3             # close 1 and 3
+./tick.py 2 -n "asked Kevin, waiting on the answer"
+./tick.py 4 --sent        # sent rather than done
+./tick.py 5 --dropped -n "TG answered it themselves"
+./tick.py 1 --undo        # reopen
+```
+
+The running order becomes **Still to do**, with the minutes left rather than the
+minutes planned, and closed items collect underneath with the time and your
+note. Held items drop out of "Wait before you send" once closed.
+
+Progress lives in `state/progress-<date>.json`, not in the report, so
+regenerating the report keeps it. That file is also how a chat in this repo knows
+where you are without you explaining: `AGENTS.md` tells the agent to run
+`./tick.py` rather than editing the page by hand.
+
 ## Reminders
 
 `POST_REMIND=1` pushes the actions into an Apple Reminders list called
@@ -138,11 +161,12 @@ If the agent is not confident about the date it writes nothing and flags it in
 | `render.py` | Morning JSON into HTML, plus the shared CSS, the error page and the cancelled-standup notice. No network, no LLM. |
 | `render_post.py` | Post-standup JSON into HTML. Imports the shared styling from `render.py`. |
 | `render_md.py` | Post-standup JSON into markdown, for handing work back in chat. |
+| `tick.py` | Close actions and rebuild both pages. The only way progress gets recorded. |
 | `run_prep.sh` | Morning entry point. Guards, skip check, timeout, error page. |
 | `run_post.sh` | Afternoon entry point. Polls for the Notion note. |
 | `launchd/` | The two schedules. |
 | `output/` | Per day: the morning JSON and HTML, the afternoon JSON, HTML and markdown. |
-| `state/` | `skip-next.json`, when a standup has been cancelled. |
+| `state/` | `skip-next.json` when a standup has been cancelled, `progress-<date>.json` for what you have closed, `open-loops.json` for holds carried across days. |
 | `logs/` | `run.log` for both runners, `agent-<date>.log` and `agent-post-<date>.log` for raw agent transcripts. |
 
 ## Furigana markup

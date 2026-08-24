@@ -266,7 +266,30 @@ conditions" tells him nothing. "Until these arrive he cannot show TG where their
 patrol and the integrity check differ, which is the whole argument at the onsite"
 tells him why he is waiting.
 
-## Step 6: say clearly when he should not act yet
+## Step 6: read the internal ticket before answering TG about a build
+
+When TG are waiting on something Kraken is building, never write the reply from
+the TG ticket alone. Open the linked internal ticket and read its state: build
+status, refinement status, assignee, committed date, dependencies, and the last
+engineer comment. Then say in `where_it_stands` whether anything is actually
+blocked, and name the blocker if it is.
+
+That state decides what the reply can promise. Refined and queued with no
+engineer means agree the plan and say the timing follows. A live blocker means
+say what is waiting and on whom. Never invent a date, and never let TG infer one
+from silence.
+
+None of that state goes to TG. No story points, no t-shirt size, no refinement
+status, no queue position, no engineer names. To them it is 要件の整理は完了して
+おり、実施の時期が決まりましたらご連絡いたします. The detail belongs in
+`where_it_stands`, which only Rei reads.
+
+Read the internal ticket for what TG have not been told, too. A build ticket
+often carries a consequence nobody has passed on, such as existing holds not
+being cleared by the change, which decides whether their verification plan even
+works.
+
+## Step 7: say clearly when he should not act yet
 
 Some actions look ready and are not. If sending now would commit Rei to a
 position that a pending reply might overturn, or would ask someone a question
@@ -301,7 +324,7 @@ Read that file at the start of the run. Any loop whose `revisit` date has passed
 and which is still unresolved becomes an action today, and the reason it appears
 is that it has been sitting. Drop loops that have since been answered.
 
-## Step 7: bake the draft into the action
+## Step 8: bake the draft into the action
 
 Where an action means Rei owes somebody words, the draft goes **inside that
 action**, in its `draft` field. Never in a separate section.
@@ -376,7 +399,7 @@ Slack thread without expanding.
 Where you lack the information to draft something, say so in the action's
 `detail` and leave `draft` out. Do not guess at content Rei will send.
 
-## Step 8: did the meeting cancel a future standup?
+## Step 9: did the meeting cancel a future standup?
 
 Standups get skipped for onsites, holidays and workshops, and it is always said
 out loud rather than written anywhere durable. Search the summary and transcript

@@ -16,10 +16,17 @@ import json
 import sys
 from datetime import date, datetime
 from pathlib import Path
+from typing import Any
 
-from render import plain
+from render import load_progress, plain
 
 URGENCY = {"today": "TODAY", "this-week": "this week", "monitor": "monitor"}
+DONE_LABEL = {"done": "done", "sent": "sent", "dropped": "dropped"}
+PROGRESS: dict = {}
+
+
+def status_of(rank: Any) -> dict:
+    return PROGRESS.get(str(rank), {})
 
 
 def link(label: str, url: str) -> str:
@@ -95,11 +102,17 @@ def render_ticket(t: dict) -> list[str]:
     for a in sorted(t.get("actions", []), key=lambda x: x.get("rank", 99)):
         mins = f", {a['est_minutes']} min" if a.get("est_minutes") else ""
         hold = a.get("hold") or {}
+        done = status_of(a.get("rank"))
         state = "WAIT" if hold else URGENCY.get(a.get("urgency", "monitor"), "monitor")
+        if done:
+            state = DONE_LABEL.get(done.get("state", "done"), "done").upper()
         actions.append(
             f"#### {a.get('rank', '-')}. {a.get('title', '')} [{state}{mins}]"
         )
         actions.append("")
+        if done:
+            note = f" {done['note']}" if done.get("note") else ""
+            actions += [f"> Closed {done.get('at', '')}.{note}", ""]
         if a.get("why"):
             actions += [f"**Why:** {a['why']}", ""]
         if hold:
@@ -158,14 +171,21 @@ def render_ticket(t: dict) -> list[str]:
 
 
 def render(data: dict) -> str:
+    global PROGRESS
     meeting_date = data.get("meeting_date") or date.today().isoformat()
+    PROGRESS = load_progress(meeting_date)
     try:
         pretty = datetime.strptime(meeting_date, "%Y-%m-%d").strftime("%A %-d %B %Y")
     except ValueError:
         pretty = meeting_date
 
     tickets = data.get("tickets", [])
-    total = sum(a.get("est_minutes") or 0 for t in tickets for a in t.get("actions", []))
+    total = sum(
+        a.get("est_minutes") or 0
+        for t in tickets
+        for a in t.get("actions", [])
+        if not status_of(a.get("rank"))
+    )
 
     out = [
         f"# After the TG billing standup, {pretty}",
@@ -189,7 +209,7 @@ def render(data: dict) -> str:
         (t.get("ref", ""), a)
         for t in tickets
         for a in t.get("actions", [])
-        if a.get("hold")
+        if a.get("hold") and not status_of(a.get("rank"))
     ]
     if held:
         out += ["## Wait before you send", ""]
@@ -206,14 +226,16 @@ def render(data: dict) -> str:
         ((t.get("ref", ""), a) for t in tickets for a in t.get("actions", [])),
         key=lambda p: p[1].get("rank", 99),
     )
-    if ordered:
+    left = [(r, a) for r, a in ordered if not status_of(a.get("rank"))]
+    closed = [(r, a) for r, a in ordered if status_of(a.get("rank"))]
+    if left:
         out += [
-            f"## Running order{f' ({total} min in total)' if total else ''}",
+            f"## Still to do{f' ({total} min left)' if total else ''}",
             "",
             "| # | Ticket | Do this | Why | When | Min |",
             "|---|---|---|---|---|---|",
         ]
-        for ref, a in ordered:
+        for ref, a in left:
             state = (
                 "wait"
                 if a.get("hold")
@@ -225,6 +247,19 @@ def render(data: dict) -> str:
                 f"{a.get('est_minutes', '')} |"
             )
         out.append("")
+    if closed:
+        out += [f"## Closed ({len(closed)} of {len(ordered)})", ""]
+        for ref, a in closed:
+            st = status_of(a.get("rank"))
+            note = f" {st['note']}" if st.get("note") else ""
+            out.append(
+                f"- ~~{a.get('rank', '')}. {ref}: {a.get('title', '')}~~ "
+                f"{DONE_LABEL.get(st.get('state', 'done'), 'done')} "
+                f"{st.get('at', '')}.{note}"
+            )
+        out.append("")
+    if ordered and not left:
+        out += ["Everything on today's list is closed.", ""]
 
     for t in tickets:
         out += render_ticket(t)

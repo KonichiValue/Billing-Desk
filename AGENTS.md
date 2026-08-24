@@ -31,6 +31,24 @@ because the context is in the file:
   the `threads` links if the answer is not there. Say plainly when the file is
   stale rather than guessing.
 
+## When Rei says he has done something
+
+Run `./tick.py <numbers>` and nothing else. It records the state in
+`state/progress-<date>.json` and rebuilds both pages, so the list stops claiming
+work that is finished. Never hand-edit the report to mark something done.
+
+```
+./tick.py              # what is left
+./tick.py 1 3          # close 1 and 3
+./tick.py 2 -n "note"  # close with a note
+./tick.py 4 --dropped  # closed because it stopped being needed
+./tick.py 1 --undo     # reopen
+```
+
+Read `state/progress-<today>.json` before answering "what's left". If Rei
+mentions doing something that is not on the list, say so rather than inventing a
+number for it.
+
 ## Hard rules that carry over from the source material
 
 1. **Never send anything.** Every message to Slack, Asana, Notion or email is

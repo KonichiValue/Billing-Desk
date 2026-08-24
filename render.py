@@ -46,6 +46,21 @@ def plain(raw: str) -> str:
     return RUBY.sub(r"\1", raw or "")
 
 
+def progress_path(meeting_date: str) -> Path:
+    return Path(__file__).resolve().parent / "state" / f"progress-{meeting_date}.json"
+
+
+def load_progress(meeting_date: str) -> dict:
+    """What Rei has already done, keyed by action rank. Written by tick.py."""
+    path = progress_path(meeting_date)
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8")).get("actions", {})
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
 def pill(label: str, tone: str) -> str:
     fg, bg, border = TONES.get(tone, TONES["grey"])
     return (

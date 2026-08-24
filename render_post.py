@@ -18,7 +18,14 @@ import sys
 from datetime import date, datetime
 from pathlib import Path
 
-from render import CSS, JS, esc, furi, link_btn, pill, plain
+from render import CSS, JS, esc, furi, link_btn, load_progress, pill, plain
+
+DONE_LABEL = {"done": "Done", "sent": "Sent", "dropped": "Dropped"}
+PROGRESS: dict = {}
+
+
+def status_of(rank) -> dict:
+    return PROGRESS.get(str(rank), {})
 
 URGENCY = {
     "today": ("Today", "red"),
@@ -69,6 +76,13 @@ border-radius:10px;overflow:hidden}
 flex-wrap:wrap}
 .terms dt{flex:none;min-width:150px;font-weight:650;font-size:14px;color:var(--accent)}
 .terms dd{flex:1;min-width:240px;margin:0;font-size:14px;color:var(--mut)}
+.act.done{opacity:.62}
+.act.done .act-title{text-decoration:line-through;text-decoration-color:#98a2b3}
+.ix.done .ix-act{text-decoration:line-through;text-decoration-color:#98a2b3}
+.ix.done{opacity:.6}
+.closed{margin:0 0 11px;font-size:14px;color:#067647}
+.closed b{display:inline-block;font-size:11px;text-transform:uppercase;
+letter-spacing:.05em;margin-right:8px}
 .chg{border-left:3px solid #067647;padding:2px 0 2px 13px;margin-bottom:14px}
 .chg-line{display:flex;gap:10px;font-size:14.5px;margin-bottom:5px}
 .chg-line .k{flex:none;width:44px;font-size:11.5px;font-weight:650;
@@ -160,10 +174,16 @@ def render_index(tickets: list[dict], refs: dict[str, str]) -> str:
     for ref, a in rows:
         mins = a.get("est_minutes")
         u_label, u_tone = URGENCY.get(a.get("urgency", "monitor"), URGENCY["monitor"])
-        state = pill("Wait", "amber") if a.get("hold") else pill(u_label, u_tone)
+        done = status_of(a.get("rank"))
+        if done:
+            state = pill(DONE_LABEL.get(done.get("state", "done"), "done"), "green")
+        elif a.get("hold"):
+            state = pill("Wait", "amber")
+        else:
+            state = pill(u_label, u_tone)
         out.append(
             f"""
-      <a class="ix" href="#{esc(refs.get(ref, anchor(ref)))}">
+      <a class="ix {"done" if done else ""}" href="#{esc(refs.get(ref, anchor(ref)))}">
         <span class="ix-rank">{esc(a.get("rank", "-"))}</span>
         <span class="ix-tag">{esc(ref)}</span>
         <span class="ix-act">{esc(a.get("title"))}</span>
@@ -276,20 +296,33 @@ def render_actions(rows: list[dict]) -> str:
         blocked = r.get("blocked_by")
         quote = r.get("source_quote")
         hold = r.get("hold") or {}
+        done = status_of(r.get("rank"))
         hold_block = ""
-        if hold:
+        if done:
+            note = f" {esc(done['note'])}" if done.get("note") else ""
+            hold_block = (
+                f'<p class="closed"><b>{esc(DONE_LABEL.get(done.get("state", "done"), "done"))}'
+                f'</b>{esc(done.get("at", ""))}.{note}</p>'
+            )
+        elif hold:
             revisit = hold.get("revisit")
             hold_block = f"""
             <p class="hold"><b>Do not send this yet</b>{esc(hold.get("why"))}
             <span class="hold-until">Wait for: {esc(hold.get("until"))}</span>
             {f'<span class="hold-until"> Chase on {esc(revisit)}.</span>' if revisit else ""}</p>"""
+        if done:
+            state_pill = pill(DONE_LABEL.get(done.get("state", "done"), "done"), "green")
+        elif hold:
+            state_pill = pill("Wait", "amber")
+        else:
+            state_pill = pill(u_label, u_tone)
         out.append(
             f"""
-        <div class="act {"held" if hold else ""} {"commit" if committed else ""}">
+        <div class="act {"done" if done else ""} {"held" if hold and not done else ""} {"commit" if committed else ""}">
           <div class="act-head">
             <span class="act-rank">{esc(r.get("rank", "-"))}</span>
             <span class="act-title">{esc(r.get("title"))}</span>
-            {pill("Wait", "amber") if hold else pill(u_label, u_tone)}
+            {state_pill}
             <span class="act-min">{f"{esc(mins)} min" if mins else ""}</span>
           </div>
           <div class="act-body">
@@ -415,7 +448,9 @@ def shell(title: str, body: str) -> str:
 
 
 def render(data: dict) -> str:
+    global PROGRESS
     meeting_date = data.get("meeting_date") or date.today().isoformat()
+    PROGRESS = load_progress(meeting_date)
     try:
         pretty = datetime.strptime(meeting_date, "%Y-%m-%d").strftime("%A %-d %B")
     except ValueError:
@@ -426,14 +461,17 @@ def render(data: dict) -> str:
     cards = "".join(render_ticket(t, refs[t.get("ref", "")]) for t in tickets)
 
     total = sum(
-        a.get("est_minutes") or 0 for t in tickets for a in t.get("actions", [])
+        a.get("est_minutes") or 0
+        for t in tickets
+        for a in t.get("actions", [])
+        if not status_of(a.get("rank"))
     )
 
     held = [
         (t.get("ref", ""), a)
         for t in tickets
         for a in t.get("actions", [])
-        if a.get("hold")
+        if a.get("hold") and not status_of(a.get("rank"))
     ]
     hold_block = ""
     if held:
