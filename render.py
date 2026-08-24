@@ -470,9 +470,24 @@ JS = """
     if(d<1800)el.classList.add('soon');
   }
   if(el&&!isNaN(target)){tick();setInterval(tick,20000)}
+  function putPlain(s){
+    // Slack only turns `foo` into code when the clipboard carries plain text,
+    // so never let a rich-text flavour reach it.
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      return navigator.clipboard.writeText(s).catch(function(){legacy(s)});
+    }
+    legacy(s);
+  }
+  function legacy(s){
+    var a=document.createElement('textarea');
+    a.value=s;a.setAttribute('readonly','');
+    a.style.cssText='position:fixed;top:-1000px';
+    document.body.appendChild(a);a.select();
+    try{document.execCommand('copy')}finally{document.body.removeChild(a)}
+  }
   document.querySelectorAll('.copy').forEach(function(b){
     b.addEventListener('click',function(){
-      navigator.clipboard.writeText(b.dataset.copy);
+      putPlain(b.dataset.copy);
       var o=b.textContent;b.textContent='copied';
       setTimeout(function(){b.textContent=o},1200);
     });
