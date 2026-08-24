@@ -1,19 +1,16 @@
 #!/usr/bin/env python3
-"""Render the morning prep JSON into a single self-contained HTML page.
+"""Shared parts of the desk page: styling, furigana, and the common blocks.
 
-Usage:
-    python3 render.py output/prep-2026-08-24.json output/prep-2026-08-24.html
-    python3 render.py --error "message" output/prep-2026-08-24.html
+Not a page on its own. `render_desk.py` builds the page from the board and
+`render_standup.py` builds the standup view inside it, and both take their
+styling, their furigana handling and their item lifecycle from here so the two
+views cannot drift apart.
 """
 
 from __future__ import annotations
 
 import html
-import json
 import re
-import sys
-from datetime import date, datetime
-from pathlib import Path
 from typing import Any
 
 RUBY = re.compile(r"\{([^|{}]+)\|([^|{}]+)\}")
@@ -39,11 +36,6 @@ LIFECYCLE = {
 }
 CLOSED_STATES = {"done", "sent", "dropped"}
 
-URGENCY = {
-    "today": ("Today", "red"),
-    "this-week": ("This week", "amber"),
-    "monitor": ("Monitor", "grey"),
-}
 
 
 def furi(raw: str) -> str:
@@ -108,61 +100,6 @@ def link_btn(url: str, label: str) -> str:
     if not url:
         return ""
     return f'<a class="btn" href="{esc(url)}" target="_blank" rel="noopener">{esc(label)}</a>'
-
-
-def render_action_board(rows: list[dict]) -> str:
-    if not rows:
-        return '<p class="empty">Nothing needs doing before the standup.</p>'
-    out = []
-    for row in sorted(rows, key=lambda r: r.get("rank", 99)):
-        u_label, u_tone = URGENCY.get(row.get("urgency", "monitor"), URGENCY["monitor"])
-        mins = row.get("est_minutes")
-        out.append(
-            f"""
-        <li class="action">
-          <div class="action-rank">{esc(row.get("rank", "-"))}</div>
-          <div class="action-body">
-            <div class="action-top">
-              <span class="action-text">{esc(row.get("action"))}</span>
-              {pill(u_label, u_tone)}
-            </div>
-            <div class="action-meta">
-              <span class="ref">{esc(row.get("ticket_ref"))}</span>
-              <span>{esc(row.get("where"))}</span>
-              <span class="why">{esc(row.get("why_now"))}</span>
-              {f'<span class="mins">{esc(mins)} min</span>' if mins else ""}
-            </div>
-          </div>
-          <div class="action-go">{link_btn(row.get("link", ""), "Open")}</div>
-        </li>"""
-        )
-    return f'<ol class="action-list">{"".join(out)}</ol>'
-
-
-def render_timeline(events: list[dict]) -> str:
-    if not events:
-        return '<p class="empty">No discussion found in Asana or Slack.</p>'
-    out = []
-    for ev in events:
-        who = esc(ev.get("who"))
-        side = "tg" if "(TG)" in (ev.get("who") or "") else "kraken"
-        url = ev.get("url", "")
-        anchor = (
-            f'<a href="{esc(url)}" target="_blank" rel="noopener" class="src">source</a>'
-            if url
-            else ""
-        )
-        out.append(
-            f"""
-        <li class="tl-item {side}">
-          <div class="tl-date">{esc(ev.get("date"))}</div>
-          <div class="tl-main">
-            <div class="tl-who">{who} <span class="tl-where">{esc(ev.get("where"))}</span> {anchor}</div>
-            <div class="tl-what">{esc(ev.get("what"))}</div>
-          </div>
-        </li>"""
-        )
-    return f'<ul class="timeline">{"".join(out)}</ul>'
 
 
 def render_script(blocks: list[dict]) -> str:
@@ -275,93 +212,6 @@ def render_consequences(c: dict) -> str:
         <h3>Scope, and what falls outside it</h3>
         <dl class="cons-list">{items}</dl>
       </section>"""
-
-
-def render_ticket(t: dict) -> str:
-    issue = "".join(f"<li>{esc(b)}</li>" for b in t.get("the_issue", []))
-    unknowns = t.get("unknowns", [])
-    unknown_block = ""
-    if unknowns:
-        items = "".join(f"<li>{esc(u)}</li>" for u in unknowns)
-        unknown_block = f"""
-      <section class="sub warn">
-        <h3>Check before 10:30</h3>
-        <ul>{items}</ul>
-      </section>"""
-
-    sources = t.get("sources", [])
-    source_block = ""
-    if sources:
-        items = "".join(
-            f'<li><a href="{esc(s.get("url"))}" target="_blank" rel="noopener">{esc(s.get("label"))}</a></li>'
-            for s in sources
-        )
-        source_block = f"""
-      <details class="sub sources">
-        <summary><h3>Sources ({len(sources)})</h3></summary>
-        <ul>{items}</ul>
-      </details>"""
-
-    days = t.get("days_since_activity")
-    stale = ' <span class="stale">quiet for ' + str(days) + " days</span>" if isinstance(days, int) and days >= 3 else ""
-
-    position = (
-        f'<p class="position"><strong>Our position:</strong> {esc(t.get("our_position"))}</p>'
-        if t.get("our_position")
-        else ""
-    )
-
-    estimate = (
-        f'<span class="est">{esc(t.get("estimate"))}</span>' if t.get("estimate") else ""
-    )
-
-    return f"""
-    <article class="ticket" id="{esc(t.get("ref"))}">
-      <header class="t-head">
-        <div class="t-ref">{esc(t.get("order", "?"))}</div>
-        <div class="t-titles">
-          <h2><span class="tag">{esc(t.get("ref"))}</span>{esc(t.get("title_en"))}</h2>
-          <p class="t-ja">{esc(t.get("title_ja"))}</p>
-          <p class="t-meta">
-            {pill(t.get("status_label", "-"), t.get("status_tone", "grey"))}
-            {f'<span>{esc(t.get("board_position"))}</span>' if t.get("board_position") else ""}
-            {estimate}
-            {stale}
-          </p>
-        </div>
-        <div class="t-go">{link_btn(t.get("asana_url", ""), "Asana")}</div>
-      </header>
-
-      <section class="sub">
-        <h3>The issue in 20 seconds</h3>
-        <ul class="issue">{issue}</ul>
-        {f'<p class="matters">{esc(t.get("why_it_matters"))}</p>' if t.get("why_it_matters") else ""}
-      </section>
-
-      <section class="sub">
-        <h3>Where it stands</h3>
-        <p class="status">{esc(t.get("latest_status"))}</p>
-        {position}
-      </section>
-
-      {render_consequences(t.get("consequences", {}))}
-
-      <details class="sub" open>
-        <summary><h3>How we got here</h3></summary>
-        {render_timeline(t.get("timeline", []))}
-      </details>
-
-      <section class="sub script">
-        <h3>What I say today</h3>
-        {'<p class="noask">Nothing needed from TG on this one. Status only.</p>' if t.get("tg_ask_needed") is False else ""}
-        {render_script(t.get("jp_script", []))}
-      </section>
-
-      {render_questions(t.get("open_questions", []))}
-      {render_drafts(t.get("drafts", []))}
-      {unknown_block}
-      {source_block}
-    </article>"""
 
 
 CSS = """
@@ -495,10 +345,24 @@ padding:18px 22px;margin-top:24px}
 color:var(--soft);margin:0 0 9px}
 .gaps ul{margin:0;padding-left:19px}
 .foot{text-align:center;color:var(--soft);font-size:12.5px;margin-top:32px}
-body.script-only .headline,body.script-only .board,body.script-only .sub:not(.script),
-body.script-only details,body.script-only .gaps,body.script-only .t-go{display:none}
+/* Two views, one page. The desk is what to do, the standup is what to say, and
+   they share the same tickets, so switching must never feel like navigating. */
+.views{display:flex;gap:2px;padding:3px;background:#f0f1f3;border-radius:9px}
+.views button{font:600 13px/1 inherit;padding:7px 13px;border:0;border-radius:7px;
+background:none;color:var(--mut);cursor:pointer}
+.views button[aria-selected="true"]{background:#fff;color:var(--ink);
+box-shadow:0 1px 2px rgba(16,24,40,.09)}
+.views .badge{display:inline-block;margin-left:6px;min-width:17px;padding:0 5px;
+border-radius:9px;background:#b42318;color:#fff;font-size:11px;line-height:17px;
+font-weight:700;vertical-align:1px}
+.views button[aria-selected="true"] .badge{background:var(--ink)}
+body[data-view="desk"] #view-standup,body[data-view="standup"] #view-desk{display:none}
+.keys{color:var(--soft);font-size:11.5px;margin-left:8px}
+body.script-only .sub:not(.script),body.script-only .st-head .pos,
+body.script-only details,body.script-only .st-brief,body.script-only .st-raise,
+body.script-only .st-warn,body.script-only .st-cons{display:none}
 body.script-only .jp{font-size:26px}
-body.script-only .ticket{padding:18px 22px}
+body.script-only .st-tk{padding:18px 22px}
 .err{background:#fef3f2;border:1px solid #fecdca;border-radius:12px;padding:22px;
 color:#b42318}
 .err pre{white-space:pre-wrap;font-size:13px;background:#fff;padding:13px;
@@ -548,115 +412,44 @@ JS = """
     t.textContent=document.body.classList.contains('script-only')
       ?'Show everything':'Script only';
   });
+
+  // The view lives on the body, so CSS does the switching and nothing reloads.
+  // A hash link from one view to the other lands on the right ticket because we
+  // switch first and let the browser scroll after.
+  var tabs=[].slice.call(document.querySelectorAll('.views button'));
+  function show(view,remember){
+    if(!tabs.length)return;
+    document.body.dataset.view=view;
+    tabs.forEach(function(b){b.setAttribute('aria-selected',b.dataset.view===view)});
+    if(remember!==false)try{sessionStorage.setItem('desk-view',view)}catch(e){}
+  }
+  tabs.forEach(function(b){
+    b.addEventListener('click',function(){show(b.dataset.view)});
+  });
+  document.addEventListener('click',function(e){
+    var a=e.target.closest('a[data-goto]');
+    if(!a)return;
+    show(a.dataset.goto);
+    var target=document.querySelector(a.getAttribute('href'));
+    if(target){e.preventDefault();target.scrollIntoView({behavior:'smooth',block:'start'});
+      history.replaceState(null,'',a.getAttribute('href'))}
+  });
+  document.addEventListener('keydown',function(e){
+    if(e.metaKey||e.ctrlKey||e.altKey)return;
+    var tag=(e.target.tagName||'').toLowerCase();
+    if(tag==='input'||tag==='textarea')return;
+    if(e.key==='1')show('desk');
+    if(e.key==='2')show('standup');
+    if(e.key==='s'&&t)t.click();
+  });
+  if(tabs.length){
+    var start=document.body.dataset.view;
+    try{
+      var saved=sessionStorage.getItem('desk-view');
+      if(saved)start=saved;
+    }catch(e){}
+    if(location.hash.indexOf('#s-')===0)start='standup';
+    show(start,false);
+  }
 })();
 """
-
-
-def shell(title: str, body: str, meeting_iso: str = "") -> str:
-    return f"""<!doctype html>
-<html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{esc(title)}</title><style>{CSS}</style></head>
-<body data-meeting="{esc(meeting_iso)}">
-{body}
-<script>{JS}</script></body></html>"""
-
-
-def render(data: dict) -> str:
-    meeting_date = data.get("meeting_date") or date.today().isoformat()
-    try:
-        pretty = datetime.strptime(meeting_date, "%Y-%m-%d").strftime("%A %-d %B")
-    except ValueError:
-        pretty = meeting_date
-
-    tickets = sorted(data.get("tickets", []), key=lambda t: t.get("order", 99))
-    cards = "".join(render_ticket(t) for t in tickets)
-
-    gaps = data.get("gaps", [])
-    gap_block = ""
-    if gaps:
-        items = "".join(f"<li>{esc(g)}</li>" for g in gaps)
-        gap_block = f'<section class="gaps"><h2>Open gaps</h2><ul>{items}</ul></section>'
-
-    body = f"""
-<header class="top"><div class="top-in">
-  <h1>TG billing standup prep</h1>
-  <span class="date">{esc(pretty)} &middot; 10:30 JST</span>
-  <span id="countdown"></span>
-  <button class="toggle" id="scriptonly">Script only</button>
-</div></header>
-<div class="wrap">
-  <div class="headline"><p>{esc(data.get("headline"))}</p></div>
-  <div class="board">
-    <h2 class="board-h">Do first</h2>
-    {render_action_board(data.get("action_board", []))}
-  </div>
-  <h2 class="tickets-h">{len(tickets)} open ticket{"s" if len(tickets) != 1 else ""}, in the order they come up on the board</h2>
-  {cards}
-  {gap_block}
-  <p class="foot">Generated {esc(data.get("generated_at"))}</p>
-</div>"""
-    return shell(f"TG prep {meeting_date}", body, f"{meeting_date}T10:30:00+09:00")
-
-
-def render_notice(reason: str, quote: str = "", url: str = "") -> str:
-    body = f"""
-<div class="wrap" style="padding-top:60px">
-  <div class="headline" style="border-left-color:#b54708">
-    <p>No billing standup today.</p>
-    <p style="font-size:15px;font-weight:400;color:var(--mut);margin-top:8px">
-      {esc(reason)}</p>
-  </div>
-  {f'<p class="quote-note" style="color:var(--soft);font-style:italic">{esc(quote)}</p>' if quote else ""}
-  {f'<p>{link_btn(url, "Meeting note that said so")}</p>' if url else ""}
-  <p class="foot">Build the prep anyway with <code>./run_prep.sh --force</code>.</p>
-</div>"""
-    return shell("No TG standup today", body)
-
-
-def render_error(message: str) -> str:
-    body = f"""
-<div class="wrap" style="padding-top:40px">
-  <div class="err">
-    <h1 style="margin:0 0 8px;font-size:20px">Prep did not generate this morning</h1>
-    <p style="margin:0">Run it by hand with <code>./run_prep.sh --force</code>,
-    or open Asana directly. Details below.</p>
-    <pre>{esc(message)}</pre>
-  </div>
-</div>"""
-    return shell("TG prep failed", body)
-
-
-def main() -> int:
-    args = sys.argv[1:]
-    if len(args) >= 3 and args[0] == "--error":
-        Path(args[2]).write_text(render_error(args[1]), encoding="utf-8")
-        return 0
-    if len(args) >= 3 and args[0] == "--notice":
-        reason, quote, url = (args[1:-1] + ["", ""])[:3]
-        Path(args[-1]).write_text(render_notice(reason, quote, url), encoding="utf-8")
-        return 0
-    if len(args) != 2:
-        print(__doc__, file=sys.stderr)
-        return 2
-
-    src, dest = Path(args[0]), Path(args[1])
-    if not src.exists():
-        print(f"missing {src}", file=sys.stderr)
-        return 1
-    try:
-        data = json.loads(src.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        print(f"invalid JSON in {src}: {exc}", file=sys.stderr)
-        return 1
-    if not isinstance(data, dict) or "tickets" not in data:
-        print(f"{src} is missing the 'tickets' key", file=sys.stderr)
-        return 1
-
-    dest.write_text(render(data), encoding="utf-8")
-    print(f"wrote {dest} ({len(data.get('tickets', []))} tickets)")
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

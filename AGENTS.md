@@ -13,6 +13,10 @@ standup is one of the things that moves it, not the reason it exists.
 come and go, the standup happens or it does not, but an item keeps its number
 until it is closed. Everything in `output/` is rendered from the board.
 
+The page has two views off that one file. The desk is what he does; the standup
+view is what he says at 10:30, from each ticket's `prep` block. Neither carries
+its own status, so a script cannot contradict the list.
+
 ## When Rei asks you to act on his work
 
 **Read `output/desk.md` first, before answering anything.** That is the board in
@@ -49,6 +53,13 @@ closed and numbers never change.
 
 `./tick.py` on its own prints the same status without spending a single token,
 so use that when he only wants to know where he is.
+
+## "prep" or "build the script"
+
+**Read `prompt-prep.md` and follow it exactly.** Same routine as the Build script
+button and `tg prep`: the refresh sweep first, then the standup half. It writes
+each ticket's `prep` block and nothing else, so item states stay where the sweep
+left them.
 
 ## When Rei says he has done something
 
@@ -108,11 +119,11 @@ but cannot change it; the board is the only truth about what is closed.
 
 ## Changing what lands on the pages
 
-Edit the prompts, not the output. `prompt.md` drives the morning prep page,
-`prompt-post.md` folds the standup into the board, and `prompt-refresh.md` is
-the sweep behind "refresh". The schema in `prompt-post.md` and the shape in
-`board.py` are the contract the renderers expect, so if you add a field, update
-`render_desk.py` and `render_desk_md.py` in the same change.
+Edit the prompts, not the output. `prompt-refresh.md` is the sweep behind
+"refresh", `prompt-prep.md` writes the standup script on top of that sweep, and
+`prompt-post.md` folds the meeting note in. The shape in `board.py` is the
+contract the renderers expect, so if you add a field, update `render_desk.py`,
+`render_standup.py` and `render_desk_md.py` in the same change.
 
 Do not hand-edit files in `output/`. They are regenerated from the board on
 every page load.

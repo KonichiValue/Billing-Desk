@@ -14,7 +14,7 @@ BIN="$HOME/.local/bin"
 
 mkdir -p "$BIN" "$HOME/Applications"
 
-chmod +x "$DIR/bin/tg" "$DIR/tick.py" "$DIR/run_post.sh" "$DIR/run_prep.sh"
+chmod +x "$DIR/bin/tg" "$DIR/tick.py" "$DIR/run_post.sh"
 ln -sf "$DIR/bin/tg" "$BIN/tg"
 print -r -- "linked $BIN/tg"
 

@@ -8,9 +8,10 @@
 #   tg 2 --mine         he replied, it is yours again
 #   tg 5 --dropped -n "TG answered it themselves"
 #   tg refresh          sweep every open ticket and thread, rebuild, open
+#   tg prep             sweep, then write today's standup script
 #   tg chat             open the folder in Cursor to hand work over
-#   tg build            rebuild the desk page from the board
-#   tg post             rebuild from today's Notion meeting note
+#   tg build            rebuild the page from the board, no agent
+#   tg post             fold today's Notion meeting note into the board
 #   tg stop             shut the local page server down
 #
 # Anything numeric goes straight to tick.py, so the numbers you see on the page
@@ -71,27 +72,36 @@ stop_server() {
     || print -r -- "no desk server running"
 }
 
+run_agent() {
+  # $1 is the prompt file, $2 is what to print while it works.
+  if ! command -v cursor-agent >/dev/null 2>&1; then
+    print -u2 "cursor-agent is not installed. Type 'refresh' in a Cursor chat on this folder instead."
+    return 1
+  fi
+  # One agent at a time. Two of them writing the board is how it ends up half
+  # updated, and the buttons on the page take the same lock.
+  local lock="state/refresh.lock"
+  if [[ -f "$lock" ]] && kill -0 "$(cut -d' ' -f1 "$lock")" 2>/dev/null; then
+    print -u2 "already running ($(cat "$lock"))"
+    return 1
+  fi
+  mkdir -p state
+  print -r -- "$$ terminal $(date +%H:%M)" >"$lock"
+  trap 'rm -f "$lock"' EXIT INT TERM
+  print -r -- "$2"
+  cursor-agent --print --force --approve-mcps --trust \
+    --workspace "$REPO" ${TG_MODEL:+--model "$TG_MODEL"} \
+    "$(cat "$1")"
+}
+
 case "${1:-}" in
   "")            python3 tick.py; page ;;
   s|st|status)   python3 tick.py ;;
   refresh|r)
-    if ! command -v cursor-agent >/dev/null 2>&1; then
-      print -u2 "cursor-agent is not installed. Type 'refresh' in a Cursor chat on this folder instead."
-      exit 1
-    fi
-    # One refresh at a time. Two agents writing the board is how it ends up
-    # half updated, and the Refresh button on the page takes the same lock.
-    LOCK="state/refresh.lock"
-    if [[ -f "$LOCK" ]] && kill -0 "$(cut -d' ' -f1 "$LOCK")" 2>/dev/null; then
-      print -u2 "a refresh is already running ($(cat "$LOCK"))"
-      exit 1
-    fi
-    print -r -- "$$ terminal $(date +%H:%M)" >"$LOCK"
-    trap 'rm -f "$LOCK"' EXIT INT TERM
-    print -r -- "Looking for what moved since the page was built..."
-    cursor-agent --print --force --approve-mcps --trust \
-      --workspace "$REPO" ${TG_MODEL:+--model "$TG_MODEL"} \
-      "$(cat prompt-refresh.md)" || exit 1
+    run_agent prompt-refresh.md "Looking for what moved since the page was built..." || exit 1
+    page ;;
+  prep|p)
+    run_agent prompt-prep.md "Sweeping everything, then writing today's script..." || exit 1
     page ;;
   chat)          open -a Cursor "$REPO" ;;
   stop)          stop_server ;;
@@ -99,8 +109,7 @@ case "${1:-}" in
     python3 render_desk.py "$BOARD" output/desk.html || exit 1
     python3 render_desk_md.py "$BOARD" output/desk.md ;;
   post)          ./run_post.sh --force ;;
-  prep)          ./run_prep.sh ;;
   open)          page ;;
-  -h|--help|help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' ;;
+  -h|--help|help) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//' ;;
   *)             python3 tick.py "$@" ;;
 esac

@@ -11,55 +11,63 @@ finished, and it keeps its number until it closes, so "do 4" means the same
 thing next week. Everything else in the repo either writes to the board or draws
 it.
 
-Two scheduled runs feed it, because the standup is the day's forcing function:
+**One page, two views.** The desk answers "what do I do". The standup view
+answers "what do I say at 10:30", in the order the meeting walks the board, with
+the Japanese script. Same tickets, same file, and `1` and `2` switch between
+them. A ticket that needs airtime carries a *raise at standup* pill on the desk
+and appears under its script; a ticket in the script links back to its open items
+on the desk. Neither view has a status of its own, so a script can never
+contradict the list.
+
+Three things put work on the board, and the standup is the day's forcing
+function:
 
 | | When | What it does |
 |---|---|---|
-| **Morning prep** | 09:10, Mon/Wed/Thu | A separate briefing page: what to know and say at 10:30. |
-| **Standup fold-in** | from 11:00, same days | Reads the meeting note and moves the board. |
+| **Refresh** | any time you press it | Sweeps every open ticket and thread, moves what changed. |
+| **Build script** | when you sit down on a standup day | Refresh, then writes what you say at 10:30. |
+| **Standup fold-in** | from 11:00, Mon/Wed/Thu | Reads the meeting note and moves the board. Scheduled, because the note appears while you are still in meetings. |
 
-The split is deliberate. Before the standup you have 30 minutes and you spend
-them reading, so the morning page is for preparing, not working. Replies,
-investigation and ticket updates wait for the desk.
+Before the standup you have 20 minutes and you spend them reading, so the
+standup view is for preparing. Replies, investigation and ticket updates wait for
+the desk afterwards.
 
 The desk is written twice: `output/desk.html` to read, `output/desk.md` to hand
 work back from. Open a Cursor chat in this repo and say "draft the reply to
 Nakayama-san" or "check the codebase for X", and `AGENTS.md` points the agent at
 the markdown so it starts with the full picture.
 
-## Morning prep
+## The standup script
 
-1. Finds every open Asana ticket assigned to Rei in the two TG shared projects,
-   in the order they appear on the 2-week cycle board.
-2. Reads the full comment history on each one, plus the linked internal Kraken
-   build ticket.
-3. Searches Slack (public, private and DMs) for anything said about those
-   tickets that never made it into Asana.
-4. Traces what each agreed fix does **not** cover: what falls outside it, what
+Press **Build script** in the app, or run `tg prep`. Nothing is scheduled for the
+morning, deliberately: you build it when you sit down, so it is written against
+the replies that landed overnight rather than against 09:10.
+
+1. Runs the full refresh first, so the script sits on the newest state.
+2. Puts your tickets in the order the cards appear on the 2-week cycle board, and
+   says roughly when you are up.
+3. Traces what each agreed fix does **not** cover: what falls outside it, what
    piles up because of that, who owns the pile, and what cleanup means. This is
    where the real questions come from, and it is the step that stops TG raising
    something you had not thought about.
-5. Writes a Japanese speaking script with furigana and English translations.
-6. Renders `output/prep-<date>.html` and opens it.
+4. Writes the Japanese you say out loud, with furigana above the kanji and
+   English underneath, plus the questions you need TG to answer.
+5. Marks the items that can only be closed in the meeting, so they show on both
+   views.
 
-**Do first** holds at most three rows and is usually empty. An item only
-qualifies if a message has been waiting on you for more than a working day, or
-TG will raise it at 10:30 and you cannot answer cold.
+A ticket with nothing outstanding gets a two-line 現状 block and says *status
+only*. That is a good thing to report in one breath, and padding it wastes
+standup time.
 
-```sh
-./run_prep.sh            # skips if today's page already exists
-./run_prep.sh --force    # rebuild from scratch, ignoring a cancelled standup
-./run_prep.sh --no-open  # build only
-```
-
-`PREP_MODEL` picks a model. `PREP_TIMEOUT` changes the watchdog, default 900.
+Internal build tickets, story points, refinement status and delivery dates never
+reach the script. They stay on the desk side, where they are for you.
 
 ## The standup fold-in
 
 1. Finds today's `Billing Stand Up` meeting note in Notion and reads both the
    summary and the **full transcript**. The transcript is the valuable half:
    pushback, undecided forks and quiet takeaways only exist there.
-2. Loads the morning JSON so it can show what the meeting changed.
+2. Reads the board so it can show what the meeting changed.
 3. For each ticket, gathers **every conversation it lives in**: the Asana ticket,
    the internal build ticket, the CE refinement thread, the CE help thread, the
    Heqing DM. Threads get read in full, because a reversal lands in reply 30 and
@@ -101,12 +109,17 @@ bar. Behind it, `serve.py` runs on `127.0.0.1:8787` and renders the page on ever
 load, so what you see at four in the afternoon reflects everything you have
 ticked off. It starts on first use and stays up; `tg stop` ends it.
 
-That server is also what makes the **Refresh** button in the page header work. It
-runs the same routine as `tg refresh`: the button asks the server, the server
-runs the agent, the page reports progress and reloads itself when the work
-lands. If `cursor-agent` is not logged in, the button says so rather than
-failing quietly. Opening the HTML file directly still works and simply has no
-button, since a `file://` page has nothing to send the click to.
+That server is also what makes the **Refresh** and **Build script** buttons in
+the header work: the button asks the server, the server runs the agent, the page
+reports progress and reloads itself when the work lands. Both take the same lock,
+so a terminal run and a button press can never write the board at once.
+
+Before spending anything, the server checks that `cursor-agent` is signed in and
+that the Asana and Slack connections are authorised. When they are not, the page
+says which one and the **Log in** button walks them one browser approval at a
+time. That check exists because an agent with no tools does not stop, it
+improvises. Opening the HTML file directly still works and simply has no buttons,
+since a `file://` page has nothing to send a click to.
 
 ```
 tg              open the desk, print where everything sits
@@ -115,6 +128,7 @@ tg 4            item 4 is finished
 tg 2 -w Kevin   sent, now sitting with Kevin
 tg 2 --mine     he replied, it is yours again
 tg refresh      sweep every open ticket and thread, rebuild, open
+tg prep         sweep, then write today's standup script
 tg chat         open the folder in Cursor to hand work over
 tg build        re-render the page from the board, no agent
 tg post         fold today's Notion meeting note in again
@@ -176,54 +190,55 @@ relying on it in the scheduled job.
 ## Cancelled standups
 
 Standups get skipped for onsites and workshops, and it is only ever said out
-loud. The post-standup agent listens for it and writes `state/skip-next.json`
-with the date of the meeting that is not happening. The morning job reads that
-file and shows a short "no standup today" page instead of building a prep it
-does not need. `--force` overrides.
+loud. The fold-in agent listens for it and records the date on the board, and both
+views say so at the top. The script still builds if you press the button, since
+the work does not stop because the meeting did.
 
-If the agent is not confident about the date it writes nothing and flags it in
-`gaps`, because a missing prep page is worse than a redundant one.
+If the agent is not confident about the date it records nothing and flags it,
+because a missing warning is better than a wrong one.
 
-## Reading the pages
+## Reading the page
 
-- Ticket cards run top to bottom in the order you need them: the issue, where it
-  stands, what the fix does not cover, how it got here, then the script.
-- **What I say today** is meant to be read aloud verbatim. Furigana sits above
-  the kanji, English underneath, and each block has a copy button that copies the
-  Japanese without the markup.
-- The amber **Check before 10:30** box holds unknowns and hard cautions,
+- `1` shows the desk, `2` the standup, `s` strips everything but the Japanese at
+  a larger size. The tab you were on survives a reload; each morning opens on the
+  script when one has been built and the standup has not started yet.
+- On the desk, **Where you are** is one list: yours at the top, then what you may
+  not send yet, then what sits with someone else, with finished work folded away
+  behind a count. Each ticket header carries what Asana currently says about it,
+  and a draft always sits inside the item that needs it.
+- On the standup view, cards run in board order: the issue in 20 seconds, where
+  it stands, what the fix does not cover, then the script.
+- **What I say** is meant to be read aloud verbatim. Furigana sits above the
+  kanji, English underneath, and each block copies the Japanese without the
+  markup.
+- The amber **Check before you speak** box holds unknowns and hard cautions,
   including anything you must not say to TG.
-- **Script only** strips the morning page back to the Japanese at a larger size.
-- On the desk, the running order links straight down to the ticket, each ticket
-  header carries what Asana currently says about it, a red border means you
-  committed to it out loud, and a draft always sits inside the item that needs
-  it. Anything not with you is folded shut.
-- Both pages are plain HTML. Keep them, mail them, print them.
+- It is plain HTML in one file. Keep it, mail it, print it.
 
 ## Pieces
 
 | File | What it is |
 |---|---|
-| `prompt.md` | Morning agent instructions and output schema. |
-| `prompt-post.md` | How the standup gets folded into the board, plus the board schema. |
-| `AGENTS.md` | How a Cursor chat in this repo picks up today's list and acts on it. |
-| `config.json` | Project GIDs, user GIDs, meeting time, Slack channel hints. |
 | `board.py` | The board: what it holds, how state moves, where numbers come from. |
-| `render.py` | Morning JSON into HTML, plus the shared CSS, the lifecycle and the error page. No network, no LLM. |
-| `render_desk.py` | The board into `output/desk.html`. |
+| `prompt-refresh.md` | What "refresh" means, for the button, `tg refresh` and a chat alike. |
+| `prompt-prep.md` | The standup script: the sweep, then what goes in `prep`. |
+| `prompt-post.md` | How the standup gets folded into the board. |
+| `AGENTS.md` | How a Cursor chat in this repo picks up the list and acts on it. |
+| `config.json` | Project GIDs, user GIDs, meeting time, Slack channel hints. |
+| `render.py` | Shared styling, furigana, item lifecycle and the common blocks. No network, no LLM. |
+| `render_desk.py` | The board into `output/desk.html`, both views in one file. |
+| `render_standup.py` | The standup view inside that file. |
 | `render_desk_md.py` | The board into `output/desk.md`, for handing work back in chat. |
 | `tick.py` | Move items along and rebuild. The only way state gets recorded. |
-| `serve.py` | The local page server: renders on every load, and runs the agent when the Refresh button asks. Loopback only, keyed. |
-| `bin/tg` | The one command. Opens the window, moves items along, starts a refresh. |
-| `install.sh` | Links `tg` and builds the Dock app. Safe to rerun. |
-| `prompt-refresh.md` | What "refresh" means, for the button and for a chat alike. |
+| `serve.py` | The local page server: renders on every load, runs an agent when a button asks, and walks the sign-in when something is not authorised. Loopback only, keyed. |
+| `bin/tg` | The one command. Opens the window, moves items along, starts a run. |
+| `install.sh` | Links `tg`, builds the Dock app, keeps the server running. Safe to rerun. |
 | `app/` | The icon generator and the Tokyo Gas mark. The Kraken mark is read from `~/Projects/kraken-core` at build time. |
-| `run_prep.sh` | Morning entry point. Guards, skip check, timeout, error page. |
-| `run_post.sh` | Afternoon entry point. Polls for the Notion note, then folds it in. |
-| `launchd/` | The two schedules. |
-| `output/` | `desk.html` and `desk.md`, both rendered from the board, plus the morning prep pages. |
+| `run_post.sh` | The fold-in entry point. Polls for the Notion note, then folds it in. |
+| `launchd/` | The fold-in schedule and the page server. |
+| `output/` | `desk.html` and `desk.md`, both rendered from the board. |
 | `state/` | `board.json`, the one durable file, and `skip-next.json` when a standup has been cancelled. |
-| `logs/` | `run.log` for both runners, `agent-<date>.log` and `agent-post-<date>.log` for raw agent transcripts. |
+| `logs/` | `refresh-<date>.log`, `prep-<date>.log` and the fold-in logs. |
 
 ## Furigana markup
 
@@ -233,19 +248,20 @@ annotations. The reading goes on the whole word, not per character:
 
 ## Schedule
 
-Both jobs fire on Mon, Wed and Thu, at 09:10 and 11:00. If the Mac is asleep at
-that time `launchd` runs the job as soon as it wakes, so opening the laptop at
-09:30 still gets you the morning page. Neither runner rebuilds a page it already
-built that day.
+Only two things run on their own. The fold-in fires from 11:00 on Mon, Wed and
+Thu and retries until the Notion note appears, because that note lands while you
+are still in meetings. The page server starts at login and stays up, so the Dock
+app always finds it. Everything else is a button.
+
+If the Mac is asleep at 11:00, `launchd` runs the job as soon as it wakes.
 
 ```sh
-launchctl unload ~/Library/LaunchAgents/com.tg-billing-desk.prep.plist
-launchctl load  ~/Library/LaunchAgents/com.tg-billing-desk.prep.plist
-launchctl list | grep -E "tg-(morning-prep|post-standup)"
+launchctl kickstart -k "gui/$UID/com.tg-billing-desk.post"
+launchctl list | grep tg-billing
 ```
 
 To change the days or times, edit the plist in `launchd/`, copy it over the one
-in `~/Library/LaunchAgents/`, then unload and load.
+in `~/Library/LaunchAgents/`, then `launchctl bootout` and `bootstrap` it.
 
 ## Requirements
 
@@ -255,10 +271,11 @@ in `~/Library/LaunchAgents/`, then unload and load.
 
 ## Any model, any assistant
 
-Nothing here is tied to one model. Neither runner names one, so both use whatever
-`cursor-agent` defaults to, and `PREP_MODEL` and `POST_MODEL` override per run:
+Nothing here is tied to one model. Nothing names one, so every run uses whatever
+`cursor-agent` defaults to, and `TG_MODEL` or `POST_MODEL` override per run:
 
 ```sh
+TG_MODEL=gpt-5.6-sol-high tg prep
 POST_MODEL=gpt-5.6-sol-high ./run_post.sh --force
 ```
 
@@ -273,7 +290,13 @@ looks for its own filename finds the same instructions.
 
 ## When it breaks
 
-Both pages still open, showing the error and pointing at the agent log. Most
-likely causes, in order: `cursor-agent` logged out, an MCP server needing
-re-auth, or the agent writing malformed JSON. For the last one, `--force`
-usually fixes it.
+The page still opens, since it renders from the board and the board is only
+written by a run that finished. Most likely causes, in order: the Asana or Slack
+connection needing re-auth, `cursor-agent` signed out, or an agent writing
+malformed JSON. The first two are what the Log in button is for. For the last,
+run it again.
+
+```sh
+tail -f logs/refresh-$(date +%F).log
+tail -f logs/serve.log
+```

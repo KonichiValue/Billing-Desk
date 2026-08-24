@@ -12,27 +12,48 @@ Shape of `state/board.json`:
       "version": 1,
       "checked_at": "2026-08-24T18:20:00+09:00",
       "next_id": 8,
-      "tickets": [
-        {
-          "id": "1217430352217964",        Asana gid, so nothing is duplicated
-          "ref": "請求未発行",              short tag Rei uses out loud
-          "title_en", "title_ja", "asana_url",
-          "asana": {"status", "section", "priority", "assignee", "project"},
-          "last_activity": {"at", "who", "where"},
-          "where_it_stands", "terms", "threads", "internal_ticket",
-          "events": [{"on": "2026-08-24", "at": "15:14", "who", "what",
-                      "so_what", "where", "source_url"}],
-          "items": [ ...see below... ]
-        }
-      ]
-    }
+              "standup": {"date", "at", "built_at", "headline"},
+              "tickets": [
+                {
+                  "id": "1217430352217964",        Asana gid, so nothing is duplicated
+                  "ref": "請求未発行",              short tag Rei uses out loud
+                  "title_en", "title_ja", "asana_url",
+                  "asana": {"status", "section", "priority", "assignee", "project"},
+                  "last_activity": {"at", "who", "where"},
+                  "where_it_stands", "terms", "threads", "internal_ticket",
+                  "events": [{"on": "2026-08-24", "at": "15:14", "who", "what",
+                              "so_what", "where", "source_url"}],
+                  "prep": { ...see below... },
+                  "items": [ ...see below... ]
+                }
+              ]
+            }
+
+`prep` is what the ticket sounds like out loud, and only the standup view reads
+it. It is rebuilt whenever Rei presses Build script, and it deliberately holds no
+status of its own: the standup view takes `where_it_stands` from the ticket, so a
+script can never contradict the desk.
+
+    {"order": 1, "board_position": "3 of 14 on the board",
+     "issue": ["plain English, two or three lines"], "why_it_matters",
+     "consequences": {"fix_covers", "falls_outside", "accumulates",
+                      "who_owns_it", "done_means", "still_open"},
+     "open_questions": [{"en", "ja_ruby", "who"}],
+     "script": [{"heading": "現状", "heading_en": "Where it stands",
+                 "lines": [{"ja_ruby": "{託送|たくそう}...", "en": "..."}]}],
+     "tg_ask_needed": true, "estimate": "", "unknowns": [], "built_at"}
+
+An item with `at_standup` true is work that has to be spoken about rather than
+only done, so it shows on both views: on the desk with a "raise at standup" pill,
+in the script under the ticket it belongs to.
 
 An item is an action with a life:
 
-    {"id": 3, "title", "why", "detail": [], "state": "todo|waiting|hold|done|
-     sent|dropped", "state_at", "state_note", "waits_on", "hold", "draft",
-     "where", "link", "urgency", "est_minutes", "opened", "closed_at",
-     "history": [{"at", "state", "note"}]}
+            {"id": 3, "title", "why", "detail": [], "state": "todo|waiting|hold|done|
+             sent|dropped", "state_at", "state_note", "waits_on", "hold", "draft",
+             "where", "link", "urgency", "est_minutes", "opened", "closed_at",
+             "at_standup", "at_standup_note",
+             "history": [{"at", "state", "note"}]}
 
 Only `tick.py` and the agents write here. Renderers read it and never change it.
 """

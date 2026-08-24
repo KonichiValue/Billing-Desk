@@ -218,17 +218,26 @@ def lock_held() -> bool:
     return True
 
 
-def run_refresh() -> None:
-    """One agent pass over prompt-refresh.md, then the page reloads itself."""
-    if not (ROOT / "prompt-refresh.md").exists():
-        set_job("failed", "prompt-refresh.md is missing")
+JOBS = {
+    # endpoint name -> prompt, what the page says while it runs
+    "refresh": ("prompt-refresh.md", "Reading every open ticket and the threads behind them"),
+    "prep": ("prompt-prep.md", "Sweeping everything, then writing your standup script"),
+}
+
+
+def run_agent(kind: str) -> None:
+    """One agent pass over a prompt, then the page reloads itself."""
+    prompt_name, running_note = JOBS[kind]
+    prompt = ROOT / prompt_name
+    if not prompt.exists():
+        set_job("failed", f"{prompt_name} is missing")
         return
     agent = subprocess.run(["which", "cursor-agent"], capture_output=True, text=True)
     if agent.returncode != 0:
         set_job("failed", "cursor-agent is not installed. Type 'refresh' in a Cursor chat instead.")
         return
     if lock_held():
-        set_job("failed", "a refresh is already running. Let it finish.")
+        set_job("failed", "something is already running against the board. Let it finish.")
         return
 
     left, message = blockers()
@@ -236,8 +245,8 @@ def run_refresh() -> None:
         set_job("needs_login", f"{message} Press Log in and approve each one.")
         return
 
-    set_job("running", "Reading every open ticket and the threads behind them")
-    log = ROOT / "logs" / f"refresh-{datetime.now():%Y-%m-%d}.log"
+    set_job("running", running_note)
+    log = ROOT / "logs" / f"{kind}-{datetime.now():%Y-%m-%d}.log"
     log.parent.mkdir(exist_ok=True)
     # No --model, so it runs on whatever cursor-agent defaults to, which is Auto.
     # TG_MODEL pins a specific one when that is wanted.
@@ -245,26 +254,26 @@ def run_refresh() -> None:
            "--workspace", str(ROOT)]
     if os.environ.get("TG_MODEL"):
         cmd += ["--model", os.environ["TG_MODEL"]]
-    LOCK.write_text(f"{os.getpid()} desk-server {datetime.now():%H:%M}\n")
+    LOCK.write_text(f"{os.getpid()} desk-server {kind} {datetime.now():%H:%M}\n")
     with log.open("a", encoding="utf-8") as fh:
-        fh.write(f"\n=== {datetime.now():%H:%M:%S} refresh ===\n")
+        fh.write(f"\n=== {datetime.now():%H:%M:%S} {kind} ===\n")
         try:
             proc = subprocess.run(
-                cmd + [(ROOT / "prompt-refresh.md").read_text(encoding="utf-8")],
+                cmd + [prompt.read_text(encoding="utf-8")],
                 cwd=ROOT,
                 stdout=fh,
                 stderr=subprocess.STDOUT,
                 timeout=TIMEOUT_SECS,
             )
         except subprocess.TimeoutExpired:
-            set_job("failed", "the agent ran past 15 minutes and was stopped")
+            set_job("failed", f"the {kind} ran past 15 minutes and was stopped")
             return
         finally:
             LOCK.unlink(missing_ok=True)
     if proc.returncode != 0:
         set_job("failed", f"the agent exited {proc.returncode}. See {log.name}")
         return
-    set_job("done", "Refreshed")
+    set_job("done", "Refreshed" if kind == "refresh" else "Script written")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -333,13 +342,14 @@ class Handler(BaseHTTPRequestHandler):
         if not self.keyed():
             self.json_out(403, {"error": "bad key"})
             return
-        if path == "/api/refresh":
+        if path in ("/api/refresh", "/api/prep"):
             with job_lock:
                 if job["state"] == "running":
                     self.json_out(409, dict(job))
                     return
+            kind = path.rsplit("/", 1)[1]
             set_job("running", "Starting")
-            threading.Thread(target=run_refresh, daemon=True).start()
+            threading.Thread(target=run_agent, args=(kind,), daemon=True).start()
             self.json_out(202, {"state": "running"})
             return
         if path == "/api/login":

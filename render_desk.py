@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Render the board into the desk page: one self-contained HTML file.
+"""Render the board into one self-contained HTML file with two views.
 
-Everything is grouped by ticket, because that is how the work gets done. The
-only cross-ticket structure is the running order at the top, which is the list
-Rei actually works from.
+The desk view answers "what do I do", grouped by ticket because that is how the
+work gets done. The standup view answers "what do I say at 10:30", in the order
+the meeting walks the board. Same tickets, same file, one source of truth, and
+switching between them costs a keystroke.
 
 Usage:
     python3 render_desk.py state/board.json output/desk.html
@@ -19,6 +20,7 @@ import sys
 from datetime import date, datetime
 from pathlib import Path
 
+import render_standup
 from render import (
     CSS,
     JS,
@@ -466,6 +468,8 @@ def render_items(rows: list[dict]) -> str:
             <span class="hold-until">Wait for: {esc(hold.get("until"))}</span>
             {f'<span class="hold-until"> Chase on {esc(revisit)}.</span>' if revisit else ""}</p>"""
         state_pill = pill(st["label"], st["tone"])
+        if r.get("at_standup") and not done:
+            state_pill += pill("Raise at standup", "amber")
         chase = (r.get("waits_on") or {}).get("chase_on", "")
         # Anything not sitting with Rei folds shut, so the page is only as long
         # as the work he still has.
@@ -561,6 +565,15 @@ def render_ticket(t: dict, ident: str) -> str:
     else:
         posture = pill("Clear", "green")
 
+    # When there is a script for this ticket, the desk card says so and jumps
+    # straight to it, because "what do I say about this" is the next question.
+    say_link = (
+        f'<a class="btn" href="#{esc(render_standup.anchor(ident))}" '
+        f'data-goto="standup">What I say</a>'
+        if (t.get("prep") or {}).get("script")
+        else ""
+    )
+
     return f"""
     <article class="tk" id="{esc(ident)}">
       <header class="tk-head">
@@ -570,6 +583,7 @@ def render_ticket(t: dict, ident: str) -> str:
           {posture}
           {asana_chips(t)}
           {link_btn(t.get("asana_url", ""), "Asana ticket")}
+          {say_link}
         </p>
         {int_block}
       </header>
@@ -588,7 +602,7 @@ def render_ticket(t: dict, ident: str) -> str:
     </article>"""
 
 
-def shell(title: str, body: str) -> str:
+def shell(title: str, body: str, view: str = "desk", meeting_iso: str = "") -> str:
     # The manifest and icon are what let Chrome install this as its own app, with
     # its own Dock tile. They 404 harmlessly when the page is opened from disk.
     return f"""<!doctype html>
@@ -598,16 +612,21 @@ def shell(title: str, body: str) -> str:
 <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png">
 <link rel="apple-touch-icon" href="/icon-512.png">
 <meta name="theme-color" content="#fafafa">
-<title>{esc(title)}</title><style>{CSS}{EXTRA_CSS}</style></head>
-<body>
+<title>{esc(title)}</title>
+<style>{CSS}{EXTRA_CSS}{render_standup.EXTRA_CSS}</style></head>
+<body data-view="{esc(view)}" data-meeting="{esc(meeting_iso)}">
 {body}
 <script>{JS}</script></body></html>"""
 
 
-# The button only appears when serve.py is behind the page, because a file://
+# The buttons only appear when serve.py is behind the page, because a file://
 # page has nothing to send the click to. serve.py swaps the key in as it serves.
-REFRESH_BUTTON = """
-  <button id="refresh" class="refresh" hidden>Refresh</button>
+def controls(prep_label: str) -> str:
+    return """
+  <button id="refresh" class="refresh" hidden data-run="/api/refresh"
+          data-busy="Refreshing">Refresh</button>
+  <button id="prep" class="refresh" hidden data-run="/api/prep"
+          data-busy="Writing">%s</button>
   <button id="login" class="refresh" hidden>Log in</button>
   <a id="login-link" class="refresh" hidden target="_blank" rel="noopener">Open sign-in page</a>
   <span id="refresh-note" class="refresh-note"></span>
@@ -615,26 +634,28 @@ REFRESH_BUTTON = """
 (function () {
   var key = "__DESK_KEY__";
   if (location.protocol !== "http:" || key.indexOf("DESK_KEY") > -1) return;
-  var btn = document.getElementById("refresh");
+  var runners = [].slice.call(document.querySelectorAll("[data-run]"));
   var login = document.getElementById("login");
   var link = document.getElementById("login-link");
   var note = document.getElementById("refresh-note");
-  btn.hidden = false;
+  runners.forEach(function (b) { b.hidden = false; });
 
   function say(text, tone) {
     note.textContent = text || "";
     note.className = "refresh-note" + (tone ? " " + tone : "");
   }
 
-  function ready(label) {
-    btn.disabled = false;
-    btn.textContent = label || "Refresh";
+  function ready() {
+    runners.forEach(function (b) {
+      b.disabled = false;
+      b.textContent = b.dataset.label || b.textContent;
+    });
   }
 
   function poll() {
     fetch("/api/status").then(function (r) { return r.json(); }).then(function (s) {
       if (s.state === "running") { say(s.message + "\\u2026"); setTimeout(poll, 2000); return; }
-      if (s.state === "done") { say("Refreshed, reloading"); location.reload(); return; }
+      if (s.state === "done") { say("Done, reloading"); location.reload(); return; }
       // Signed out is not a failure, it is one click. Offer the click, and the
       // link the CLI printed once it has one. Keep polling so the moment the
       // browser approval lands the buttons come back on their own.
@@ -654,13 +675,16 @@ REFRESH_BUTTON = """
     });
   }
 
-  btn.addEventListener("click", function () {
-    btn.disabled = true;
-    btn.textContent = "Refreshing";
-    say("Starting\\u2026");
-    fetch("/api/refresh?k=" + encodeURIComponent(key), { method: "POST" })
-      .then(poll)
-      .catch(function () { ready(); say("could not reach the desk server", "bad"); });
+  runners.forEach(function (b) {
+    b.dataset.label = b.textContent;
+    b.addEventListener("click", function () {
+      runners.forEach(function (o) { o.disabled = true; });
+      b.textContent = b.dataset.busy;
+      say("Starting\\u2026");
+      fetch(b.dataset.run + "?k=" + encodeURIComponent(key), { method: "POST" })
+        .then(poll)
+        .catch(function () { ready(); say("could not reach the desk server", "bad"); });
+    });
   });
 
   login.addEventListener("click", function () {
@@ -673,7 +697,7 @@ REFRESH_BUTTON = """
 
   poll();
 })();
-</script>"""
+</script>""" % prep_label
 
 
 def checked_line(stamp: str) -> str:
@@ -692,6 +716,38 @@ def checked_line(stamp: str) -> str:
     if mins < 24 * 60:
         return f"checked {mins // 60}h ago, at {then:%H:%M}"
     return f"last checked {then:%-d %B}"
+
+
+def view_tabs(mine: int, has_script: bool) -> str:
+    """Two tabs, and the desk one carries the count of what is actually yours."""
+    badge = f'<span class="badge">{mine}</span>' if mine else ""
+    dot = "" if has_script else '<span class="badge">!</span>'
+    return f"""
+  <div class="views" role="tablist">
+    <button data-view="desk" role="tab" aria-selected="true">Desk{badge}</button>
+    <button data-view="standup" role="tab" aria-selected="false">Standup{dot}</button>
+  </div>
+  <span class="keys">1 / 2</span>"""
+
+
+def opening_view(board: dict, has_script: bool) -> str:
+    """What to show on load.
+
+    Before the standup, with a script already written, the script is what he
+    opens the laptop for. Every other moment of the day, the desk is.
+    """
+    if not has_script:
+        return "desk"
+    standup = board.get("standup") or {}
+    if standup.get("date") != date.today().isoformat():
+        return "desk"
+    at = standup.get("at") or "10:30"
+    try:
+        hour, minute = (int(x) for x in at.split(":")[:2])
+    except ValueError:
+        hour, minute = 10, 30
+    now = datetime.now()
+    return "standup" if (now.hour, now.minute) < (hour, minute) else "desk"
 
 
 def render(data: dict) -> str:
@@ -767,28 +823,53 @@ def render(data: dict) -> str:
         items = "".join(f"<li>{esc(g)}</li>" for g in gaps)
         gap_block = f'<section class="gaps"><h2>Open gaps</h2><ul>{items}</ul></section>'
 
+    mine = sum(
+        1
+        for t in tickets
+        for i in t.get("items", [])
+        if state_of(i)["state"] == "todo"
+    )
+
+    standup = data.get("standup") or {}
+    built = standup.get("built_at", "")
+    has_script = any((t.get("prep") or {}).get("script") for t in tickets)
+    # A script written before the last sweep may not know the newest replies.
+    stale = bool(has_script and built and built < (data.get("checked_at") or ""))
+    prep_label = "Rebuild script" if has_script else "Build script"
+    meeting = f'{standup.get("date") or date.today().isoformat()}T{standup.get("at") or "10:30"}:00+09:00'
+
     body = f"""
 <header class="top"><div class="top-in">
   <h1>TG billing desk</h1>
   <span class="date">{esc(pretty)} &middot; {esc(checked_line(data.get("checked_at", "")))}</span>
-  <span style="margin-left:auto">{link_btn(data.get("notion_url", ""), "Meeting note")}</span>
-  {REFRESH_BUTTON}
+  {view_tabs(mine, has_script)}
+  <span id="countdown" style="margin-left:auto"></span>
+  {link_btn(data.get("notion_url", ""), "Meeting note")}
+  <button class="toggle" id="scriptonly">Script only</button>
+  {controls(prep_label)}
 </div></header>
 <div class="wrap">
-  {f'<div class="headline"><p>{esc(data.get("headline"))}</p></div>' if data.get("headline") else ""}
-  {skip_block}
-  {render_track(tickets, refs)}
-  <p class="foot" style="margin:0 0 22px">
-  {f"About {total} min of work sits with you. " if total else ""}
-  Close something by telling the chat, or with <code>tg &lt;number&gt;</code>.</p>
-  {hold_block}
-  <h2 class="tickets-h">{len(tickets)} open ticket{"s" if len(tickets) != 1 else ""}, everything for each one in one place</h2>
-  {cards}
-  {watch_block}
-  {gap_block}
-  <p class="foot">Generated {esc(data.get("generated_at"))}</p>
+  <div id="view-desk" role="tabpanel">
+    {f'<div class="headline"><p>{esc(data.get("headline"))}</p></div>' if data.get("headline") else ""}
+    {skip_block}
+    {render_track(tickets, refs)}
+    <p class="foot" style="margin:0 0 22px">
+    {f"About {total} min of work sits with you. " if total else ""}
+    Close something by telling the chat, or with <code>tg &lt;number&gt;</code>.</p>
+    {hold_block}
+    <h2 class="tickets-h">{len(tickets)} open ticket{"s" if len(tickets) != 1 else ""}, everything for each one in one place</h2>
+    {cards}
+    {watch_block}
+    {gap_block}
+  </div>
+  <div id="view-standup" role="tabpanel">
+    {skip_block}
+    {render_standup.render(data, refs, built, stale)}
+  </div>
 </div>"""
-    return shell("TG billing desk", body)
+    return shell(
+        "TG billing desk", body, opening_view(data, has_script), meeting
+    )
 
 
 def render_error(message: str) -> str:

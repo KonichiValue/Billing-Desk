@@ -7,7 +7,7 @@ or "check the codebase for X". Keep it dense, keep every link, and keep the
 ticket grouping so a single block is enough context to act on.
 
 Usage:
-    python3 render_md.py output/post-2026-08-24.json output/post-2026-08-24.md
+    python3 render_desk_md.py state/board.json output/desk.md
 """
 
 from __future__ import annotations
@@ -173,8 +173,55 @@ def render_ticket(t: dict) -> list[str]:
         for th in t.get("threads", [])
     ]
     out += block("Every conversation this lives in", threads)
+    out += render_prep(t.get("prep") or {})
 
     return out
+
+
+def render_prep(prep: dict) -> list[str]:
+    """The standup half, in plain kanji: what he says and what he still asks.
+
+    Furigana markup is stripped, because this file is read by an agent and by
+    Rei in a chat, and `{託送|たくそう}` helps neither of them.
+    """
+    if not prep.get("script") and not prep.get("open_questions"):
+        return []
+    rows: list[str] = []
+    if prep.get("issue"):
+        rows += [f"- {b}" for b in prep["issue"]]
+        if prep.get("why_it_matters"):
+            rows.append(f"- Why it matters: {prep['why_it_matters']}")
+        rows.append("")
+    cons = prep.get("consequences") or {}
+    labels = (
+        ("fix_covers", "The fix covers"),
+        ("falls_outside", "It does not cover"),
+        ("accumulates", "So this piles up"),
+        ("who_owns_it", "Owned by"),
+        ("done_means", "Cleanup means"),
+        ("still_open", "Still undecided"),
+    )
+    rows += [f"- **{label}:** {cons[key]}" for key, label in labels if cons.get(key)]
+    if cons:
+        rows.append("")
+    for b in prep.get("script", []):
+        rows += [
+            f"**{b.get('heading', '')} ({b.get('heading_en', '')})**",
+            "",
+            "```",
+            *[plain(line.get("ja_ruby", "")) for line in b.get("lines", [])],
+            "```",
+            "",
+        ]
+        rows += [f"- {line.get('en', '')}" for line in b.get("lines", [])]
+        rows.append("")
+    for q in prep.get("open_questions", []):
+        rows.append(f"- **Ask {q.get('who', 'TG')}:** {q.get('en', '')}")
+        rows.append(f"  {plain(q.get('ja_ruby', ''))}")
+    if prep.get("unknowns"):
+        rows.append("")
+        rows += [f"- Check first: {u}" for u in prep["unknowns"]]
+    return block("What I say at standup", rows)
 
 
 def render(data: dict) -> str:
