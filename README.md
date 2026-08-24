@@ -1,4 +1,4 @@
-# TG standup prep
+# TG billing standup
 
 Two pages a day for the Tokyo Gas billing standup, both self-contained HTML,
 both opening themselves in the browser.
@@ -139,8 +139,8 @@ that time `launchd` runs the job as soon as it wakes, so opening the laptop at
 built that day.
 
 ```sh
-launchctl unload ~/Library/LaunchAgents/com.tg-morning-prep.plist
-launchctl load  ~/Library/LaunchAgents/com.tg-morning-prep.plist
+launchctl unload ~/Library/LaunchAgents/com.tg-billing-standup.prep.plist
+launchctl load  ~/Library/LaunchAgents/com.tg-billing-standup.prep.plist
 launchctl list | grep -E "tg-(morning-prep|post-standup)"
 ```
 

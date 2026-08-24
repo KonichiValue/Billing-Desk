@@ -3,17 +3,17 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.tg-morning-prep</string>
+    <string>com.tg-billing-standup.prep</string>
 
     <!-- Build the TG billing standup prep page and open it in the browser. -->
     <key>ProgramArguments</key>
     <array>
         <string>/bin/zsh</string>
-        <string>/Users/rei.samuelsson/Projects/tg-morning-prep/run_prep.sh</string>
+        <string>/Users/rei.samuelsson/Projects/tg-billing-standup/run_prep.sh</string>
     </array>
 
     <key>WorkingDirectory</key>
-    <string>/Users/rei.samuelsson/Projects/tg-morning-prep</string>
+    <string>/Users/rei.samuelsson/Projects/tg-billing-standup</string>
 
     <!-- Mon (1), Wed (3), Thu (4) at 09:10 local time. If the Mac is asleep or
          off at 09:10, launchd fires the job as soon as it wakes, which is the
@@ -35,8 +35,8 @@
     </dict>
 
     <key>StandardOutPath</key>
-    <string>/Users/rei.samuelsson/Projects/tg-morning-prep/logs/launchd.out.log</string>
+    <string>/Users/rei.samuelsson/Projects/tg-billing-standup/logs/launchd.out.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/rei.samuelsson/Projects/tg-morning-prep/logs/launchd.err.log</string>
+    <string>/Users/rei.samuelsson/Projects/tg-billing-standup/logs/launchd.err.log</string>
 </dict>
 </plist>
