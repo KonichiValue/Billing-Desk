@@ -335,11 +335,11 @@ def render_actions(rows: list[dict]) -> str:
     if not rows:
         return """
       <section class="sub">
-        <h3>To do</h3>
+        <h3>Actions</h3>
         <p class="empty">Nothing to do on this one right now.</p>
       </section>"""
     out = []
-    for r in sorted(rows, key=lambda x: x.get("rank", 99)):
+    for r in sorted(rows, key=lambda x: (state_of(x)["order"], x.get("rank", 99))):
         detail = "".join(f"<li>{esc(b)}</li>" for b in r.get("detail", []))
         mins = r.get("est_minutes")
         committed = r.get("committed_to")
@@ -396,7 +396,7 @@ def render_actions(rows: list[dict]) -> str:
         )
     return f"""
       <section class="sub">
-        <h3>To do, hardest consequence first</h3>
+        <h3>Actions, and where each one sits</h3>
         {"".join(out)}
       </section>"""
 

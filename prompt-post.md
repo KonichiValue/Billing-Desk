@@ -361,6 +361,20 @@ the end when he needs a decision. No preamble, no recap of process, no "just
 wanted to check in". Warmth belongs in the first line to someone he knows, and
 nowhere else.
 
+### Never say back what they already wrote
+
+Before every paragraph, ask what the reader does not already know. Agreeing with
+a proposal takes one sentence: say it works and stop. Listing their own plan back
+to them, or restating the expected result they set out themselves, adds length
+without adding a single thing they can act on, and it reads as though Rei is
+filling space rather than answering.
+
+What earns room in a reply is the part they cannot see from where they sit. A
+consequence buried in the internal build ticket, a constraint on how they should
+verify, an answer to something they asked. Write those in full, cut everything
+else. A three-line reply that carries one new fact beats a page that carries
+none.
+
 ### Two things is a sentence, not a list
 
 A list earns its place at three items or more, and only when each one is a

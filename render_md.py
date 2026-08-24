@@ -96,7 +96,9 @@ def render_ticket(t: dict) -> list[str]:
     out += block("What changed today", changed)
 
     actions: list[str] = []
-    for a in sorted(t.get("actions", []), key=lambda x: x.get("rank", 99)):
+    for a in sorted(
+        t.get("actions", []), key=lambda x: (state_of(x)["order"], x.get("rank", 99))
+    ):
         mins = f", {a['est_minutes']} min" if a.get("est_minutes") else ""
         hold = a.get("hold") or {}
         st = state_of(a)
@@ -141,7 +143,7 @@ def render_ticket(t: dict) -> list[str]:
             ]
         actions.append("")
         actions += render_draft(a.get("draft") or {})
-    out += block("To do, hardest consequence first", actions)
+    out += block("Actions, and where each one sits", actions)
 
     waiting = [
         f"- **{w.get('who', '')}** owes: {w.get('what', '')} "
