@@ -79,6 +79,15 @@ case "${1:-}" in
       print -u2 "cursor-agent is not installed. Type 'refresh' in a Cursor chat on this folder instead."
       exit 1
     fi
+    # One refresh at a time. Two agents writing the board is how it ends up
+    # half updated, and the Refresh button on the page takes the same lock.
+    LOCK="state/refresh.lock"
+    if [[ -f "$LOCK" ]] && kill -0 "$(cut -d' ' -f1 "$LOCK")" 2>/dev/null; then
+      print -u2 "a refresh is already running ($(cat "$LOCK"))"
+      exit 1
+    fi
+    print -r -- "$$ terminal $(date +%H:%M)" >"$LOCK"
+    trap 'rm -f "$LOCK"' EXIT INT TERM
     print -r -- "Looking for what moved since the page was built..."
     cursor-agent --print --force --approve-mcps --trust \
       --workspace "$REPO" ${TG_MODEL:+--model "$TG_MODEL"} \

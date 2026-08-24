@@ -81,31 +81,63 @@ def set_job(state: str, message: str = "", url: str = "") -> None:
         )
 
 
-def logged_in() -> bool:
-    status = subprocess.run(
-        ["cursor-agent", "status"], capture_output=True, text=True, check=False
-    )
-    return "not logged in" not in (status.stdout + status.stderr).lower()
-
-
 ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 URL_IN = re.compile(r"https://\S+")
 
 
-def start_login() -> None:
-    """Run the sign-in here and hand Rei the URL it prints.
+def cli(*args: str, timeout: int = 60) -> str:
+    out = subprocess.run(
+        ["cursor-agent", *args],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=timeout,
+        stdin=subprocess.DEVNULL,
+    )
+    return ANSI.sub("", out.stdout + out.stderr)
+
+
+def logged_in() -> bool:
+    return "not logged in" not in cli("status").lower()
+
+
+def unauthorised_mcps() -> list[str]:
+    """Which configured MCP servers the agent cannot actually use.
+
+    Without these a refresh has no Asana and no Slack. An agent with no tools
+    does not stop: it improvises with curl and invented tokens, or starts
+    another agent. Better to refuse the run and name what is missing.
+    """
+    missing = []
+    for line in cli("mcp", "list").splitlines():
+        name, _, state = line.partition(":")
+        if state.strip() and "requires_authentication" in state:
+            missing.append(name.strip())
+    return missing
+
+
+def blockers() -> tuple[list[str], str]:
+    """Everything standing between the button and a real run, in one look."""
+    if not logged_in():
+        return ["account"], "cursor-agent is signed out."
+    missing = unauthorised_mcps()
+    if missing:
+        names = " and ".join(n.title() for n in missing)
+        verb = "needs" if len(missing) == 1 else "need"
+        return missing, f"{names} {verb} authorising before a refresh can read anything."
+    return [], ""
+
+
+def connect_one(args: list[str], label: str, done) -> bool:
+    """Run one auth command, show the link it prints, wait for it to land.
 
     Driving Terminal through AppleScript needs an automation permission this
-    process does not have, so instead the login runs as a child here and the
-    page shows the link. Rei approves it in the browser, this notices, and the
-    button comes back to life.
+    process does not have, so the command runs as a child here and the page
+    shows the link. Rei approves it in the browser and this notices.
     """
-    if logged_in():
-        set_job("idle", "Already signed in. Press Refresh.")
-        return
     try:
         proc = subprocess.Popen(
-            ["cursor-agent", "login"],
+            ["cursor-agent", *args],
             cwd=ROOT,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
@@ -114,10 +146,10 @@ def start_login() -> None:
             bufsize=1,
         )
     except OSError as exc:
-        set_job("needs_login", f"could not start the sign-in: {exc}")
-        return
+        set_job("needs_login", f"could not start {label}: {exc}")
+        return False
 
-    set_job("needs_login", "Starting the sign-in")
+    set_job("needs_login", f"Starting {label}")
     lines: list[str] = []
     threading.Thread(
         target=lambda: [lines.append(ANSI.sub("", ln)) for ln in proc.stdout],
@@ -125,7 +157,7 @@ def start_login() -> None:
     ).start()
 
     url, deadline = "", time.time() + 25
-    while time.time() < deadline and not url:
+    while time.time() < deadline and not url and not done():
         for line in list(lines):
             found = URL_IN.search(line)
             if found:
@@ -134,23 +166,56 @@ def start_login() -> None:
         if not url:
             time.sleep(0.5)
 
-    if url:
-        set_job("needs_login", "Approve the sign-in in your browser, then press Refresh.", url)
-    else:
-        set_job(
-            "needs_login",
-            "The sign-in printed no link. Open a Terminal and run: cursor-agent login",
-        )
+    set_job(
+        "needs_login",
+        f"Approve {label} in your browser." if url else
+        f"{label} printed no link. In a Terminal run: cursor-agent {' '.join(args)}",
+        url,
+    )
 
-    # Wait for it to land rather than making him press anything twice.
-    end = time.time() + 300
+    end = time.time() + 240
     while time.time() < end:
-        if logged_in():
-            set_job("idle", "Signed in. Press Refresh.")
-            return
-        if proc.poll() is not None and not url:
-            return
+        if done():
+            return True
+        if proc.poll() is not None:
+            time.sleep(2)
+            return done()
         time.sleep(3)
+    return False
+
+
+def start_login() -> None:
+    """Walk everything that needs authorising, one browser approval at a time.
+
+    The account sign-in is only half of it. Asana and Slack are separate grants,
+    and a refresh without them reads nothing at all.
+    """
+    if not logged_in() and not connect_one(["login"], "the Cursor sign-in", logged_in):
+        return
+    for name in unauthorised_mcps():
+        connect_one(
+            ["mcp", "login", name],
+            f"the {name.title()} connection",
+            lambda n=name: n not in unauthorised_mcps(),
+        )
+    left, message = blockers()
+    set_job("needs_login", message) if left else set_job("idle", "Connected. Press Refresh.")
+
+
+LOCK = ROOT / "state" / "refresh.lock"
+
+
+def lock_held() -> bool:
+    """True when another refresh is already running, here or in a terminal."""
+    if not LOCK.exists():
+        return False
+    try:
+        pid = int(LOCK.read_text().split()[0])
+        os.kill(pid, 0)
+    except (ValueError, IndexError, OSError):
+        LOCK.unlink(missing_ok=True)  # stale: whoever held it is gone
+        return False
+    return True
 
 
 def run_refresh() -> None:
@@ -162,9 +227,13 @@ def run_refresh() -> None:
     if agent.returncode != 0:
         set_job("failed", "cursor-agent is not installed. Type 'refresh' in a Cursor chat instead.")
         return
+    if lock_held():
+        set_job("failed", "a refresh is already running. Let it finish.")
+        return
 
-    if not logged_in():
-        set_job("needs_login", "cursor-agent is signed out. Log in and the button works again.")
+    left, message = blockers()
+    if left:
+        set_job("needs_login", f"{message} Press Log in and approve each one.")
         return
 
     set_job("running", "Reading every open ticket and the threads behind them")
@@ -176,6 +245,7 @@ def run_refresh() -> None:
            "--workspace", str(ROOT)]
     if os.environ.get("TG_MODEL"):
         cmd += ["--model", os.environ["TG_MODEL"]]
+    LOCK.write_text(f"{os.getpid()} desk-server {datetime.now():%H:%M}\n")
     with log.open("a", encoding="utf-8") as fh:
         fh.write(f"\n=== {datetime.now():%H:%M:%S} refresh ===\n")
         try:
@@ -189,6 +259,8 @@ def run_refresh() -> None:
         except subprocess.TimeoutExpired:
             set_job("failed", "the agent ran past 15 minutes and was stopped")
             return
+        finally:
+            LOCK.unlink(missing_ok=True)
     if proc.returncode != 0:
         set_job("failed", f"the agent exited {proc.returncode}. See {log.name}")
         return

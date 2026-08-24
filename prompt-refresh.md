@@ -8,6 +8,24 @@ same.
 Tool names below are indicative. Use whatever equivalents you have for Asana,
 Slack and Notion.
 
+## Stop rather than improvise
+
+You need the Asana and Slack tools to do this at all. If they are missing, or
+they answer with an authentication error, **stop immediately**, change nothing,
+and reply with one line naming what is missing. Rei fixes it with the Log in
+button on the page.
+
+Three things are never a workaround, however reasonable they look:
+
+- Calling the Asana, Slack or Notion HTTP APIs yourself, with `curl` or
+  anything else. There are no API tokens here, and naming an environment
+  variable does not conjure one.
+- Starting another agent: no `cursor-agent`, no `tg refresh`, no subagent that
+  runs either. You are the refresh. A second one writes the board underneath
+  you and can leave it half updated.
+- Guessing what a ticket or a thread now says. A source you could not read is a
+  source you do not report on.
+
 ## What the board is
 
 `state/board.json` is the only durable file, and `board.py` documents its shape.
@@ -83,8 +101,13 @@ again.
 
 ## 7. Say what changed, briefly
 
-A few lines on what moved and what it means for the list. If nothing moved, say
-so in one line and stop. Never restate the whole board back to him.
+Always end with this, even when the answer is dull. A run that finishes silently
+is indistinguishable from a run that died, and the log is the only place Rei can
+check afterwards.
+
+A few lines on what moved and what it means for the list. When nothing moved,
+one line saying so and the time you swept to. Never restate the whole board back
+to him.
 
 The rules in `AGENTS.md` apply throughout, particularly: never send anything,
 and never draft around a hold.
