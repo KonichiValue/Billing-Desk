@@ -1,0 +1,41 @@
+{
+  "owner": {
+    "name": "Rei Samuelsson",
+    "asana_user_gid": "1216346648719660",
+    "email": "rei.samuelsson@kraken.tech",
+    "slack_user_id": "U0BF5A8U13R"
+  },
+  "asana": {
+    "workspace_gid": "696560454032998",
+    "projects": [
+      { "gid": "1209105241697514", "name": "インシデント（TG Shared）" },
+      { "gid": "1209230965235758", "name": "Billing 2-Week Cycle [TG shared]" }
+    ],
+    "exclude_projects": [
+      { "gid": "1216300090755092", "name": "Rei - Billing CDL onboarding list" }
+    ]
+  },
+  "meeting": {
+    "name": "Billing standup (TG)",
+    "time_local": "10:30",
+    "timezone": "Asia/Tokyo",
+    "days": ["Mon", "Wed", "Thu"]
+  },
+  "slack": {
+    "search_scope": "all",
+    "channel_hints": [
+      "#ext-proj-tokyogas-billing",
+      "#ext-proj-tokyogas-billing-krakentech-1",
+      "#ext-tokyogas-critical-issues",
+      "#ext-tokyogas-asana-requests",
+      "#proj-tokyogas-ops-internal",
+      "#ext-proj-tokyogas-ops",
+      "#ext-proj-tokyogas-operations"
+    ]
+  },
+  "japanese": {
+    "level": "N2 spoken",
+    "register": "ですます",
+    "furigana_policy": "above N3"
+  }
+}
