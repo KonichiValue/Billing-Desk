@@ -144,24 +144,64 @@ You are specifically looking for three things:
 Slack permalinks are built as
 `https://krakentech.slack.com/archives/<CHANNEL_ID>/p<TS with the dot removed>`.
 
-## Step 5: work out what Rei must actually do
+## Step 5: trace what the fix does not cover
 
-For each ticket decide who owns the next move right now: Rei, another Kraken
-person, or TG. Then rank every action across all tickets into `action_board`.
+This is the step that separates a useful page from a status readout, so do it
+for every ticket, properly.
 
-Ranking rules, in order:
-1. A TG or CE message that has been waiting for a reply for more than one
-   working day goes first.
-2. Anything TG will visibly ask about at this standup goes next.
-3. Work that unblocks somebody else goes next.
-4. Monitoring and follow-ups go last.
+Almost every fix in this programme is scoped: it fixes one case out of several,
+or one pattern out of many. Reading the ticket tells you what the fix covers.
+Your job is to work out what happens to everything it does **not** cover,
+because that is where the real discussion lives and it is what Rei gets asked
+about.
 
-Keep `action_board` to at most six rows. If something does not need doing today,
-it does not belong there.
+Run this chain on each ticket and write the results into `consequences`:
 
-For each action, give a realistic `est_minutes`. Rei has 30 minutes.
+1. **What exactly does the agreed fix cover?** Name the cases, patterns or
+   categories, in the team's own numbering if they have one.
+2. **What falls outside it?** Name those cases too.
+3. **What accumulates because of that?** If a hold, a flag or a manual step
+   keeps firing on the uncovered cases, accounts pile up somewhere. Say where,
+   and say whether the pile grows or is a fixed legacy set. Those two need
+   different answers and TG will make the distinction.
+4. **Who owns the pile?** Somebody has to review, filter or clear it. If the
+   ticket does not say who, that is a real question, and a good one.
+5. **What does "done" mean for the uncovered cases?** If somebody has asked for
+   a cleanup after the fix, pin down what cleanup means: which accounts, which
+   cases, who executes it.
+6. **What decision is still genuinely open?** Not "we should investigate", but a
+   fork with two named options and nobody yet assigned to choose.
 
-## Step 6: write the Japanese script
+Anything this produces that only TG can answer becomes an `open_questions`
+entry. Anything Rei can answer himself becomes an `unknowns` entry.
+
+Do this from the ticket alone. Every link in that chain is derivable before
+anyone speaks, and finding it beforehand is the entire point of this page.
+
+## Step 6: what Rei does before 10:30
+
+**The morning page is for preparing, not for working.** Rei has 30 minutes and
+he is going to spend them reading, not fixing tickets or writing replies. Almost
+everything can wait until after the standup, when the post-standup page picks it
+up.
+
+So `action_board` holds only things that genuinely must happen before 10:30. An
+item qualifies on one of exactly two grounds:
+
+1. A message from TG or a Kraken CE has been waiting on Rei for more than one
+   working day. Leaving it unanswered through another standup is visible.
+2. TG will raise this at 10:30 and Rei cannot answer without checking something
+   first.
+
+Everything else is deferred, including replies he ought to send, investigation,
+and anything that merely unblocks someone else. Do not list it.
+
+Keep `action_board` to at most three rows and prefer zero. An empty board is the
+normal, healthy state, and the renderer says so. Do not pad it to look busy.
+
+For each action, give a realistic `est_minutes`.
+
+## Step 7: write the Japanese script
 
 Every ticket gets a `jp_script`: the actual sentences Rei will say out loud at
 the standup. This is not a translation of your English summary. It is speech.
@@ -196,16 +236,22 @@ Style:
 - Rei will read these aloud verbatim, so they must be natural spoken Japanese,
   not written report style and not clipped notes.
 
-### Do not manufacture asks
+### Asks: earn them, do not invent them and do not miss them
 
-If Rei genuinely needs nothing from TG on a ticket, say so and stop. Set
-`tg_ask_needed` to `false`, leave `open_questions` empty, and give that ticket a
-`現状` block of two to four lines and nothing else. A ticket sitting with Kraken
-engineering with no open TG question is a perfectly good thing to report in one
-breath.
+Before you decide a ticket needs nothing from TG, check your Step 5 output. If
+the fix is scoped and you have not established who owns the uncovered cases or
+what cleanup means for them, then there **is** an ask and you have not found it
+yet. Go back and finish Step 5.
+
+Set `tg_ask_needed` to `false` only when Step 5 came back genuinely clean: the
+fix covers everything, or the leftovers already have a named owner and an agreed
+definition of done. Then give the ticket a `現状` block of two to four lines and
+stop. A ticket sitting with Kraken engineering with nothing outstanding is a
+perfectly good thing to report in one breath.
 
 Never invent a question just to fill the 質問 block. A weak question wastes
-standup time and makes Rei look like he has not read his own ticket.
+standup time. But a missing question is worse: it means TG raises it instead, and
+Rei is answering cold on his own ticket.
 
 Where a delivery estimate exists **and has already been shared with TG**, put it
 in `estimate` as a short string. Never surface internal sizing, story points or
@@ -237,7 +283,7 @@ is working on it, here is what will change. Nothing about when or how big.
 Use the internal ticket detail in `latest_status`, `unknowns` and `action_board`
 instead. That part of the page is for Rei only.
 
-## Step 7: drafts
+## Step 8: drafts
 
 Where you have enough information to write a reply, put it in `drafts`. Text
 only, Rei copies it himself. Japanese drafts follow the same furigana markup and
@@ -299,6 +345,14 @@ Write `output/prep-<YYYY-MM-DD>.json` using today's date in JST.
       ],
       "latest_status": "2 to 3 sentences. Where it stands right now and who owns the next move.",
       "our_position": "What Kraken last said or currently proposes. Empty string if none.",
+      "consequences": {
+        "fix_covers": "What the agreed fix actually covers. Name the cases.",
+        "falls_outside": "What it does not cover. Name those cases too.",
+        "accumulates": "What piles up as a result, where, and whether the pile grows or is a fixed legacy set. Empty string if nothing does.",
+        "who_owns_it": "Who reviews or clears the pile. Say 'not decided' when it is not decided, and raise it as a question.",
+        "done_means": "What cleanup after the fix actually means: which accounts, which cases, who executes. Empty string if no cleanup was requested.",
+        "still_open": "The one decision genuinely unresolved, with both named options. Empty string if none."
+      },
       "open_questions": [
         {
           "en": "The question in English.",
@@ -344,3 +398,11 @@ The two arrays are ordered on different principles, deliberately.
 `tickets` follows the 2-week cycle board order, because that is the order the
 meeting walks through them. Keep the `ref` tags consistent between the two so he
 can jump from one to the other.
+
+## Before you finish: is the next standup even happening?
+
+Check whether `state/skip-next.json` exists and holds today's date. If it does,
+the standup was cancelled at the last meeting, and `run_prep.sh` will have
+skipped you entirely, so you will not be running. You do not need to handle
+this. It is noted here only so you do not write conflicting advice about a
+meeting that is not happening.

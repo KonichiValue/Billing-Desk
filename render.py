@@ -196,6 +196,37 @@ def render_drafts(drafts: list[dict]) -> str:
       </details>"""
 
 
+CONSEQUENCE_ROWS = [
+    ("fix_covers", "The fix covers"),
+    ("falls_outside", "It does not cover"),
+    ("accumulates", "So this piles up"),
+    ("who_owns_it", "Owned by"),
+    ("done_means", "Cleanup means"),
+    ("still_open", "Still undecided"),
+]
+
+
+def render_consequences(c: dict) -> str:
+    """The scope of a fix, and what happens to everything outside it.
+
+    This is where TG's questions come from, so it renders even when half the
+    fields are blank."""
+    if not isinstance(c, dict):
+        return ""
+    rows = [(label, c.get(key)) for key, label in CONSEQUENCE_ROWS if c.get(key)]
+    if not rows:
+        return ""
+    items = "".join(
+        f'<div class="cons-row"><dt>{esc(label)}</dt><dd>{esc(value)}</dd></div>'
+        for label, value in rows
+    )
+    return f"""
+      <section class="sub cons">
+        <h3>Scope, and what falls outside it</h3>
+        <dl class="cons-list">{items}</dl>
+      </section>"""
+
+
 def render_ticket(t: dict) -> str:
     issue = "".join(f"<li>{esc(b)}</li>" for b in t.get("the_issue", []))
     unknowns = t.get("unknowns", [])
@@ -262,6 +293,8 @@ def render_ticket(t: dict) -> str:
         <p class="status">{esc(t.get("latest_status"))}</p>
         {position}
       </section>
+
+      {render_consequences(t.get("consequences", {}))}
 
       <details class="sub" open>
         <summary><h3>How we got here</h3></summary>
@@ -360,6 +393,13 @@ details.sub{padding-top:0}
 border-radius:8px;font-size:14.5px;color:#194185}
 .status{margin:0}
 .position{margin:9px 0 0;color:var(--mut);font-size:15px}
+.cons-list{margin:0;display:grid;gap:1px;background:var(--line);
+border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.cons-row{display:flex;gap:0;background:#fff;align-items:baseline}
+.cons-row dt{flex:none;width:158px;padding:9px 13px;font-size:12.5px;
+font-weight:650;color:var(--soft);background:#fcfcfc}
+.cons-row dd{flex:1;min-width:0;margin:0;padding:9px 13px;font-size:14.5px}
+.cons-row:last-child dd{color:#b54708;font-weight:550}
 .timeline{list-style:none;margin:0;padding:0}
 .tl-item{display:flex;gap:13px;padding:7px 0;border-left:2px solid var(--line);
 padding-left:14px;margin-left:4px}
@@ -494,6 +534,21 @@ def render(data: dict) -> str:
     return shell(f"TG prep {meeting_date}", body, f"{meeting_date}T10:30:00+09:00")
 
 
+def render_notice(reason: str, quote: str = "", url: str = "") -> str:
+    body = f"""
+<div class="wrap" style="padding-top:60px">
+  <div class="headline" style="border-left-color:#b54708">
+    <p>No billing standup today.</p>
+    <p style="font-size:15px;font-weight:400;color:var(--mut);margin-top:8px">
+      {esc(reason)}</p>
+  </div>
+  {f'<p class="quote-note" style="color:var(--soft);font-style:italic">{esc(quote)}</p>' if quote else ""}
+  {f'<p>{link_btn(url, "Meeting note that said so")}</p>' if url else ""}
+  <p class="foot">Build the prep anyway with <code>./run_prep.sh --force</code>.</p>
+</div>"""
+    return shell("No TG standup today", body)
+
+
 def render_error(message: str) -> str:
     body = f"""
 <div class="wrap" style="padding-top:40px">
@@ -511,6 +566,10 @@ def main() -> int:
     args = sys.argv[1:]
     if len(args) >= 3 and args[0] == "--error":
         Path(args[2]).write_text(render_error(args[1]), encoding="utf-8")
+        return 0
+    if len(args) >= 3 and args[0] == "--notice":
+        reason, quote, url = (args[1:-1] + ["", ""])[:3]
+        Path(args[-1]).write_text(render_notice(reason, quote, url), encoding="utf-8")
         return 0
     if len(args) != 2:
         print(__doc__, file=sys.stderr)

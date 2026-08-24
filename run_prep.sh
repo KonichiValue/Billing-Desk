@@ -29,7 +29,7 @@ LOG="logs/run.log"
 AGENT_LOG="logs/agent-$TODAY.log"
 TIMEOUT_SECS="${PREP_TIMEOUT:-900}"
 
-mkdir -p output logs
+mkdir -p output logs state
 
 log() { print -r -- "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
 
@@ -46,6 +46,30 @@ if [[ -f "$HTML" && $FORCE -eq 0 ]]; then
   log "already built for $TODAY, opening existing page (use --force to rebuild)"
   [[ $OPEN -eq 1 ]] && open "$HTML"
   exit 0
+fi
+
+# The previous standup may have announced that today's is cancelled. The
+# post-standup job records that in state/skip-next.json.
+if [[ -f state/skip-next.json && $FORCE -eq 0 ]]; then
+  SKIP=$(python3 - state/skip-next.json "$TODAY" <<'PY'
+import json, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as fh:
+        data = json.load(fh)
+except (OSError, json.JSONDecodeError):
+    raise SystemExit(0)
+if data.get("skip_date") != sys.argv[2]:
+    raise SystemExit(0)
+print("\t".join(str(data.get(k) or "") for k in ("reason", "quote", "source_url")))
+PY
+)
+  if [[ -n "$SKIP" ]]; then
+    log "standup cancelled today, not building prep"
+    IFS=$'\t' read -r SKIP_REASON SKIP_QUOTE SKIP_URL <<<"$SKIP"
+    python3 render.py --notice "$SKIP_REASON" "$SKIP_QUOTE" "$SKIP_URL" "$HTML"
+    [[ $OPEN -eq 1 ]] && open "$HTML"
+    exit 0
+  fi
 fi
 
 command -v cursor-agent >/dev/null 2>&1 || fail "cursor-agent is not on PATH"
