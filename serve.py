@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import secrets
 import subprocess
 import sys
@@ -35,6 +36,23 @@ job_lock = threading.Lock()
 
 
 BOARD = ROOT / "state" / "board.json"
+
+# Chrome reads this when you install the page as an app, and takes the Dock icon
+# from it. Without it the installed app wears the Chrome logo.
+MANIFEST = {
+    "name": "TG Billing Desk",
+    "short_name": "TG Desk",
+    "description": "Every open Tokyo Gas billing ticket and what is left to do on it.",
+    "start_url": "/",
+    "scope": "/",
+    "display": "standalone",
+    "background_color": "#fafafa",
+    "theme_color": "#fafafa",
+    "icons": [
+        {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+        {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    ],
+}
 
 
 def rebuild() -> str:
@@ -60,6 +78,30 @@ def set_job(state: str, message: str = "") -> None:
         job.update(state=state, message=message, at=datetime.now().strftime("%H:%M"))
 
 
+def logged_in() -> bool:
+    status = subprocess.run(
+        ["cursor-agent", "status"], capture_output=True, text=True, check=False
+    )
+    return "not logged in" not in (status.stdout + status.stderr).lower()
+
+
+def start_login() -> None:
+    """Put the login in a Terminal window, because it needs a browser and a human.
+
+    A background server cannot complete an OAuth flow, so the honest thing is to
+    hand the step to Rei rather than fail at him.
+    """
+    script = (
+        'tell application "Terminal" to do script "cursor-agent login"\n'
+        'tell application "Terminal" to activate'
+    )
+    subprocess.run(["osascript", "-e", script], check=False)
+    set_job(
+        "needs_login",
+        "Finish the login in the Terminal window that just opened, then press Refresh.",
+    )
+
+
 def run_refresh() -> None:
     """One agent pass over prompt-refresh.md, then the page reloads itself."""
     if not (ROOT / "prompt-refresh.md").exists():
@@ -70,16 +112,19 @@ def run_refresh() -> None:
         set_job("failed", "cursor-agent is not installed. Type 'refresh' in a Cursor chat instead.")
         return
 
-    status = subprocess.run(["cursor-agent", "status"], capture_output=True, text=True)
-    if "not logged in" in (status.stdout + status.stderr).lower():
-        set_job("failed", "cursor-agent is not logged in. Run: cursor-agent login")
+    if not logged_in():
+        set_job("needs_login", "cursor-agent is signed out. Log in and the button works again.")
         return
 
-    set_job("running", "Reading the tickets and threads behind your open actions")
+    set_job("running", "Reading every open ticket and the threads behind them")
     log = ROOT / "logs" / f"refresh-{datetime.now():%Y-%m-%d}.log"
     log.parent.mkdir(exist_ok=True)
+    # No --model, so it runs on whatever cursor-agent defaults to, which is Auto.
+    # TG_MODEL pins a specific one when that is wanted.
     cmd = ["cursor-agent", "--print", "--force", "--approve-mcps", "--trust",
            "--workspace", str(ROOT)]
+    if os.environ.get("TG_MODEL"):
+        cmd += ["--model", os.environ["TG_MODEL"]]
     with log.open("a", encoding="utf-8") as fh:
         fh.write(f"\n=== {datetime.now():%H:%M:%S} refresh ===\n")
         try:
@@ -128,6 +173,19 @@ class Handler(BaseHTTPRequestHandler):
             with job_lock:
                 self.json_out(200, dict(job))
             return
+        if path == "/manifest.webmanifest":
+            self.send(200, json.dumps(MANIFEST).encode(), "application/manifest+json")
+            return
+        if path in ("/icon-192.png", "/icon-512.png", "/favicon.ico"):
+            name = {"/favicon.ico": "icon-192.png"}.get(path, path.lstrip("/"))
+            icon = ROOT / "app" / name
+            if not icon.exists():
+                icon = ROOT / "app" / "icon.png"
+            if not icon.exists():
+                self.send(404, b"no icon built", "text/plain")
+                return
+            self.send(200, icon.read_bytes(), "image/png")
+            return
         if path in ("/", "/index.html"):
             if not BOARD.exists():
                 self.send(404, b"No board yet. Run: tg build", "text/plain")
@@ -160,6 +218,10 @@ class Handler(BaseHTTPRequestHandler):
             set_job("running", "Starting")
             threading.Thread(target=run_refresh, daemon=True).start()
             self.json_out(202, {"state": "running"})
+            return
+        if path == "/api/login":
+            threading.Thread(target=start_login, daemon=True).start()
+            self.json_out(202, {"state": "needs_login"})
             return
         self.json_out(404, {"error": "not here"})
 

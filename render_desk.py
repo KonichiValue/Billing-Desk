@@ -588,9 +588,15 @@ def render_ticket(t: dict, ident: str) -> str:
 
 
 def shell(title: str, body: str) -> str:
+    # The manifest and icon are what let Chrome install this as its own app, with
+    # its own Dock tile. They 404 harmlessly when the page is opened from disk.
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png">
+<link rel="apple-touch-icon" href="/icon-512.png">
+<meta name="theme-color" content="#fafafa">
 <title>{esc(title)}</title><style>{CSS}{EXTRA_CSS}</style></head>
 <body>
 {body}
@@ -601,12 +607,14 @@ def shell(title: str, body: str) -> str:
 # page has nothing to send the click to. serve.py swaps the key in as it serves.
 REFRESH_BUTTON = """
   <button id="refresh" class="refresh" hidden>Refresh</button>
+  <button id="login" class="refresh" hidden>Log in</button>
   <span id="refresh-note" class="refresh-note"></span>
 <script>
 (function () {
   var key = "__DESK_KEY__";
   if (location.protocol !== "http:" || key.indexOf("DESK_KEY") > -1) return;
   var btn = document.getElementById("refresh");
+  var login = document.getElementById("login");
   var note = document.getElementById("refresh-note");
   btn.hidden = false;
 
@@ -615,12 +623,21 @@ REFRESH_BUTTON = """
     note.className = "refresh-note" + (tone ? " " + tone : "");
   }
 
+  function ready(label) {
+    btn.disabled = false;
+    btn.textContent = label || "Refresh";
+  }
+
   function poll() {
     fetch("/api/status").then(function (r) { return r.json(); }).then(function (s) {
       if (s.state === "running") { say(s.message + "\\u2026"); setTimeout(poll, 2000); return; }
       if (s.state === "done") { say("Refreshed, reloading"); location.reload(); return; }
-      if (s.state === "failed") { btn.disabled = false; btn.textContent = "Refresh"; say(s.message, "bad"); return; }
-      btn.disabled = false; btn.textContent = "Refresh"; say(s.message);
+      // Signed out is not a failure, it is one click. Offer the click.
+      if (s.state === "needs_login") { ready(); login.hidden = false; say(s.message, "bad"); return; }
+      if (s.state === "failed") { ready(); say(s.message, "bad"); return; }
+      login.hidden = true;
+      ready();
+      say(s.message);
     });
   }
 
@@ -630,7 +647,14 @@ REFRESH_BUTTON = """
     say("Starting\\u2026");
     fetch("/api/refresh?k=" + encodeURIComponent(key), { method: "POST" })
       .then(poll)
-      .catch(function () { btn.disabled = false; btn.textContent = "Refresh"; say("could not reach the desk server", "bad"); });
+      .catch(function () { ready(); say("could not reach the desk server", "bad"); });
+  });
+
+  login.addEventListener("click", function () {
+    login.disabled = true;
+    fetch("/api/login?k=" + encodeURIComponent(key), { method: "POST" })
+      .then(function () { setTimeout(function () { login.disabled = false; poll(); }, 1500); })
+      .catch(function () { login.disabled = false; say("could not open Terminal", "bad"); });
   });
 
   poll();

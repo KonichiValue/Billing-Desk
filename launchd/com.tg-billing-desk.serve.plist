@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.tg-billing-desk.serve</string>
+
+    <!-- The desk page server. Once the page is installed as its own app, that
+         app opens http://127.0.0.1:8787/ directly and has no way to start a
+         server first, so this keeps one running from login onwards. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>/Users/rei.samuelsson/Projects/tg-billing-desk/serve.py</string>
+        <string>--port</string>
+        <string>8787</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/rei.samuelsson/Projects/tg-billing-desk</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/Users/rei.samuelsson/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>TZ</key>
+        <string>Asia/Tokyo</string>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/rei.samuelsson/Projects/tg-billing-desk/logs/serve.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/rei.samuelsson/Projects/tg-billing-desk/logs/serve.log</string>
+</dict>
+</plist>
