@@ -836,7 +836,14 @@ def render(data: dict) -> str:
     # A script written before the last sweep may not know the newest replies.
     stale = bool(has_script and built and built < (data.get("checked_at") or ""))
     prep_label = "Rebuild script" if has_script else "Build script"
-    meeting = f'{standup.get("date") or date.today().isoformat()}T{standup.get("at") or "10:30"}:00+09:00'
+    # The countdown is only meaningful on a day that has a standup, and an empty
+    # value is what tells the page not to draw one at all.
+    today_iso = date.today().isoformat()
+    meeting = (
+        f'{today_iso}T{standup.get("at") or "10:30"}:00+09:00'
+        if standup.get("date") == today_iso and not standup.get("skipped")
+        else ""
+    )
 
     body = f"""
 <header class="top"><div class="top-in">
