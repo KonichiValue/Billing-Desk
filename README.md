@@ -85,19 +85,32 @@ Every action has one number, unique across the page, and the running order is
 built from those numbers rather than written separately. So "do 4" always means
 the same thing, and the table and the ticket sections cannot disagree.
 
-## Refreshing during the day
+## Getting at it during the day
 
-Type `refresh` into a chat opened on this folder. The assistant re-reads the
-Asana comments and Slack threads behind the open actions, adds what it finds to
-each ticket's timeline, moves the actions the replies affect, and rebuilds both
-pages. `AGENTS.md` defines exactly what that word means, so every model does the
-same thing with it.
+Run `./install.sh` once. It puts **TG Standup** in `~/Applications`, which you
+drag to the Dock, and links `tg` into `~/.local/bin`. Both point at this
+checkout, so pulling changes updates them; rerun it after any change to `bin/tg`.
 
-Two things it deliberately does not do: reopen closed actions, and start again
-from scratch. For a clean rebuild from the meeting note, run `./run_post.sh
---force`, which throws away the day's hand edits.
+Clicking the Dock icon rebuilds the page from the current state and opens it, so
+what you see at four in the afternoon reflects everything you have ticked off.
 
-For status alone, `./tick.py` prints where everything sits and costs nothing.
+```
+tg              open the page, print where everything sits
+tg s            status only, costs nothing
+tg 4            action 4 is finished
+tg 2 -w Kevin   sent, now sitting with Kevin
+tg 2 --mine     he replied, it is yours again
+tg refresh      go and see what moved, rebuild, open
+tg chat         open the folder in Cursor to hand work over
+tg build        full rebuild from the Notion meeting note
+```
+
+`refresh` also works as a single word typed into a Cursor chat on this folder.
+Both routes run `prompt-refresh.md`, so the answer does not depend on which one
+you used: it checks only the sources the open actions point at, adds what it
+finds to each ticket's timeline, moves the actions those events affect, and
+rebuilds. It will not reopen closed actions or start the day again. For that,
+`tg build`, which throws away the day's hand edits.
 
 ## Keeping the list honest
 

@@ -1,0 +1,62 @@
+#!/bin/zsh
+# One command for the standup list, from the terminal or the Dock.
+#
+#   tg                  open today's page, print where everything sits
+#   tg s                print status only, costs nothing
+#   tg 4                action 4 is finished
+#   tg 2 -w Kevin       sent, now sitting with Kevin
+#   tg 2 --mine         he replied, it is yours again
+#   tg 5 --dropped -n "TG answered it themselves"
+#   tg refresh          go and see what moved, rebuild, open
+#   tg chat             open the folder in Cursor to hand work over
+#   tg build            full rebuild from the Notion meeting note
+#
+# Anything numeric goes straight to tick.py, so the numbers you see on the page
+# are the numbers you type.
+
+set -uo pipefail
+
+REPO="${TG_STANDUP_REPO:-$HOME/Projects/tg-billing-standup}"
+cd "$REPO" || { print -u2 "no repo at $REPO"; exit 1 }
+
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+export TZ="Asia/Tokyo"
+
+latest() {
+  local f
+  f=(output/post-*.json(Nn))
+  [[ ${#f} -gt 0 ]] && print -r -- "${f[-1]}"
+}
+
+page() {
+  local json="$(latest)"
+  [[ -n "$json" ]] || { print -u2 "no list built yet, run: tg build"; return 1 }
+  local html="${json:r}.html"
+  # Rebuild first, so a page opened three hours later still shows the truth.
+  python3 render_post.py "$json" "$html" >/dev/null || return 1
+  python3 render_md.py "$json" "${json:r}.md" >/dev/null
+  local built="${${json:t:r}#post-}"
+  [[ "$built" == "$(date +%Y-%m-%d)" ]] || print -r -- "Showing $built, no list for today yet."
+  open "$html"
+}
+
+case "${1:-}" in
+  "")            python3 tick.py; page ;;
+  s|st|status)   python3 tick.py ;;
+  refresh|r)
+    if ! command -v cursor-agent >/dev/null 2>&1; then
+      print -u2 "cursor-agent is not installed. Type 'refresh' in a Cursor chat on this folder instead."
+      exit 1
+    fi
+    print -r -- "Looking for what moved since the page was built..."
+    cursor-agent --print --force --approve-mcps --trust \
+      --workspace "$REPO" ${TG_MODEL:+--model "$TG_MODEL"} \
+      "$(cat prompt-refresh.md)" || exit 1
+    page ;;
+  chat)          open -a Cursor "$REPO" ;;
+  build)         ./run_post.sh --force ;;
+  prep)          ./run_prep.sh ;;
+  open)          page ;;
+  -h|--help|help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' ;;
+  *)             python3 tick.py "$@" ;;
+esac
