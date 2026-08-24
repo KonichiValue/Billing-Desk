@@ -109,18 +109,24 @@ def render_ticket(t: dict) -> list[str]:
         mins = f", {a['est_minutes']} min" if a.get("est_minutes") else ""
         hold = a.get("hold") or {}
         st = state_of(a)
-        actions.append(
-            f"#### {a.get('rank', '-')}. {a.get('title', '')} [{st['label'].upper()}{mins}]"
-        )
-        actions.append("")
+        active = st["state"] in {"todo", "hold"}
+        head = f"{a.get('rank', '-')}. {a.get('title', '')} [{st['label'].upper()}{mins}]"
+        if active:
+            actions += [f"#### {head}", ""]
+        else:
+            actions += [f"<details><summary>{head}</summary>", ""]
         note = f" {st['note']}" if st.get("note") else ""
         if st["closed"]:
             actions += [f"> {st['label']} {st.get('at', '')}.{note}", ""]
         elif st["state"] == "waiting":
+            waits = a.get("waits_on") or {}
+            owed = f" They owe: {waits['what']}" if waits.get("what") else ""
+            chase = f" Chase on {waits['chase_on']}." if waits.get("chase_on") else ""
             tail = f" {st['note']}." if st.get("note") else ""
+            when = f"Sent {st['at']}. " if st.get("sent") else ""
             actions += [
-                f"> Sent {st.get('at', '')}. Nothing further from you until "
-                f"{st.get('who', 'they')} replies.{tail}",
+                f"> {when}Nothing further from you until "
+                f"{st.get('who', 'they')} answers.{owed}{tail}{chase}",
                 "",
             ]
         if a.get("progress_note"):
@@ -151,15 +157,9 @@ def render_ticket(t: dict) -> list[str]:
             ]
         actions.append("")
         actions += render_draft(a.get("draft") or {}, st)
+        if not active:
+            actions += ["</details>", ""]
     out += block("Actions, and where each one sits", actions)
-
-    waiting = [
-        f"- **{w.get('who', '')}** owes: {w.get('what', '')} "
-        f"(due {w.get('due', 'not stated')}, chase {w.get('chase_on', '')}). "
-        f"Blocks: {w.get('blocks', '')} {link('source', w.get('source_url', ''))}"
-        for w in t.get("waiting_on", [])
-    ]
-    out += block("Waiting on someone else", waiting)
 
     decisions = []
     for d in t.get("open_decisions", []):
@@ -243,11 +243,16 @@ def render(data: dict) -> str:
         for ref, a, st in rows:
             bits = []
             if st["state"] == "waiting":
-                bits.append(f"sent {st.get('at', '')}, with {st.get('who', 'them')}")
+                who, since = st.get("who", "them"), st.get("at", "")
+                bits.append(
+                    f"sent {since}, with {who}"
+                    if st.get("sent")
+                    else f"with {who} since {since}"
+                )
             elif st["closed"]:
                 bits.append(f"{st['label'].lower()} {st.get('at', '')}")
             elif st["state"] == "hold":
-                bits.append(f"not yet, wait for {(a.get('hold') or {}).get('until', '')}")
+                bits.append(f"not yet, until {(a.get('hold') or {}).get('until', '')}")
             else:
                 bits.append("with you")
                 if a.get("est_minutes"):

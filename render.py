@@ -76,9 +76,18 @@ def load_progress(meeting_date: str) -> dict:
 
 
 def action_state(progress: dict, action: dict) -> dict:
-    """Where one action sits: its state, label, tone, and who is holding it."""
+    """Where one action sits: its state, label, tone, and who is holding it.
+
+    tick.py wins, because Rei saying what he did beats anything the page assumed.
+    Failing that, an action can arrive already sitting with someone else.
+    """
     saved = dict(progress.get(str(action.get("rank")), {}))
+    sent_by_rei = saved.get("state") == "waiting"
+    waits = action.get("waits_on") or {}
+    if not saved and waits:
+        saved = {"state": "waiting", "who": waits.get("who", ""), "at": waits.get("since", "")}
     state = saved.get("state") or ("hold" if action.get("hold") else "todo")
+    saved["sent"] = sent_by_rei
     label, tone, order = LIFECYCLE.get(state, LIFECYCLE["todo"])
     if state == "waiting" and saved.get("who"):
         label = f"Waiting on {saved['who']}"

@@ -163,6 +163,16 @@ flex-wrap:wrap;background:#fcfcfc;border-bottom:1px solid var(--line)}
 .act-rank{width:24px;height:24px;flex:none;border-radius:6px;background:var(--ink);
 color:#fff;display:grid;place-items:center;font-size:12px;font-weight:650}
 .act-title{flex:1;min-width:0;font-weight:600;font-size:15.5px}
+.act-sub{display:block;font-size:12.5px;font-weight:400;color:var(--soft);
+margin-top:2px}
+details.act>summary{cursor:pointer;list-style:none}
+details.act>summary::-webkit-details-marker{display:none}
+details.act:not([open])>summary{border-bottom:0}
+details.act .act-title{font-weight:550}
+details.act.waiting{background:#fcfdff}
+details.act.done,details.act.sent,details.act.dropped{opacity:.72}
+details.act.done .act-title,details.act.sent .act-title{text-decoration:line-through;
+text-decoration-color:#98a2b3}
 .act-min{color:var(--soft);font-size:12.5px;font-variant-numeric:tabular-nums}
 .act-body{padding:13px 15px}
 .act-why{margin:0 0 11px;font-size:14.5px;color:var(--ink)}
@@ -219,7 +229,11 @@ def sub_line(st: dict) -> str:
     """The one line under a title saying what has already happened to it."""
     bits = []
     if st["state"] == "waiting":
-        bits.append(f"sent {st.get('at', '')}, with {st.get('who', 'them')}")
+        who = st.get("who", "them")
+        since = st.get("at", "")
+        bits.append(
+            f"sent {since}, with {who}" if st.get("sent") else f"with {who} since {since}"
+        )
     elif st["closed"]:
         bits.append(f"{st['label'].lower()} {st.get('at', '')}")
     if st.get("note"):
@@ -397,10 +411,16 @@ def render_actions(rows: list[dict]) -> str:
             )
         elif st["state"] == "waiting":
             note = f" {esc(st['note'])}." if st.get("note") else ""
+            waits = r.get("waits_on") or {}
+            owed = f" They owe: {esc(waits['what'])}." if waits.get("what") else ""
+            chase_line = (
+                f" Chase on {esc(waits['chase_on'])}." if waits.get("chase_on") else ""
+            )
+            sent = f"Sent {esc(st.get('at', ''))}" if st.get("sent") else "Not yours"
             status_block = (
-                f'<p class="sent-note"><b>Sent {esc(st.get("at", ""))}</b>'
+                f'<p class="sent-note"><b>{sent}</b>'
                 f'Nothing further from you until {esc(st.get("who", "they"))} '
-                f"replies.{note}</p>"
+                f"answers.{owed}{note}{chase_line}</p>"
             )
         elif hold:
             revisit = hold.get("revisit")
@@ -409,15 +429,23 @@ def render_actions(rows: list[dict]) -> str:
             <span class="hold-until">Wait for: {esc(hold.get("until"))}</span>
             {f'<span class="hold-until"> Chase on {esc(revisit)}.</span>' if revisit else ""}</p>"""
         state_pill = pill(st["label"], st["tone"])
+        chase = (r.get("waits_on") or {}).get("chase_on", "")
+        # Anything not sitting with Rei folds shut, so the page is only as long
+        # as the work he still has.
+        active = st["state"] in {"todo", "hold"}
+        tag, attrs = ("div", "") if active else ("details", "")
+        head_tag = "div" if active else "summary"
+        sub = sub_line(st) or (f"chase {esc(chase)}" if chase else "")
         out.append(
             f"""
-        <div class="act {st["state"]} {"held" if hold and not done else ""} {"commit" if committed else ""}">
-          <div class="act-head">
+        <{tag} class="act {st["state"]} {"held" if hold and not done else ""} {"commit" if committed else ""}"{attrs}>
+          <{head_tag} class="act-head">
             <span class="act-rank">{esc(r.get("rank", "-"))}</span>
-            <span class="act-title">{esc(r.get("title"))}</span>
+            <span class="act-title">{esc(r.get("title"))}
+              {f'<span class="act-sub">{sub}</span>' if sub and not active else ""}</span>
             {state_pill}
-            <span class="act-min">{f"{esc(mins)} min" if mins else ""}</span>
-          </div>
+            <span class="act-min">{f"{esc(mins)} min" if mins and active else ""}</span>
+          </{head_tag}>
           <div class="act-body">
             {f'<p class="act-why"><b>Why</b>{esc(r.get("why"))}</p>' if r.get("why") else ""}
             {status_block}
@@ -432,37 +460,12 @@ def render_actions(rows: list[dict]) -> str:
             {f'<p class="act-quote">{esc(quote)} {link_btn(r.get("source_url", ""), "Source") if r.get("source_url") else ""}</p>' if quote else ""}
             {render_draft(r.get("draft") or {}, st)}
           </div>
-        </div>"""
+        </{tag}>"""
         )
     return f"""
       <section class="sub">
         <h3>Actions, and where each one sits</h3>
         {"".join(out)}
-      </section>"""
-
-
-def render_waiting(rows: list[dict]) -> str:
-    if not rows:
-        return ""
-    out = []
-    for r in rows:
-        chase = r.get("chase_on")
-        out.append(
-            f"""
-        <li>
-          <span class="wait-who">{esc(r.get("who"))}</span>
-          <span class="wait-main">{esc(r.get("what"))}
-            {f'<span class="wait-sub">Blocks: {esc(r.get("blocks"))}</span>' if r.get("blocks") else ""}
-            <span class="wait-sub">Due {esc(r.get("due") or "not stated")}
-            {link_btn(r.get("source_url", ""), "Source") if r.get("source_url") else ""}</span>
-          </span>
-          <span class="wait-chase">{f"chase {esc(chase)}" if chase else ""}</span>
-        </li>"""
-        )
-    return f"""
-      <section class="sub">
-        <h3>Waiting on someone else</h3>
-        <ul class="wait">{"".join(out)}</ul>
       </section>"""
 
 
@@ -525,7 +528,6 @@ def render_ticket(t: dict, ident: str) -> str:
 
       {render_changed(t.get("changed_today", []), t.get("started_the_day", ""))}
       {render_actions(t.get("actions", []))}
-      {render_waiting(t.get("waiting_on", []))}
       {render_decisions(t.get("open_decisions", []))}
       {render_threads(t.get("threads", []))}
     </article>"""

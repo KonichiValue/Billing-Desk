@@ -66,8 +66,8 @@ limits:
 - `watch` holds at most 2 items, and only where you can name the route by which
   it reaches one of his tickets. "Useful context" is not a route. Prefer an empty
   array.
-- `open_decisions` holds only forks with no owner. A fork someone is already
-  deciding belongs in `waiting_on` instead.
+- `open_decisions` holds only forks that nobody owns and no action covers. A
+  fork someone is already deciding is an action with `waits_on` naming them.
 
 Background he already knows gets cut. He has been on these tickets for weeks, so
 do not re-explain the cause of a bug he diagnosed himself. State what is new and
@@ -177,6 +177,11 @@ Rei nothing about whether that was a commitment from TG or a colleague agreeing.
 `so_what` is for the entries that change what Rei does. Leave it empty on the
 ones that are only steps in the story, so the ones that carry it stand out.
 
+Rei's own messages go in the timeline too, as "You". He needs to see that he
+answered at 15:14 and what came back at 15:18, and a story with his own moves
+missing reads as though nothing he did counted. It is also how he checks, at six
+in the evening, that something he meant to send actually went.
+
 If the file is missing, carry on and note it in `gaps`.
 
 ## Step 3: decide what belongs here
@@ -188,8 +193,16 @@ an outstanding ask just rolled forward with nowhere to go.
 
 Within a ticket, include work owned by other people whenever it gates Rei. When
 a TG person takes something away for internal clarification and Rei's ticket
-cannot progress until they return, that goes in `waiting_on` with a `chase_on`
-date. Do not drop it because the name attached is not his.
+cannot progress until they return, that is an action like any other, with
+`waits_on` naming them and a `chase_on` date. Do not drop it because the name
+attached is not his.
+
+Everything Rei needs to keep track of is an action with a number, including the
+things he cannot move. A wait listed away from the actions gives him a second
+list to reconcile, and he then has to work out for himself which action it
+belongs to. So an action sits with him, or it sits with somebody named. The
+things he is waiting for are the same numbers he already knows, further down the
+page.
 
 Genuinely separate workstreams go in the top-level `watch` array, one line each.
 
@@ -289,12 +302,13 @@ work that does not need doing. Check who can see the source before you draft a
 message about it. Reply to a colleague when they asked Rei something, or when he
 knows something that is genuinely not written down anywhere they look.
 
-Every `waiting_on` row needs the same treatment. `blocks` says what of Rei's
-cannot move until it lands, in concrete terms, because a row that only says what
-someone owes gives him no way to judge whether to chase. "The Databricks
-conditions" tells him nothing. "Until these arrive he cannot show TG where their
-patrol and the integrity check differ, which is the whole argument at the onsite"
-tells him why he is waiting.
+An action carrying `waits_on` needs the same treatment in its `why`: say what of
+Rei's cannot move until it lands. A line that only says what someone owes gives
+him no way to judge whether to chase. "The Databricks conditions" tells him
+nothing. "Until these arrive he cannot show TG where their patrol and the
+integrity check differ, which is the whole argument at the onsite" tells him why
+he is waiting. Name every person who owes something, on their own side of the
+fence, so there is no doubt who has to move.
 
 ## Step 6: read the internal ticket before answering TG about a build
 
@@ -332,7 +346,7 @@ chases if that event has not happened.
 Be strict about this. A hold on something that could safely go today costs him a
 day. No hold on something premature costs him a retraction in front of TG.
 
-Every hold and every `waiting_on` row also gets written to
+Every hold and every `waits_on` also gets written to
 `state/open-loops.json`, so nothing quietly expires:
 
 ```json
@@ -588,6 +602,12 @@ Write `output/post-<YYYY-MM-DD>.json` using today's date in JST.
           ],
           "committed_to": "Who Rei promised this to and when. Empty string if not a commitment.",
           "progress_note": "What has already happened on this same number today, when the action has come back to him. Empty string otherwise.",
+          "waits_on": {
+            "who": "Who is holding this, with their side. Omit the whole object when the next move is Rei's.",
+            "what": "Exactly what they owe, in one clause.",
+            "since": "When it landed with them, HH:MM today or 'DD Mon'",
+            "chase_on": "YYYY-MM-DD, or a place such as '2026-08-26, at the onsite'"
+          },
           "where": "Asana | Slack #channel-name | Offline",
           "link": "Direct URL to the exact thread or ticket to act in.",
           "blocked_by": "What must happen first. Empty string if nothing.",
@@ -607,16 +627,6 @@ Write `output/post-<YYYY-MM-DD>.json` using today's date in JST.
             "body_ruby": "Draft text. Japanese uses {漢字|かんじ} markup.",
             "body_en": "English translation when the draft is Japanese, else empty string"
           }
-        }
-      ],
-      "waiting_on": [
-        {
-          "who": "Name (TG) or Name (Kraken)",
-          "what": "What they owe, in one sentence.",
-          "due": "Date they said, or 'not stated'",
-          "chase_on": "YYYY-MM-DD",
-          "blocks": "Concretely, what of Rei's cannot move until this lands. This is the reason he is waiting, so make it say something.",
-          "source_url": "Permalink"
         }
       ],
       "open_decisions": [
