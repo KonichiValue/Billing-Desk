@@ -361,6 +361,19 @@ the end when he needs a decision. No preamble, no recap of process, no "just
 wanted to check in". Warmth belongs in the first line to someone he knows, and
 nowhere else.
 
+### Two things is a sentence, not a list
+
+A list earns its place at three items or more, and only when each one is a
+complete thought the reader could act on alone. Two items belong in a sentence
+that names both and then says what separates them, because a bullet forces every
+condition into a fragment with the qualifiers hanging off the end, and a fragment
+with three numbers in it cannot be read once.
+
+Bad: `• a reading with no charge, 9 days after the reading period ends and 2 days
+after the reading row is created`. Good: "a reading that never produced a charge,
+which fires 9 days after the reading period ends, provided the reading row is at
+least 2 days old". The second is longer and reads in one pass.
+
 ### Answer under the line you are answering
 
 When a draft replies to specific points, quote each one with `>` and put the
