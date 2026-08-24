@@ -206,7 +206,7 @@ border-radius:10px;padding:12px 15px;margin-bottom:10px}
 
 /* Header actions. The one that matters in this view is the bright one. */
 .refresh{border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);
-color:#dce6f5;font:650 12px/1 inherit;padding:6px 12px;border-radius:7px;
+color:#dce6f5;font:650 12px/1 inherit;padding:0 12px;border-radius:7px;
 cursor:pointer}
 .refresh:hover{background:rgba(255,255,255,.16);color:#fff}
 body[data-view="desk"] #refresh,body[data-view="standup"] #prep{
@@ -216,7 +216,7 @@ background:#4881ec}
 body[data-view="standup"] #prep{background:#b32a9c;border-color:#cf56b9}
 body[data-view="standup"] #prep:hover{background:#c33bab}
 .refresh:disabled{opacity:.5;cursor:default}
-a.refresh{text-decoration:none;display:inline-block;line-height:1}
+a.refresh{text-decoration:none}
 .refresh-note{font-size:11.5px;color:#93a4bd;max-width:280px}
 .refresh-note.bad{color:#f6b0ac}
 """

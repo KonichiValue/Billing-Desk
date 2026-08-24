@@ -387,8 +387,12 @@ box-shadow:inset 0 -1px 0 rgba(255,255,255,.06),0 4px 16px rgba(9,14,26,.14)}
 /* Wider than the page it sits over: this row is navigation, not prose, and it
    has to hold the tabs and the buttons without wrapping. One line tall, since
    every pixel here is taken off the top of what he is actually reading. */
-.top-in{max-width:1180px;margin:0 auto;padding:6px 20px;display:flex;
+.top-in{max-width:1180px;margin:0 auto;padding:4px 20px;display:flex;
 align-items:center;gap:10px;flex-wrap:wrap}
+/* One height for everything in this row, so no single control can push the bar
+   taller than the tabs need. */
+.top .btn,.toggle,.refresh,#countdown,.views button{height:26px;box-sizing:border-box;
+display:inline-flex;align-items:center;line-height:1}
 .brand{display:flex;align-items:center;gap:8px}
 .brand img{width:20px;height:20px;border-radius:6px;display:block}
 .top h1{font-size:13px;margin:0;font-weight:650;color:#fff;letter-spacing:-.005em;
@@ -397,17 +401,17 @@ white-space:nowrap}
 /* Hours old means a reply may have landed unseen, which is worth a colour. */
 .top .date.old{color:#f4c27a}
 .top .btn{color:#c9d6ea;border-color:rgba(255,255,255,.16);
-background:rgba(255,255,255,.07);font-size:12px;padding:4px 9px}
+background:rgba(255,255,255,.07);font-size:12px;padding:0 10px}
 .top .btn:hover{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.28);
 color:#fff}
 .acts{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
 justify-content:flex-end}
 #countdown{font-variant-numeric:tabular-nums;font-weight:650;font-size:12.5px;
-padding:4px 10px;border-radius:7px;color:#dae4f5;background:rgba(255,255,255,.09);
+padding:0 10px;border-radius:7px;color:#dae4f5;background:rgba(255,255,255,.09);
 border:1px solid rgba(255,255,255,.14)}
 #countdown:empty{display:none}
 #countdown.soon{background:#fee4e2;border-color:#fda29b;color:#912018}
-.toggle{font:600 12px/1 inherit;padding:5px 10px;border-radius:7px;
+.toggle{font:600 12px/1 inherit;padding:0 10px;border-radius:7px;
 border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.07);
 cursor:pointer;color:#c9d6ea}
 .toggle:hover{background:rgba(255,255,255,.14);color:#fff}
@@ -418,7 +422,7 @@ body[data-view="desk"] #scriptonly{display:none}
 /* Two views, one page. Big target, live count, and the key that switches it. */
 .views{display:flex;gap:3px;padding:3px;background:rgba(255,255,255,.08);
 border:1px solid rgba(255,255,255,.10);border-radius:10px}
-.views button{display:flex;align-items:center;gap:7px;font:inherit;padding:5px 11px;
+.views button{gap:7px;font:inherit;padding:0 11px;
 border:0;border-radius:8px;background:none;color:#a9b8d2;cursor:pointer;
 text-align:left;white-space:nowrap}
 .views button:hover{color:#fff;background:rgba(255,255,255,.07)}
@@ -432,8 +436,8 @@ border-left:1px solid currentColor}
 .views .k{flex:none;font:700 10px/14px inherit;min-width:14px;text-align:center;
 border-radius:4px;background:rgba(255,255,255,.13);color:#c2cee3}
 .views button[aria-selected="true"] .k{background:#eef1f6;color:#6b7789}
-.views .badge{flex:none;min-width:18px;padding:0 5px;border-radius:9px;
-background:#e0483b;color:#fff;font:700 10.5px/18px inherit;text-align:center}
+.views .badge{flex:none;min-width:17px;padding:0 5px;border-radius:9px;
+background:#e0483b;color:#fff;font:700 10.5px/17px inherit;text-align:center}
 .views button[aria-selected="true"] .badge{background:var(--red);color:#fff}
 .views .badge.quiet{background:rgba(255,255,255,.16);color:#dbe4f2}
 body[data-view="desk"] #view-standup,body[data-view="standup"] #view-desk{display:none}
