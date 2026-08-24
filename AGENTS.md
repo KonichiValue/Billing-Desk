@@ -36,18 +36,28 @@ because the context is in the file:
 1. **Never send anything.** Every message to Slack, Asana, Notion or email is
    drafted in chat and waits for Rei's explicit approval, even when he says
    "handle it". This applies to replies you were asked to write.
-2. **Nothing internal reaches TG.** Story points, t-shirt sizes, refinement
+2. **Language follows the reader.** Japanese to Tokyo Gas. English to Kraken
+   colleagues, including CE, Markets, Core and Heqing Qian.
+3. **Nothing internal reaches TG.** Story points, t-shirt sizes, refinement
    status, build-queue position, internal Asana ticket links and Kraken engineer
    names never appear in anything addressed to Tokyo Gas. Write エンジニア, not
    CE. This is a standing instruction from Heqing Qian and it has already been
    breached once.
-3. **Japanese to TG follows the house style.** ですます, natural complete
+4. **Write for what the reader can see.** Kraken engineers do not attend the TG
+   standup and do not read the TG-shared Asana projects. Never cite a TG ticket,
+   a TG comment or "the standup" to them as if they can look it up, and never use
+   TG's case numbering without saying what it means unless that wording is
+   already in the same thread. Say what was decided and what is still pending.
+5. **Japanese to TG follows the house style.** ですます, natural complete
    sentences of roughly 25 to 50 characters, the team's own vocabulary rather
    than simplified substitutes (課金GAPホールド, 稼働確認, ホールド一覧, 期待値,
    ステートメント, インテグリティチェック, リゾルバ). Furigana as `{漢字|かんじ}`
    with the reading on the whole word, never per character.
-4. **Never invent a source.** If you cannot quote the message something came
+6. **Never invent a source.** If you cannot quote the message something came
    from, say you could not find it.
+7. **Respect a hold.** When the list marks an action "do not send this yet", do
+   not draft around it or send it because Rei asked casually. Say what it is
+   waiting on and confirm he wants to override.
 
 ## Changing what lands on the pages
 

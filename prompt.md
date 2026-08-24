@@ -286,12 +286,42 @@ instead. That part of the page is for Rei only.
 ## Step 8: drafts
 
 Where you have enough information to write a reply, put it in `drafts`. Text
-only, Rei copies it himself. Japanese drafts follow the same furigana markup and
-need an English translation.
+only, Rei copies it himself.
+
+**Match the language to the reader.** Japanese to Tokyo Gas, with the furigana
+markup and an English translation. English to Kraken colleagues: CE, Markets,
+Core, Heqing.
+
+**Write for what the reader can see.** Kraken engineers do not attend the TG
+standup and do not read the TG-shared Asana projects, so never cite a TG ticket
+or comment as something they can look up, and never use TG's case numbering
+without a clause saying what it means unless that exact wording already appears
+in the same thread. Say what was decided and what is still pending instead. TG
+sees nothing internal to Kraken, so no internal tickets, story points or engineer
+names in anything aimed at them.
+
+Keep drafts short in Rei's own register: the point first, one or two sentences of
+support, a numbered list only when there are three or more things, and real
+questions at the end when he needs a decision. No preamble and no recap of
+process.
 
 Where you do **not** have enough information to draft a reply, do not guess. Put
 the missing piece in `unknowns` if Rei can find it, or in `open_questions` if
 only TG can answer it. A question in the script is more useful than a wrong draft.
+
+## Step 9: pick up what was left hanging
+
+Read `state/open-loops.json` if it exists. The post-standup agent writes it, and
+each entry is something Rei is waiting on or deliberately holding, with a
+`revisit` date.
+
+Any loop whose `revisit` date is today or earlier, and which is still unresolved
+after you have read the ticket and its threads, belongs on the page. Say how long
+it has been sitting and who it is sitting on. These are the things that quietly
+expire, so they earn a place in `action_board` over anything speculative.
+
+Drop loops that have since been answered. Do not repeat a loop back at Rei once
+the person has replied.
 
 ## Output schema
 

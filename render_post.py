@@ -74,6 +74,19 @@ border-radius:8px;font-size:14.5px;color:#194185;font-weight:550}
 .chg-src{font-size:12px;color:var(--soft);margin-top:6px}
 .act{border:1px solid var(--line);border-radius:11px;margin-bottom:13px;overflow:hidden}
 .act.commit{border-color:#fecdca}
+.act.held{border-color:#fedf89;background:#fffdf7}
+.act.held .act-head{background:#fffaeb}
+.hold{margin:0 0 12px;padding:10px 13px;background:#fffaeb;border:1px solid #fedf89;
+border-radius:8px;font-size:13.5px;color:#93370d}
+.hold b{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.06em;
+color:#b54708;margin-bottom:3px}
+.hold-until{color:#7a2e0e;font-weight:600}
+.holds{background:#fffaeb;border:1px solid #fedf89;border-left:4px solid #b54708;
+border-radius:12px;padding:15px 20px;margin-bottom:22px}
+.holds h2{margin:0 0 9px;font-size:13px;text-transform:uppercase;
+letter-spacing:.08em;color:#b54708}
+.holds ul{margin:0;padding-left:19px}
+.holds li{font-size:14.5px;color:#93370d;margin-bottom:5px}
 .act-head{display:flex;gap:11px;padding:12px 15px;align-items:center;
 flex-wrap:wrap;background:#fcfcfc;border-bottom:1px solid var(--line)}
 .act-rank{width:24px;height:24px;flex:none;border-radius:6px;background:var(--ink);
@@ -131,13 +144,14 @@ def render_index(rows: list[dict], refs: dict[str, str]) -> str:
         ref = row.get("ticket_ref", "")
         mins = row.get("est_minutes")
         u_label, u_tone = URGENCY.get(row.get("urgency", "monitor"), URGENCY["monitor"])
+        state = pill("Wait", "amber") if row.get("on_hold") else pill(u_label, u_tone)
         out.append(
             f"""
       <a class="ix" href="#{esc(refs.get(ref, anchor(ref)))}">
         <span class="ix-rank">{esc(row.get("rank", "-"))}</span>
         <span class="ix-tag">{esc(ref)}</span>
         <span class="ix-act">{esc(row.get("action"))}</span>
-        {pill(u_label, u_tone)}
+        {state}
         <span class="ix-min">{f"{esc(mins)} min" if mins else ""}</span>
       </a>"""
         )
@@ -229,16 +243,25 @@ def render_actions(rows: list[dict]) -> str:
         committed = r.get("committed_to")
         blocked = r.get("blocked_by")
         quote = r.get("source_quote")
+        hold = r.get("hold") or {}
+        hold_block = ""
+        if hold:
+            revisit = hold.get("revisit")
+            hold_block = f"""
+            <p class="hold"><b>Do not send this yet</b>{esc(hold.get("why"))}
+            <span class="hold-until">Wait for: {esc(hold.get("until"))}</span>
+            {f'<span class="hold-until"> Chase on {esc(revisit)}.</span>' if revisit else ""}</p>"""
         out.append(
             f"""
-        <div class="act {"commit" if committed else ""}">
+        <div class="act {"held" if hold else ""} {"commit" if committed else ""}">
           <div class="act-head">
             <span class="act-rank">{esc(r.get("rank", "-"))}</span>
             <span class="act-title">{esc(r.get("title"))}</span>
-            {pill(u_label, u_tone)}
+            {pill("Wait", "amber") if hold else pill(u_label, u_tone)}
             <span class="act-min">{f"{esc(mins)} min" if mins else ""}</span>
           </div>
           <div class="act-body">
+            {hold_block}
             {f"<ul>{detail}</ul>" if detail else ""}
             {f'<p class="act-commit">You committed this to {esc(committed)}</p>' if committed else ""}
             {f'<p class="act-block">Blocked by: {esc(blocked)}</p>' if blocked else ""}
@@ -371,6 +394,29 @@ def render(data: dict) -> str:
         a.get("est_minutes") or 0 for t in tickets for a in t.get("actions", [])
     )
 
+    held = [
+        (t.get("ref", ""), a)
+        for t in tickets
+        for a in t.get("actions", [])
+        if a.get("hold")
+    ]
+    hold_block = ""
+    if held:
+        rows = []
+        for ref, act in held:
+            h = act.get("hold") or {}
+            chase = f" Chase on {esc(h.get('revisit'))}." if h.get("revisit") else ""
+            rows.append(
+                f"<li><strong>{esc(ref)}</strong>: {esc(act.get('title'))}. "
+                f"Wait for {esc(h.get('until'))}.{chase}</li>"
+            )
+        items = "".join(rows)
+        hold_block = f"""
+  <div class="holds">
+    <h2>Wait before you send, {len(held)} thing{"s" if len(held) != 1 else ""}</h2>
+    <ul>{items}</ul>
+  </div>"""
+
     nxt = data.get("next_standup") or {}
     skip_block = ""
     if nxt.get("skipped"):
@@ -407,6 +453,7 @@ def render(data: dict) -> str:
 <div class="wrap">
   <div class="headline"><p>{esc(data.get("headline"))}</p></div>
   {skip_block}
+  {hold_block}
   <h2 class="board-h">Running order{f" &middot; about {total} min in total" if total else ""}</h2>
   {render_index(data.get("index", []), refs)}
   <h2 class="tickets-h">{len(tickets)} ticket{"s" if len(tickets) != 1 else ""}, everything for each one in one place</h2>

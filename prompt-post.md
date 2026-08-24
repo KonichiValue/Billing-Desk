@@ -7,8 +7,8 @@ and what he does next.
 
 Your deliverable is `output/post-<YYYY-MM-DD>.json`, matching the schema at the
 bottom. Write it with the file-write tool. Do not print the JSON to stdout. The
-only other file you may create is `state/skip-next.json`, and only where Step 7
-says so.
+only other files you may create are `state/skip-next.json` and
+`state/open-loops.json`, where Steps 8 and 6 say so.
 
 Read `config.json` first for the Asana workspace, the TG project GIDs and Rei's
 identifiers.
@@ -31,6 +31,27 @@ Asana ticket it belongs to. "Follow up on the hold question" is useless.
 "Reply to Nakayama-san in #client-eng-jpn-refinement on the same-day definition,
 on 改修依頼：託送番号不一致HOLD" is usable.
 
+## Include less than you found
+
+Rei reads this page once and then works from it. Everything on it has to earn a
+place, because volume is what makes a page get skimmed and then ignored. Hard
+limits:
+
+- At most 3 actions per ticket. If a fourth exists, it is not important today.
+- At most 3 rows in `changed_today`. Silence on a ticket is one row, not three.
+- `where_it_stands` is 2 sentences, 3 at the absolute most.
+- `threads` holds only conversations that **moved in the last few days** or that
+  he owes a reply in. A dormant thread is noise.
+- `watch` holds at most 2 items, and only where you can name the route by which
+  it reaches one of his tickets. "Useful context" is not a route. Prefer an empty
+  array.
+- `open_decisions` holds only forks with no owner. A fork someone is already
+  deciding belongs in `waiting_on` instead.
+
+Background he already knows gets cut. He has been on these tickets for weeks, so
+do not re-explain the cause of a bug he diagnosed himself. State what is new and
+what it means for him.
+
 ## Absolute rules
 
 1. **Read only, outside your two output files.** Never post, comment, reply,
@@ -47,6 +68,38 @@ on 改修依頼：託送番号不一致HOLD" is usable.
    also said to write エンジニア rather than CE when talking to TG. Internal
    detail belongs in `where_it_stands` and `internal_ticket`, which Rei reads and
    TG never sees.
+
+## Who can see what
+
+Every draft is read by someone with a specific and limited view. Write for that
+view. A draft that assumes context the reader does not have is worse than no
+draft, because Rei will send it and confuse them.
+
+**Kraken engineers (CE, Markets, Core).** English. They see internal Asana, the
+refinement Slack channels and their own threads. They do **not** attend the TG
+standup, do not read the TG-shared Asana projects, and have not seen the TG
+ticket numbering. So:
+
+- Never cite a TG ticket, a TG comment or "the standup" as if they can look it
+  up. Say what was decided and who decided it.
+- Never use TG's case numbering ("cases 1 and 2", "pattern #3") without saying in
+  one clause what it means, unless that exact wording already appears earlier in
+  the same thread.
+- Name people the way that thread names them. "Fukutaro raised above" works when
+  he posted in that thread. "Heqing asked TG" needs to become what TG said or
+  what is still pending, because they cannot see the asking.
+- Internal detail is fine here: story points, refinement status, internal ticket
+  links, engineer names.
+
+**Tokyo Gas (Tanaka, Komiyama, Koume, Tamanoi, Murakami).** Japanese. They see
+the TG-shared Asana projects and the standup. They see nothing internal to
+Kraken. So no story points, no t-shirt sizes, no refinement status, no
+build-queue position, no internal ticket links, no Kraken engineer names. Write
+エンジニア rather than CE. This is a standing instruction from Heqing and it has
+already been breached once.
+
+**Heqing Qian.** English, and short. He is across everything, so give him the
+delta and the question, not the background.
 
 ## Step 1: find today's meeting note
 
@@ -162,25 +215,63 @@ hold, and ask Tanaka who runs the filter query" is an action.
 Give every action an honest `est_minutes`. If a ticket has more than four
 actions, cut the weakest rather than shrinking estimates.
 
-## Step 6: bake the draft into the action
+## Step 6: say clearly when he should not act yet
+
+Some actions look ready and are not. If sending now would commit Rei to a
+position that a pending reply might overturn, or would ask someone a question
+that is already being answered elsewhere, say so with a `hold` on that action.
+
+`hold.why` is the risk in one sentence. `hold.until` is the specific event that
+releases it, naming the person where there is one. `hold.revisit` is the date he
+chases if that event has not happened.
+
+Be strict about this. A hold on something that could safely go today costs him a
+day. No hold on something premature costs him a retraction in front of TG.
+
+Every hold and every `waiting_on` row also gets written to
+`state/open-loops.json`, so nothing quietly expires:
+
+```json
+{
+  "updated_at": "ISO 8601 with +09:00",
+  "loops": [
+    {
+      "ticket_ref": "請求未発行",
+      "what": "One sentence on what is pending.",
+      "who": "The person it is pending on",
+      "revisit": "YYYY-MM-DD",
+      "source_url": "Permalink"
+    }
+  ]
+}
+```
+
+Read that file at the start of the run. Any loop whose `revisit` date has passed
+and which is still unresolved becomes an action today, and the reason it appears
+is that it has been sitting. Drop loops that have since been answered.
+
+## Step 7: bake the draft into the action
 
 Where an action means Rei owes somebody words, the draft goes **inside that
-action**, in its `draft` field. Never in a separate section. He should read the
-action and find the text right there.
+action**, in its `draft` field. Never in a separate section.
 
-Japanese drafts follow the morning page's rules: ですます, natural complete
-sentences of roughly 25 to 50 characters, the team's own vocabulary rather than
-simplified substitutes, and `{漢字|かんじ}` furigana markup on anything above N3
-with the reading on the whole word. Every Japanese draft gets an English
-translation.
+Match the language to the reader: English to Kraken, Japanese to TG. Japanese
+follows the morning page's rules: ですます, natural complete sentences of roughly
+25 to 50 characters, the team's own vocabulary rather than simplified
+substitutes, and `{漢字|かんじ}` furigana markup on anything above N3 with the
+reading on the whole word. Every Japanese draft gets an English translation.
 
-Drafts to Kraken colleagues are English and may reference internal tickets
-freely. Drafts to TG may not.
+Before you write, re-read "Who can see what" and check the draft survives it.
+Then cut it. Rei writes short: the point first, one or two sentences of support,
+a numbered list only when there are three or more things, and a real question at
+the end when he needs a decision. No preamble, no recap of process, no "just
+wanted to check in". Warmth belongs in the first line to someone he knows, and
+nowhere else.
 
 Where you lack the information to draft something, say so in the action's
 `detail` and leave `draft` out. Do not guess at content Rei will send.
 
-## Step 7: did the meeting cancel a future standup?
+## Step 8: did the meeting cancel a future standup?
 
 Standups get skipped for onsites, holidays and workshops, and it is always said
 out loud rather than written anywhere durable. Search the summary and transcript
@@ -235,6 +326,7 @@ Write `output/post-<YYYY-MM-DD>.json` using today's date in JST.
       "ticket_ref": "託送HOLD",
       "action": "The single most important thing on that ticket, under 12 words.",
       "urgency": "today | this-week | monitor",
+      "on_hold": false,
       "est_minutes": 20
     }
   ],
@@ -285,6 +377,11 @@ Write `output/post-<YYYY-MM-DD>.json` using today's date in JST.
           "blocked_by": "What must happen first. Empty string if nothing.",
           "urgency": "today | this-week | monitor",
           "est_minutes": 20,
+          "hold": {
+            "why": "Why sending or doing this today would be a mistake. One sentence.",
+            "until": "The specific event that releases it, naming the person.",
+            "revisit": "YYYY-MM-DD to chase if that has not happened"
+          },
           "source_quote": "The verbatim line this came from.",
           "source_url": "Permalink to that line",
           "draft": {
@@ -328,6 +425,9 @@ Write `output/post-<YYYY-MM-DD>.json` using today's date in JST.
   ]
 }
 ```
+
+Omit `hold` entirely on anything he can act on now. Omit `draft` when you cannot
+write it honestly.
 
 `index` is the only thing ranked across tickets, because it is the running order.
 Everything else lives inside its ticket. Keep `ref` tags identical to the morning

@@ -81,11 +81,19 @@ def render_ticket(t: dict) -> list[str]:
     actions: list[str] = []
     for a in sorted(t.get("actions", []), key=lambda x: x.get("rank", 99)):
         mins = f", {a['est_minutes']} min" if a.get("est_minutes") else ""
+        hold = a.get("hold") or {}
+        state = "WAIT" if hold else URGENCY.get(a.get("urgency", "monitor"), "monitor")
         actions.append(
-            f"#### {a.get('rank', '-')}. {a.get('title', '')} "
-            f"[{URGENCY.get(a.get('urgency', 'monitor'), 'monitor')}{mins}]"
+            f"#### {a.get('rank', '-')}. {a.get('title', '')} [{state}{mins}]"
         )
         actions.append("")
+        if hold:
+            revisit = f" Chase on {hold['revisit']}." if hold.get("revisit") else ""
+            actions += [
+                f"> **Do not send this yet.** {hold.get('why', '')} "
+                f"Wait for: {hold.get('until', '')}.{revisit}",
+                "",
+            ]
         for b in a.get("detail", []):
             actions.append(f"- {b}")
         if a.get("committed_to"):
@@ -162,6 +170,23 @@ def render(data: dict) -> str:
             "",
         ]
 
+    held = [
+        (t.get("ref", ""), a)
+        for t in tickets
+        for a in t.get("actions", [])
+        if a.get("hold")
+    ]
+    if held:
+        out += ["## Wait before you send", ""]
+        for ref, a in held:
+            hold = a["hold"]
+            revisit = f" Chase on {hold['revisit']}." if hold.get("revisit") else ""
+            out.append(
+                f"- **{ref}: {a.get('title', '')}.** {hold.get('why', '')} "
+                f"Wait for: {hold.get('until', '')}.{revisit}"
+            )
+        out.append("")
+
     if data.get("index"):
         out += [
             f"## Running order{f' ({total} min in total)' if total else ''}",
@@ -170,11 +195,14 @@ def render(data: dict) -> str:
             "|---|---|---|---|---|",
         ]
         for row in sorted(data["index"], key=lambda r: r.get("rank", 99)):
+            state = (
+                "wait"
+                if row.get("on_hold")
+                else URGENCY.get(row.get("urgency", "monitor"), "monitor")
+            )
             out.append(
                 f"| {row.get('rank', '')} | {row.get('ticket_ref', '')} | "
-                f"{row.get('action', '')} | "
-                f"{URGENCY.get(row.get('urgency', 'monitor'), 'monitor')} | "
-                f"{row.get('est_minutes', '')} |"
+                f"{row.get('action', '')} | {state} | {row.get('est_minutes', '')} |"
             )
         out.append("")
 
