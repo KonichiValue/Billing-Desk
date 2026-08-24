@@ -12,6 +12,11 @@ print the JSON to stdout. Do not create any other files.
 Read `config.json` first. It holds the Asana workspace, the two TG project GIDs,
 Rei's user GID, and Slack channel hints.
 
+Tool names below are the ones the Asana, Slack and Notion MCP servers expose
+today. If your toolset names them differently, use the equivalent and carry on.
+Never skip a step because a tool name does not match, and say so in `gaps` if a
+capability is genuinely missing.
+
 ## Absolute rules
 
 1. **Read only.** Never post, comment, reply, react, or create a draft in Asana

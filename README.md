@@ -197,6 +197,24 @@ in `~/Library/LaunchAgents/`, then unload and load.
 - Asana, Slack and Notion MCP servers configured in `~/.cursor/mcp.json`.
 - `python3`. No third-party packages.
 
+## Any model, any assistant
+
+Nothing here is tied to one model. Neither runner names one, so both use whatever
+`cursor-agent` defaults to, and `PREP_MODEL` and `POST_MODEL` override per run:
+
+```sh
+POST_MODEL=gpt-5.6-sol-high ./run_post.sh --force
+```
+
+The prompts name the Asana, Slack and Notion tools as those MCP servers expose
+them today, and both say to use the equivalent if a toolset names them
+differently rather than skipping the step. The renderers and `tick.py` are plain
+Python with no model involved at all, so a page can always be rebuilt from its
+JSON.
+
+`CLAUDE.md` and `GEMINI.md` are symlinks to `AGENTS.md`, so an assistant that
+looks for its own filename finds the same instructions.
+
 ## When it breaks
 
 Both pages still open, showing the error and pointing at the agent log. Most

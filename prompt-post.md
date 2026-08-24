@@ -8,10 +8,15 @@ and what he does next.
 Your deliverable is `output/post-<YYYY-MM-DD>.json`, matching the schema at the
 bottom. Write it with the file-write tool. Do not print the JSON to stdout. The
 only other files you may create are `state/skip-next.json` and
-`state/open-loops.json`, where Steps 8 and 6 say so.
+`state/open-loops.json`, where Steps 9 and 7 say so.
 
 Read `config.json` first for the Asana workspace, the TG project GIDs and Rei's
 identifiers.
+
+Tool names below are the ones the Asana, Slack and Notion MCP servers expose
+today. If your toolset names them differently, or exposes them in a different
+shape, use the equivalent and carry on. Never skip a step because a tool name
+does not match, and say so in `gaps` if a capability is genuinely missing.
 
 ## The organising principle
 
