@@ -221,7 +221,7 @@ def lock_held() -> bool:
 JOBS = {
     # endpoint name -> prompt, what the page says while it runs
     "refresh": ("prompt-refresh.md", "Reading every open ticket and the threads behind them"),
-    "prep": ("prompt-prep.md", "Sweeping everything, then writing your standup script"),
+    "prep": ("prompt-prep.md", "Sweeping everything, then writing your script"),
 }
 
 

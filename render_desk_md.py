@@ -179,7 +179,7 @@ def render_ticket(t: dict) -> list[str]:
 
 
 def render_prep(prep: dict) -> list[str]:
-    """The standup half, in plain kanji: what he says and what he still asks.
+    """The speaking half, in plain kanji: what he says and what he still asks.
 
     Furigana markup is stripped, because this file is read by an agent and by
     Rei in a chat, and `{託送|たくそう}` helps neither of them.
@@ -204,6 +204,14 @@ def render_prep(prep: dict) -> list[str]:
     rows += [f"- **{label}:** {cons[key]}" for key, label in labels if cons.get(key)]
     if cons:
         rows.append("")
+    for d in prep.get("decisions", []):
+        rows.append(f"- **Settle in the room:** {d.get('need', '')}")
+        if d.get("why"):
+            rows.append(f"  Why now: {d['why']}")
+        if d.get("fallback"):
+            rows.append(f"  If they will not: {d['fallback']}")
+    if prep.get("decisions"):
+        rows.append("")
     for b in prep.get("script", []):
         rows += [
             f"**{b.get('heading', '')} ({b.get('heading_en', '')})**",
@@ -214,6 +222,13 @@ def render_prep(prep: dict) -> list[str]:
             "",
         ]
         rows += [f"- {line.get('en', '')}" for line in b.get("lines", [])]
+        rows.append("")
+    for p in prep.get("pushback", []):
+        rows.append(f"- **If they say:** {p.get('they_say', '')}")
+        rows.append(f"  Answer: {plain(p.get('say_ja', ''))}")
+        if p.get("say_en"):
+            rows.append(f"  ({p['say_en']})")
+    if prep.get("pushback"):
         rows.append("")
     for q in prep.get("open_questions", []):
         rows.append(f"- **Ask {q.get('who', 'TG')}:** {q.get('en', '')}")
