@@ -29,6 +29,7 @@ from render import (
     render_script,
     script_meta,
     script_session,
+    section,
     when_words,
 )
 
@@ -214,11 +215,13 @@ def render_land(rows: list[dict]) -> str:
       </li>"""
         for r in rows
     )
-    return f"""
-      <section class="sub st-land-wrap">
-        <h3>Settle this before you leave the room</h3>
-        <ul class="st-land">{out}</ul>
-      </section>"""
+    return section(
+        "Settle this before you leave the room",
+        f'<ul class="st-land">{out}</ul>',
+        role="warn",
+        count=len(rows),
+        hint="decide it in the room",
+    )
 
 
 def render_pushback(rows: list[dict]) -> str:
@@ -239,11 +242,13 @@ def render_pushback(rows: list[dict]) -> str:
           {f'<button class="copy" data-copy="{esc(raw)}">copy</button>' if raw else ""}
         </li>"""
         )
-    return f"""
-      <details class="sub">
-        <summary><h3>If they push back ({len(rows)})</h3></summary>
-        <ul class="st-push">{"".join(out)}</ul>
-      </details>"""
+    return section(
+        "If they push back",
+        f'<ul class="st-push">{"".join(out)}</ul>',
+        role="ref",
+        count=len(rows),
+        fold=True,
+    )
 
 
 def render_ticket(t: dict, ident: str, desk_id: str) -> str:
@@ -298,18 +303,17 @@ def render_ticket(t: dict, ident: str, desk_id: str) -> str:
         {f'<p class="matters">{esc(prep.get("why_it_matters"))}</p>' if prep.get("why_it_matters") else ""}
       </section>''' if issue else ""}
 
-      <section class="sub">
-        <h3>Where it stands</h3>
-        <p class="st-stands">{esc(t.get("where_it_stands"))}</p>
-        {raise_rows(t, desk_id)}
-      </section>
+      {section("Where it stands",
+               f'<p class="st-stands">{esc(t.get("where_it_stands"))}</p>'
+               f'{raise_rows(t, desk_id)}',
+               role="log", hint="from the desk")}
 
       <section class="st-cons">{render_consequences(prep.get("consequences", {}))}</section>
 
       {render_land(prep.get("decisions", []))}
 
-      <section class="sub script">
-        <h3>What I say</h3>
+      <section class="sub say script">
+        <h3>What I say out loud</h3>
         {'<p class="st-none">Status only. Nothing needed from TG.</p>' if no_ask else ""}
         {render_script(prep.get("script", []))}
       </section>
@@ -347,11 +351,12 @@ def render_questions(questions: list[dict], spoken: bool) -> str:
           <div class="q-ja">{furi(q.get("ja_ruby", ""))}</div>
         </li>"""
         )
-    return f"""
-      <section class="sub">
-        <h3>Also need answering, off the script</h3>
-        <ul class="qlist">{"".join(rows)}</ul>
-      </section>"""
+    return section(
+        "Also need answering, off the script",
+        f'<ul class="qlist">{"".join(rows)}</ul>',
+        role="warn",
+        count=len(rows),
+    )
 
 
 def running_order(tickets: list[dict], ids: dict[str, str]) -> str:
@@ -431,5 +436,6 @@ def render(board: dict, desk_ids: dict[str, str], built: str, stale: bool) -> st
   <h2 class="tickets-h">{esc(order_h)}</h2>
   {running_order(tickets, ids)}
   {cards}
-  <p class="foot">Script written {esc(built)}. Press 1 for your work, 2 for the
-  script, s to strip everything but the Japanese.</p>"""
+  <p class="foot">Script written {esc(built)}. <kbd>1</kbd> your work,
+  <kbd>2</kbd> what you say, <kbd>s</kbd> Japanese only, <kbd>/</kbd> find
+  anything, <kbd>?</kbd> how this works.</p>"""

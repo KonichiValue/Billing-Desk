@@ -154,7 +154,7 @@ def render_ticket(t: dict) -> list[str]:
         actions += render_draft(a.get("draft") or {}, st)
         if not active:
             actions += ["</details>", ""]
-    out += block("Items, and where each one sits", actions)
+    out += block("To do on this ticket", actions)
 
     decisions = []
     for d in t.get("open_decisions", []):
@@ -293,7 +293,7 @@ def render(data: dict) -> str:
             if counts.get(k)
         )
         out += [
-            "## Where you are",
+            "## Everything you are carrying",
             "",
             f"**{summary}.**"
             + (f" About {total} min of work still with you." if total else ""),
@@ -338,13 +338,17 @@ def render(data: dict) -> str:
     for t in tickets:
         out += render_ticket(t)
 
-    if data.get("watch"):
-        out += ["## Not mine, but adjacent", ""]
-        out += [
-            f"- **{w.get('topic', '')}**: {w.get('why', '')} "
-            f"{link('source', w.get('source_url', ''))}"
-            for w in data["watch"]
-        ]
+    news = data.get("news") or data.get("watch") or []
+    if news:
+        out += ["## Around you at TG", "",
+                "Not his tickets. Things that move them.", ""]
+        for w in news:
+            line = f"- **{w.get('topic', '')}**"
+            if w.get("what"):
+                line += f" {w['what']}"
+            if w.get("why"):
+                line += f" _{w['why']}_"
+            out.append(f"{line} {link('source', w.get('source_url', ''))}")
         out.append("")
 
     if data.get("gaps"):

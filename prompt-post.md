@@ -76,9 +76,9 @@ limits:
 - `where_it_stands` is 2 sentences, 3 at the absolute most.
 - `threads` holds only conversations that **moved in the last few days** or that
   he owes a reply in. A dormant thread is noise.
-- `watch` holds at most 2 items, and only where you can name the route by which
-  it reaches one of his tickets. "Useful context" is not a route. Prefer an empty
-  array.
+- `news` holds at most 5 rows, and only where you can name the route by which it
+  reaches him. "Useful context" is not a route. A row whose route has closed
+  comes off the board.
 - `open_decisions` holds only forks that nobody owns and no item covers. A
   fork someone is already deciding is an item with `waits_on` naming them.
 
@@ -217,7 +217,12 @@ belongs to. So an item sits with him, or it sits with somebody named. The
 things he is waiting for are the same numbers he already knows, further down the
 page.
 
-Genuinely separate workstreams go in the top-level `watch` array, one line each.
+Genuinely separate workstreams go in the top-level `news` array, one row each.
+That array is the answer to "what has changed around me", which the ticket cards
+cannot answer: a priority that moved, an outage upstream, a decision on somebody
+else's ticket that will be quoted back at one of his. Give each row a `topic`, a
+`what` in one or two sentences, a `why` saying how it reaches him, the date, and
+a permalink. At most 5, and drop a row once it is no longer news.
 
 Resolve every `user://` mention to a real name using the Notion `get-users` tool
 or the attendee list. Never show Rei a raw UUID. If you cannot resolve one, write
@@ -548,7 +553,7 @@ everything you are not changing.
   "meeting_note": {
     "date": "YYYY-MM-DD of the standup you just processed",
     "found": true,
-    "url": "Notion URL"
+    "url": "The URL Notion itself returns for the page, the app.notion.com/p/<id> form. A workspace-slug URL you assembled by hand will 404 when the title has a date in it."
   },
   "sessions": [
     {"kind": "standup", "date": "YYYY-MM-DD", "at": "10:30"}
@@ -656,10 +661,12 @@ everything you are not changing.
       ]
     }
   ],
-  "watch": [
+  "news": [
     {
-      "topic": "Short label for something not Rei's but adjacent.",
-      "why": "One sentence on why it could reach him.",
+      "topic": "Short label for something not his, moving around him.",
+      "what": "One or two sentences on what actually happened.",
+      "why": "How it reaches him. No route, no row.",
+      "on": "YYYY-MM-DD",
       "source_url": "Permalink"
     }
   ],

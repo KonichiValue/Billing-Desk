@@ -17,6 +17,10 @@ The page has two views off that one file. *My work* is what he does; *what I say
 is the words for the next session, from each ticket's `prep` block. Neither
 carries its own status, so a script cannot contradict the list.
 
+`news` on the board is the one part that is not his work: what moved around him
+that will reach one of his tickets. Add a row only with the route named, and
+take it off once that route closes.
+
 `sessions` on the board is every room he still has to speak in, soonest first,
 and `script.for_date` says which one the current script was written for. That
 session may be an onsite rather than the 10:30 standup, which changes how much

@@ -89,7 +89,15 @@ changes what he does.
 
 Set `checked_at` to now, in ISO 8601 with the offset.
 
-## 6. Rebuild
+## 6. Keep the news honest
+
+`news` is what is moving around him that is not one of his tickets: a priority
+that changed, an outage upstream, a decision on somebody else's ticket that will
+be quoted back at one of his. Add a row only when you can name the route by
+which it reaches him, and take a row off once that route has closed. Five at the
+outside. Each row carries `topic`, `what`, `why`, `on` and `source_url`.
+
+## 7. Rebuild
 
 ```
 python3 render_desk.py    state/board.json output/desk.html
@@ -99,7 +107,7 @@ python3 render_desk_md.py state/board.json output/desk.md
 `tg refresh` and the Refresh button open the page themselves, so do not open it
 again.
 
-## 7. Say what changed, briefly
+## 8. Say what changed, briefly
 
 Always end with this, even when the answer is dull. A run that finishes silently
 is indistinguishable from a run that died, and the log is the only place Rei can

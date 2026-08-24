@@ -14,6 +14,7 @@ Shape of `state/board.json`:
       "next_id": 8,
               "sessions": [ ...see below... ],
               "script": {"for_date", "at", "built_at", "headline"},
+              "news": [ ...see below... ],
               "tickets": [
                 {
                   "id": "1217430352217964",        Asana gid, so nothing is duplicated
@@ -39,6 +40,14 @@ standup Wednesday" changes what has to move into Asana instead.
     [{"kind": "standup|onsite|workshop", "date": "2026-08-26", "at": "10:30",
       "label", "title", "place", "focus", "skipped", "reason", "quote",
       "agenda": [{"topic", "why", "owner"}], "bring": ["..."]}]
+
+`news` is what is moving around Rei that is not one of his tickets: a priority
+that changed, an outage upstream, a decision on somebody else's ticket that
+lands on his. The desk answers "what do I do" perfectly well without it, and
+answers "what has changed around me" not at all, which is the thing you walk
+into a room not knowing. Five rows at most, dropped as they go stale.
+
+    [{"topic", "what", "why", "on": "2026-08-24", "source_url"}]
 
 `prep` is what the ticket sounds like out loud, and only the speaking view reads
 it. It is rebuilt whenever Rei presses Build script, and it deliberately holds no

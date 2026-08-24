@@ -159,10 +159,12 @@ the work is not over.
 ./tick.py 1 --undo                   # forget the state entirely
 ```
 
-The desk opens with **Where you are**: one list, yours at the top, then what you
-are not allowed to send yet, then what sits with someone else. Finished work
-folds away behind a count. Each line carries how it got there, so a waiting row
-says who has it and since when, and the minutes count only what is still yours.
+The desk opens with **Everything you are carrying**: one list, yours at the top,
+then what you are not allowed to send yet, then what sits with someone else.
+Finished work folds away behind a count. Each line carries how it got there, so a
+waiting row says who has it and since when, and the minutes count only what is
+still yours. Every row also says *when*: Do now, Held to Wednesday, Chase today,
+or "No chase date" when nothing has been set and the thing could sit for ever.
 
 The pages are read-only about status, deliberately. A page opened from disk
 cannot write to disk, so a checkbox on it could only ever remember a tick inside
@@ -213,13 +215,24 @@ nothing and flags it, since a missing warning beats a wrong one.
 ## Reading the page
 
 - `1` shows your work, `2` what you say, `s` strips everything but the Japanese
-  at a larger size. The tab you were on survives a reload, each view remembers
-  where you had scrolled to, and the morning of a session opens on the script
-  when one has been built and the meeting has not started yet.
-- On the work view, **Where you are** is one list: yours at the top, then what you
-  may not send yet, then what sits with someone else, with finished work folded
-  away behind a count. Each ticket header carries what Asana currently says about
-  it, and a draft always sits inside the item that needs it.
+  at a larger size, `/` finds anything, `?` explains the whole thing. The tab you
+  were on survives a reload, each view remembers where you had scrolled to, and
+  the morning of a session opens on the script when one has been built and the
+  meeting has not started yet.
+- **Jump to** sits under the banner with every ticket on it, and the chip for the
+  card you are looking at lights up as you scroll. `/` opens a finder over the
+  page that takes a ticket tag, an item number or any word from a title.
+- On the work view, **Everything you are carrying** is one list: yours at the top,
+  then what you may not send yet, then what sits with someone else, with finished
+  work folded away behind a count. Each ticket header carries what Asana currently
+  says about it, every value labelled with its field, and links out live on their
+  own row underneath. A draft always sits inside the item that needs it.
+- **Around you at TG** is the news panel: things that are not your tickets but
+  move them, each with the route by which it reaches you and a link to where it
+  was said.
+- Inside a card the sections are colour-keyed by what they are for. Red is the
+  work, blue is the short answer and the timeline, amber is undecided, and grey
+  reference sections (shorthand, threads, a day where nothing moved) start folded.
 - On the speaking view, cards run in board order: the issue in 20 seconds, where
   it stands, what the fix does not cover, what has to be settled today, then the
   script.

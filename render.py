@@ -224,6 +224,76 @@ def short_when(iso: str, at: str = "") -> str:
     return f"{words} {at}".strip()
 
 
+DATE_IN = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def when_tag(item: dict, st: dict, sess: dict | None = None) -> tuple[str, str]:
+    """When this one is due to move, in two or three words.
+
+    The colour of an item already says whose it is. This says when, which is the
+    other half of deciding what to open next, and it is the half that used to
+    live buried in a hold note or a chase date three lines down.
+    """
+    if st["closed"]:
+        return "", ""
+    hold = item.get("hold") or {}
+    waits = item.get("waits_on") or {}
+
+    def day_in(*values: str) -> str:
+        for value in values:
+            found = DATE_IN.search(value or "")
+            if found:
+                return short_when(found.group(0))
+        return ""
+
+    if st["state"] == "todo":
+        if item.get("at_standup") and sess:
+            return f'Say it {short_when(sess.get("date", ""))}'.strip(), "next"
+        return "Do now", "now"
+    if st["state"] == "hold":
+        day = day_in(hold.get("revisit", ""), hold.get("until", ""))
+        return (f"Held to {day}" if day else "Held"), "next"
+    if st["state"] == "waiting":
+        day = day_in(waits.get("chase_on", ""))
+        if day:
+            return f"Chase {day}", "next"
+        if item.get("at_standup") and sess:
+            return f'Ask {short_when(sess.get("date", ""))}'.strip(), "next"
+        return "No chase date", "none"
+    return "", ""
+
+
+ROLE_HINT = {
+    "now": "what you do",
+    "log": "what happened",
+    "say": "what you say",
+    "ref": "background",
+    "warn": "careful",
+}
+
+
+def section(
+    title: str,
+    body: str,
+    role: str = "ref",
+    count: int | None = None,
+    fold: bool = False,
+    hint: str = "",
+) -> str:
+    """One section of a ticket card, the same shape wherever it is used.
+
+    Every section used to open with the same small grey capitals, which made a
+    card one undifferentiated column. The marker colour and the weight now say
+    what kind of section it is before the words do.
+    """
+    n = f'<span class="n">{count}</span>' if count is not None else ""
+    aside = f'<span class="hint">{esc(hint)}</span>' if hint else ""
+    head = f"<h3>{esc(title)}{n}{aside}</h3>"
+    if fold:
+        return f'<details class="sub {role}"><summary>{head}</summary>{body}</details>'
+    return f'<section class="sub {role}">{head}{body}</section>'
+
+
 def pill(label: str, tone: str) -> str:
     fg, bg, border = TONES.get(tone, TONES["grey"])
     return (
@@ -462,18 +532,46 @@ white-space:nowrap;font-weight:550}
 border-radius:6px;background:var(--accent-bg);color:var(--accent-ink);
 margin-right:8px;vertical-align:2px;letter-spacing:0}
 .est{color:var(--green);font-weight:600}
+/* When a thing is due to move. Deliberately quiet next to the state colour:
+   whose it is comes first, when it moves comes second. */
+.when{flex:none;font-size:11.5px;font-weight:700;color:var(--soft);
+white-space:nowrap;letter-spacing:.01em}
+.when.now{color:var(--red)}
+.when.next{color:var(--amber)}
+.when.none{color:#9aa3b2;font-weight:600;font-style:italic}
 
-/* Sections inside a card, and the fold-away ones. */
-.sub{padding:15px 0;border-bottom:1px solid var(--hair)}
+/* Sections inside a card. The marker bar says what kind of section it is, so a
+   card reads as parts rather than one column of identical grey capitals. */
+.sub{padding:16px 0;border-bottom:1px solid var(--hair)}
 .tk>*:last-child,.st-tk>*:last-child{border-bottom:0;padding-bottom:0}
-.sub h3{font-size:11.5px;text-transform:uppercase;letter-spacing:.08em;
-color:var(--soft);margin:0 0 8px;font-weight:700;display:inline-block}
+.sub h3{font-size:12.5px;letter-spacing:.005em;color:var(--mut);margin:0 0 10px;
+font-weight:750;display:inline-flex;align-items:center;gap:9px;vertical-align:middle;
+text-transform:none;width:calc(100% - 22px)}
+.sub h3:before{content:"";flex:none;width:3px;height:14px;border-radius:2px;
+background:var(--line)}
+.sub h3 .n{font-size:11px;font-weight:700;color:var(--soft);background:var(--hair);
+border:1px solid var(--line);border-radius:20px;padding:0 7px}
+.sub h3 .hint{margin-left:auto;font-size:11px;font-weight:600;color:#9aa3b2;
+text-transform:uppercase;letter-spacing:.06em}
+/* Red is the work, accent is the talking, grey is background you can skip. */
+.sub.now h3{color:var(--ink);font-size:14.5px;letter-spacing:-.01em}
+.sub.now h3:before{background:var(--red);height:17px;width:4px}
+.sub.say h3,.sub.key h3{color:var(--accent-ink);font-size:14.5px;letter-spacing:-.01em}
+.sub.say h3:before,.sub.key h3:before{background:var(--accent);height:17px;width:4px}
+.sub.log h3:before{background:var(--accent-line)}
+.sub.warn h3:before{background:var(--amber)}
+.sub.ref h3{color:var(--soft)}
 details>summary{cursor:pointer;list-style:none;padding:15px 0 8px}
 details>summary::-webkit-details-marker{display:none}
 details>summary::before{content:"\\25B8";color:var(--soft);font-size:10px;
 margin-right:7px;display:inline-block;transition:transform .15s}
 details[open]>summary::before{transform:rotate(90deg)}
 details.sub{padding-top:0}
+/* A folded section is one row: the arrow, the marker, the words, the count. */
+details.sub>summary{display:flex;align-items:center;padding:15px 0}
+details.sub[open]>summary{padding-bottom:9px}
+details.sub>summary>h3{margin:0;width:auto;flex:1}
+details.sub>summary::before{line-height:1}
 .status,.st-stands{margin:0;font-size:15px;color:var(--ink)}
 .matters{margin:10px 0 0;padding:9px 13px;background:var(--accent-bg);
 border:1px solid var(--accent-line);border-radius:8px;font-size:14px;
@@ -529,6 +627,107 @@ color:var(--soft);margin:0;display:inline-block;font-weight:700}
 .gaps ul{margin:8px 0 0;padding-left:18px}
 .foot{text-align:center;color:var(--soft);font-size:12px;margin-top:28px}
 .keys{color:#7b8cab;font-size:11px}
+
+/* Getting somewhere fast. The chips are the obvious way and cost no learning;
+   the finder is the fast way once you know it is there. */
+.jump{position:sticky;top:42px;z-index:20;display:flex;gap:6px;align-items:center;
+flex-wrap:wrap;margin:0 0 16px;padding:7px 11px;border:1px solid var(--line);
+border-radius:11px;background:rgba(255,255,255,.86);box-shadow:var(--shadow);
+-webkit-backdrop-filter:blur(9px) saturate(1.4);backdrop-filter:blur(9px) saturate(1.4)}
+.jump .lab{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;
+color:var(--soft);font-weight:700;padding-right:2px}
+.jump a{font-size:12.5px;font-weight:600;color:var(--mut);text-decoration:none;
+padding:3px 9px;border-radius:7px;border:1px solid transparent;white-space:nowrap}
+.jump a:hover{background:var(--hair);color:var(--ink)}
+.jump a.on{background:var(--accent-bg);color:var(--accent-ink);
+border-color:var(--accent-line)}
+.jump a .c{font-size:10.5px;font-weight:700;color:var(--red);margin-left:5px}
+.jump .find{margin-left:auto;font:600 11.5px/1 inherit;color:var(--soft);
+background:#fff;border:1px solid var(--line);border-radius:7px;padding:5px 9px;
+cursor:pointer;display:flex;gap:6px;align-items:center}
+.jump .find:hover{color:var(--accent);border-color:var(--accent-line)}
+kbd{font:700 10.5px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+background:var(--hair);border:1px solid var(--line);border-bottom-width:2px;
+border-radius:4px;padding:3px 5px;color:var(--mut)}
+
+/* The finder. Type a ticket, a number or a word and land on it. */
+.pal{position:fixed;inset:0;z-index:60;background:rgba(9,14,26,.44);
+display:flex;align-items:flex-start;justify-content:center;padding:11vh 16px 16px}
+.pal-box{width:min(640px,100%);background:#fff;border-radius:15px;
+box-shadow:0 24px 60px rgba(9,14,26,.35);overflow:hidden;display:flex;
+flex-direction:column;max-height:74vh}
+.pal input{border:0;border-bottom:1px solid var(--line);padding:16px 19px;
+font:16px/1.4 inherit;outline:0;color:var(--ink)}
+.pal ul{list-style:none;margin:0;padding:7px;overflow:auto}
+.pal li{padding:9px 11px;border-radius:9px;display:flex;gap:10px;
+align-items:center;cursor:pointer}
+.pal li[aria-selected="true"]{background:var(--accent-bg)}
+.pal .p-tag{flex:none;font-size:10.5px;font-weight:700;color:var(--accent-ink);
+background:var(--accent-bg);border:1px solid var(--accent-line);padding:1px 7px;
+border-radius:5px}
+.pal .p-t{flex:1;min-width:0;font-size:14px;white-space:nowrap;overflow:hidden;
+text-overflow:ellipsis}
+.pal .p-s{flex:none;font-size:11.5px;color:var(--soft)}
+.pal .p-none{padding:16px 19px;color:var(--soft);font-size:14px;font-style:italic}
+.pal-foot{padding:9px 14px;border-top:1px solid var(--line);background:#fbfcfe;
+font-size:11.5px;color:var(--soft);display:flex;gap:14px}
+
+/* How to work this thing. Reachable from the header on every view, because the
+   answer to "how do I close this" should never be somewhere else. */
+dialog.help{border:0;padding:0;border-radius:16px;width:min(680px,92vw);
+box-shadow:0 24px 60px rgba(9,14,26,.4);color:var(--ink)}
+dialog.help::backdrop{background:rgba(9,14,26,.5)}
+.help-in{padding:24px 28px 26px;position:relative}
+.help-in h2{margin:0 0 4px;font-size:19px;letter-spacing:-.015em}
+.help-in .lead{margin:0 0 18px;color:var(--mut);font-size:14px}
+.help-in h3{margin:18px 0 7px;font-size:12.5px;font-weight:750;color:var(--ink);
+display:flex;align-items:center;gap:8px}
+.help-in h3:before{content:"";width:3px;height:14px;border-radius:2px;
+background:var(--accent)}
+.help-in p{margin:0 0 8px;font-size:14px;color:var(--mut)}
+.help-in code{font:600 12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;
+background:var(--hair);border:1px solid var(--line);border-radius:5px;padding:1px 5px;
+color:var(--accent-ink)}
+.say-list{list-style:none;margin:0;padding:0;display:grid;gap:1px;
+background:var(--line);border:1px solid var(--line);border-radius:10px;
+overflow:hidden}
+.say-list li{background:#fff;padding:8px 12px;display:flex;gap:12px;
+align-items:baseline;font-size:13.5px}
+.say-list .said{flex:none;min-width:186px;font-weight:650;color:var(--accent-ink)}
+.say-list .does{flex:1;min-width:0;color:var(--mut)}
+.help-close{position:absolute;top:14px;right:16px;font:700 13px/1 inherit;
+background:#fff;border:1px solid var(--line);border-radius:7px;padding:6px 10px;
+cursor:pointer;color:var(--mut)}
+.help-close:hover{color:var(--ink);border-color:var(--soft)}
+
+/* The strip under your work: how to close something, in the page, not a manual. */
+.howto{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:0 0 20px;
+padding:11px 15px;border:1px dashed var(--line);border-radius:11px;
+background:rgba(255,255,255,.6);font-size:13px;color:var(--mut)}
+.howto b{color:var(--ink);font-weight:650}
+.howto>span{flex:1;min-width:300px}
+.howto code{font:600 12px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+background:#fff;border:1px solid var(--line);border-radius:5px;padding:2px 6px;
+color:var(--accent-ink);white-space:nowrap}
+.howto .more{margin-left:auto;font:650 12px/1 inherit;background:#fff;
+border:1px solid var(--line);border-radius:7px;padding:6px 11px;cursor:pointer;
+color:var(--accent)}
+.howto .more:hover{border-color:var(--accent-line);background:var(--accent-bg)}
+
+/* Everything moving around TG that is not one of his tickets. */
+.news{overflow:hidden;margin-bottom:18px}
+.news-head{display:flex;gap:10px;align-items:center;padding:12px 17px;
+border-bottom:1px solid var(--line);background:#fbfcfe}
+.news-head h2{margin:0;font-size:13px;font-weight:750;letter-spacing:-.005em}
+.news-head .why{font-size:11.5px;color:var(--soft);margin-left:auto}
+.news ul{list-style:none;margin:0;padding:0}
+.news li{padding:11px 17px;border-bottom:1px solid var(--hair);display:flex;
+gap:12px;align-items:baseline;flex-wrap:wrap}
+.news li:last-child{border-bottom:0}
+.news .n-what{flex:1;min-width:260px;font-size:14px}
+.news .n-what b{font-weight:650}
+.news .n-why{display:block;font-size:13px;color:var(--mut);margin-top:2px}
+.news .n-when{flex:none;font-size:11.5px;color:var(--soft);font-weight:600}
 
 /* Script-only: everything that is not Japanese gets out of the way. */
 body.script-only .sub:not(.script),body.script-only .st-head .pos,
@@ -616,13 +815,98 @@ JS = """
     if(target){e.preventDefault();target.scrollIntoView({behavior:'smooth',block:'start'});
       history.replaceState(null,'',a.getAttribute('href'))}
   });
+  // The finder. Everything on the page is in one index, so a ticket tag, an
+  // item number or a word out of a title all land in the same place.
+  var pal=document.getElementById('pal');
+  var palIn=pal&&pal.querySelector('input');
+  var palList=pal&&pal.querySelector('ul');
+  var index=[];
+  try{index=JSON.parse(document.getElementById('desk-index').textContent)}catch(e){}
+  var hits=[],at=0;
+
+  function jump(row){
+    closePal();
+    if(row.view)show(row.view);
+    var el=document.getElementById(row.id);
+    if(el){el.scrollIntoView({behavior:'smooth',block:'start'});
+      history.replaceState(null,'','#'+row.id)}
+  }
+  function draw(){
+    if(!hits.length){palList.innerHTML='<li class="p-none">Nothing matches</li>';return}
+    palList.innerHTML=hits.map(function(r,i){
+      return '<li role="option" data-i="'+i+'" aria-selected="'+(i===at)+'">'+
+        '<span class="p-tag">'+r.tag+'</span>'+
+        '<span class="p-t">'+r.label+'</span>'+
+        '<span class="p-s">'+(r.sub||'')+'</span></li>';
+    }).join('');
+  }
+  function filter(q){
+    q=(q||'').trim().toLowerCase();
+    hits=q?index.filter(function(r){return r.hay.indexOf(q)>-1}).slice(0,12)
+          :index.slice(0,12);
+    at=0;draw();
+  }
+  function openPal(){
+    if(!pal)return;
+    pal.hidden=false;palIn.value='';filter('');palIn.focus();
+  }
+  function closePal(){if(pal)pal.hidden=true}
+  if(pal){
+    palIn.addEventListener('input',function(){filter(palIn.value)});
+    palIn.addEventListener('keydown',function(e){
+      if(e.key==='ArrowDown'){at=Math.min(at+1,hits.length-1);draw();e.preventDefault()}
+      else if(e.key==='ArrowUp'){at=Math.max(at-1,0);draw();e.preventDefault()}
+      else if(e.key==='Enter'&&hits[at]){jump(hits[at]);e.preventDefault()}
+      else if(e.key==='Escape')closePal();
+    });
+    palList.addEventListener('click',function(e){
+      var li=e.target.closest('li[data-i]');
+      if(li&&hits[li.dataset.i])jump(hits[li.dataset.i]);
+    });
+    pal.addEventListener('click',function(e){if(e.target===pal)closePal()});
+    [].forEach.call(document.querySelectorAll('[data-find]'),function(b){
+      b.addEventListener('click',openPal);
+    });
+  }
+
+  var help=document.getElementById('help');
+  function openHelp(){if(help&&!help.open)help.showModal()}
+  if(help){
+    [].forEach.call(document.querySelectorAll('[data-help]'),function(b){
+      b.addEventListener('click',openHelp);
+    });
+    help.addEventListener('click',function(e){if(e.target===help)help.close()});
+    var x=help.querySelector('.help-close');
+    if(x)x.addEventListener('click',function(){help.close()});
+  }
+
+  // The chip for the ticket you are looking at lights up as you scroll.
+  var chips=[].slice.call(document.querySelectorAll('.jump a[href^="#t-"]'));
+  if(chips.length&&'IntersectionObserver' in window){
+    var seen={};
+    var eye=new IntersectionObserver(function(rows){
+      rows.forEach(function(r){seen[r.target.id]=r.isIntersecting});
+      var live=chips.filter(function(a){return seen[a.getAttribute('href').slice(1)]});
+      chips.forEach(function(a){a.classList.remove('on')});
+      if(live.length)live[0].classList.add('on');
+    },{rootMargin:'-90px 0px -70% 0px'});
+    chips.forEach(function(a){
+      var el=document.getElementById(a.getAttribute('href').slice(1));
+      if(el)eye.observe(el);
+    });
+  }
+
   document.addEventListener('keydown',function(e){
+    if((e.metaKey||e.ctrlKey)&&e.key==='k'){openPal();e.preventDefault();return}
     if(e.metaKey||e.ctrlKey||e.altKey)return;
     var tag=(e.target.tagName||'').toLowerCase();
     if(tag==='input'||tag==='textarea')return;
     if(e.key==='1')show('desk');
     if(e.key==='2')show('standup');
     if(e.key==='s'&&t)t.click();
+    if(e.key==='/'){openPal();e.preventDefault()}
+    if(e.key==='?')openHelp();
+    if(e.key==='Escape')closePal();
   });
   if(tabs.length){
     var start=document.body.dataset.view;
