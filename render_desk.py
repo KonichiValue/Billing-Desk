@@ -35,6 +35,7 @@ from render import (
     script_session,
     sessions,
     tracked,
+    short_when,
     when_words,
 )
 
@@ -205,7 +206,7 @@ border-radius:10px;padding:12px 15px;margin-bottom:10px}
 
 /* Header actions. The one that matters in this view is the bright one. */
 .refresh{border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);
-color:#dce6f5;font:650 12px/1 inherit;padding:8px 13px;border-radius:8px;
+color:#dce6f5;font:650 12px/1 inherit;padding:6px 12px;border-radius:7px;
 cursor:pointer}
 .refresh:hover{background:rgba(255,255,255,.16);color:#fff}
 body[data-view="desk"] #refresh,body[data-view="standup"] #prep{
@@ -736,28 +737,27 @@ def is_stale(stamp: str) -> bool:
 
 def view_tabs(mine: int, has_script: bool, sess: dict) -> str:
     """Two tabs. "My work" and "What I say" name what you get, which "Desk" and
-    "Standup" did not, and the second one carries the room it is written for."""
+    "Standup" did not, and the second one carries the room it is written for.
+
+    All on one line: the header sits above everything he reads all day, so it
+    stays as short as it can while still being the most obvious thing up there.
+    """
     badge = (
         f'<span class="badge">{mine}</span>'
         if mine
         else '<span class="badge quiet">0</span>'
     )
-    when = when_words(sess.get("date", ""), sess.get("at", ""))
-    say_sub = (
-        f'{sess.get("name", "Standup")}, {when}' if when else sess.get("name", "Standup")
-    )
+    when = short_when(sess.get("date", ""), sess.get("at", ""))
+    room = f'{sess.get("name", "Standup")} {when}'.strip()
     alert = "" if has_script else '<span class="badge">!</span>'
     return f"""
   <div class="views" role="tablist" aria-label="Views">
     <button data-view="desk" role="tab" aria-selected="true">
-      <span class="k">1</span>
-      <span><span class="lbl">My work</span><span class="sub">Tickets and items</span></span>
-      {badge}
+      <span class="k">1</span><span class="lbl">My work</span>{badge}
     </button>
     <button data-view="standup" role="tab" aria-selected="false">
-      <span class="k">2</span>
-      <span><span class="lbl">What I say</span><span class="sub">{esc(say_sub)}</span></span>
-      {alert}
+      <span class="k">2</span><span class="lbl">What I say</span>
+      <span class="sub">{esc(room)}</span>{alert}
     </button>
   </div>"""
 

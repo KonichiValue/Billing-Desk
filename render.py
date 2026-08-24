@@ -209,6 +209,21 @@ def when_words(iso: str, at: str = "") -> str:
     return f"{words}, {at}" if at else words
 
 
+def short_when(iso: str, at: str = "") -> str:
+    """The same day in as few characters as a tab can spare: "Wed 10:30"."""
+    if not iso:
+        return ""
+    try:
+        day = date.fromisoformat(iso)
+    except ValueError:
+        return iso
+    left = (day - date.today()).days
+    words = {0: "today", 1: "tomorrow"}.get(left, day.strftime("%a"))
+    if left > 6 or left < 0:
+        words = day.strftime("%-d %b")
+    return f"{words} {at}".strip()
+
+
 def pill(label: str, tone: str) -> str:
     fg, bg, border = TONES.get(tone, TONES["grey"])
     return (
@@ -370,28 +385,29 @@ header.top{position:sticky;top:0;z-index:30;
 background:linear-gradient(180deg,var(--head-2),var(--head));color:#e6ecf7;
 box-shadow:inset 0 -1px 0 rgba(255,255,255,.06),0 4px 16px rgba(9,14,26,.14)}
 /* Wider than the page it sits over: this row is navigation, not prose, and it
-   has to hold the tabs and the buttons without wrapping. */
-.top-in{max-width:1180px;margin:0 auto;padding:9px 20px;display:flex;
-align-items:center;gap:11px;flex-wrap:wrap}
-.brand{display:flex;align-items:center;gap:9px}
-.brand img{width:24px;height:24px;border-radius:7px;display:block}
-.top h1{font-size:13.5px;margin:0;font-weight:650;color:#fff;letter-spacing:-.005em;
+   has to hold the tabs and the buttons without wrapping. One line tall, since
+   every pixel here is taken off the top of what he is actually reading. */
+.top-in{max-width:1180px;margin:0 auto;padding:6px 20px;display:flex;
+align-items:center;gap:10px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:8px}
+.brand img{width:20px;height:20px;border-radius:6px;display:block}
+.top h1{font-size:13px;margin:0;font-weight:650;color:#fff;letter-spacing:-.005em;
 white-space:nowrap}
 .top .date{color:#8a9bb8;font-size:12px;white-space:nowrap}
 /* Hours old means a reply may have landed unseen, which is worth a colour. */
 .top .date.old{color:#f4c27a}
 .top .btn{color:#c9d6ea;border-color:rgba(255,255,255,.16);
-background:rgba(255,255,255,.07);font-size:12px;padding:6px 10px}
+background:rgba(255,255,255,.07);font-size:12px;padding:4px 9px}
 .top .btn:hover{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.28);
 color:#fff}
 .acts{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
 justify-content:flex-end}
 #countdown{font-variant-numeric:tabular-nums;font-weight:650;font-size:12.5px;
-padding:6px 11px;border-radius:8px;color:#dae4f5;background:rgba(255,255,255,.09);
+padding:4px 10px;border-radius:7px;color:#dae4f5;background:rgba(255,255,255,.09);
 border:1px solid rgba(255,255,255,.14)}
 #countdown:empty{display:none}
 #countdown.soon{background:#fee4e2;border-color:#fda29b;color:#912018}
-.toggle{font:600 12px/1 inherit;padding:7px 11px;border-radius:8px;
+.toggle{font:600 12px/1 inherit;padding:5px 10px;border-radius:7px;
 border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.07);
 cursor:pointer;color:#c9d6ea}
 .toggle:hover{background:rgba(255,255,255,.14);color:#fff}
@@ -400,22 +416,24 @@ cursor:pointer;color:#c9d6ea}
 body[data-view="desk"] #scriptonly{display:none}
 
 /* Two views, one page. Big target, live count, and the key that switches it. */
-.views{display:flex;gap:4px;padding:4px;background:rgba(255,255,255,.08);
-border:1px solid rgba(255,255,255,.10);border-radius:12px}
-.views button{display:flex;align-items:center;gap:9px;font:inherit;padding:7px 13px;
-border:0;border-radius:9px;background:none;color:#a9b8d2;cursor:pointer;
-text-align:left}
+.views{display:flex;gap:3px;padding:3px;background:rgba(255,255,255,.08);
+border:1px solid rgba(255,255,255,.10);border-radius:10px}
+.views button{display:flex;align-items:center;gap:7px;font:inherit;padding:5px 11px;
+border:0;border-radius:8px;background:none;color:#a9b8d2;cursor:pointer;
+text-align:left;white-space:nowrap}
 .views button:hover{color:#fff;background:rgba(255,255,255,.07)}
 .views button[aria-selected="true"]{background:#fff;color:#0d1524;
 box-shadow:0 1px 3px rgba(9,14,26,.4)}
-.views .lbl{display:block;font-size:13.5px;font-weight:650;letter-spacing:-.005em}
-.views .sub{display:block;font-size:10.5px;font-weight:550;letter-spacing:.04em;
-text-transform:uppercase;opacity:.7;margin-top:2px}
-.views .k{flex:none;font:700 10px/15px inherit;min-width:15px;text-align:center;
+.views .lbl{font-size:13px;font-weight:650;letter-spacing:-.005em}
+/* The room this script is for, alongside the label rather than under it, so the
+   whole bar stays one line tall. */
+.views .sub{font-size:11.5px;font-weight:550;opacity:.62;padding-left:7px;
+border-left:1px solid currentColor}
+.views .k{flex:none;font:700 10px/14px inherit;min-width:14px;text-align:center;
 border-radius:4px;background:rgba(255,255,255,.13);color:#c2cee3}
 .views button[aria-selected="true"] .k{background:#eef1f6;color:#6b7789}
-.views .badge{flex:none;min-width:19px;padding:0 6px;border-radius:10px;
-background:#e0483b;color:#fff;font:700 11px/19px inherit;text-align:center}
+.views .badge{flex:none;min-width:18px;padding:0 5px;border-radius:9px;
+background:#e0483b;color:#fff;font:700 10.5px/18px inherit;text-align:center}
 .views button[aria-selected="true"] .badge{background:var(--red);color:#fff}
 .views .badge.quiet{background:rgba(255,255,255,.16);color:#dbe4f2}
 body[data-view="desk"] #view-standup,body[data-view="standup"] #view-desk{display:none}

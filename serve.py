@@ -38,22 +38,38 @@ job_lock = threading.Lock()
 
 BOARD = ROOT / "state" / "board.json"
 
+def icon_src(name: str) -> str:
+    """The icon path with the file's own timestamp on it.
+
+    Chrome caches an installed app's icon against the URL it was fetched from,
+    so an icon redrawn at the same path never reaches the Dock. Moving the URL
+    whenever the file changes is what makes a redraw actually show up.
+    """
+    icon = ROOT / "app" / name
+    stamp = int(icon.stat().st_mtime) if icon.exists() else 0
+    return f"/{name}?v={stamp}"
+
+
 # Chrome reads this when you install the page as an app, and takes the Dock icon
-# from it. Without it the installed app wears the Chrome logo.
-MANIFEST = {
-    "name": "Billing Desk",
-    "short_name": "Desk",
-    "description": "Every open billing ticket, what is left to do, and what to say.",
-    "start_url": "/",
-    "scope": "/",
-    "display": "standalone",
-    "background_color": "#f4f6fa",
-    "theme_color": "#0d1524",
-    "icons": [
-        {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
-        {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
-    ],
-}
+# from it. Without it the installed app wears the Chrome logo. Built per request,
+# so redrawing the icon is enough: nothing has to remember to restart the server.
+def manifest() -> dict:
+    return {
+        "name": "Billing Desk",
+        "short_name": "Desk",
+        "description": "Every open billing ticket, what is left to do, and what to say.",
+        "start_url": "/",
+        "scope": "/",
+        "display": "standalone",
+        "background_color": "#f4f6fa",
+        "theme_color": "#0d1524",
+        "icons": [
+            {"src": icon_src("icon-192.png"), "sizes": "192x192",
+             "type": "image/png", "purpose": "any"},
+            {"src": icon_src("icon-512.png"), "sizes": "512x512",
+             "type": "image/png", "purpose": "any"},
+        ],
+    }
 
 
 def rebuild() -> str:
@@ -306,7 +322,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.json_out(200, dict(job))
             return
         if path == "/manifest.webmanifest":
-            self.send(200, json.dumps(MANIFEST).encode(), "application/manifest+json")
+            self.send(200, json.dumps(manifest()).encode(), "application/manifest+json")
             return
         if path in ("/icon-192.png", "/icon-512.png", "/favicon.ico"):
             name = {"/favicon.ico": "icon-192.png"}.get(path, path.lstrip("/"))
