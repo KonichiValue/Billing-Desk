@@ -104,6 +104,15 @@ ticket numbering. So:
 - Name people the way that thread names them. "Fukutaro raised above" works when
   he posted in that thread. "Heqing asked TG" needs to become what TG said or
   what is still pending, because they cannot see the asking.
+- Check the person's side before you name them. Sagayama and Nakayama are Kraken,
+  Tanaka and Komiyama are TG, and a draft that puts someone on the wrong side of
+  that line is unsendable. Read the email domain in the Slack profile or the
+  Asana member list rather than guessing from the name.
+- Before you tell someone their objection is answered, reread the objection.
+  Sagayama's Friday comment raised two things, categories 1 and 2 and the 01
+  mismatch in pattern #3, and TG only answered the first. Say which half is
+  covered and name the half still open. Closing a live question on his behalf is
+  worse than saying nothing.
 - Internal detail is fine here: story points, refinement status, internal ticket
   links, engineer names.
 

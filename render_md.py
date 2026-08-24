@@ -30,6 +30,12 @@ def block(title: str, rows: list[str]) -> list[str]:
     return [f"### {title}", "", *rows, ""] if rows else []
 
 
+def first_sentence(text: str) -> str:
+    """One sentence, for table cells. The rest of the why sits under the action."""
+    head = text.split(". ")[0].strip()
+    return head if head.endswith(".") else f"{head}."
+
+
 def render_draft(d: dict, indent: str = "") -> list[str]:
     if not d:
         return []
@@ -215,7 +221,8 @@ def render(data: dict) -> str:
             )
             out.append(
                 f"| {a.get('rank', '')} | {ref} | {a.get('title', '')} | "
-                f"{a.get('why', '')} | {state} | {a.get('est_minutes', '')} |"
+                f"{first_sentence(a.get('why', ''))} | {state} | "
+                f"{a.get('est_minutes', '')} |"
             )
         out.append("")
 
