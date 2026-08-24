@@ -382,6 +382,12 @@ every claim to the thing that prompted it, so nobody has to scroll to work out
 which sentence belongs to which question, and it makes an unanswered point
 visible instead of quietly dropped.
 
+Quote only the words the person you are writing to wrote themselves. A block
+holding two people's lines, or Rei's own line above their answer to it, leaves
+the reader working out who said what before they can read the reply. If their
+line only makes sense with the thing it answered, say that in your own sentence
+underneath rather than stacking a second quote above it.
+
 Quote the words that were actually written, trimmed to the clause that carries
 the question. Never paraphrase inside a quote. Two or three quoted points is the
 ceiling for one message; beyond that, answer the important ones and say the rest
