@@ -162,6 +162,12 @@ letter-spacing:.08em;color:#b54708}
 flex-wrap:wrap;background:#fcfcfc;border-bottom:1px solid var(--line)}
 .act-rank{width:24px;height:24px;flex:none;border-radius:6px;background:var(--ink);
 color:#fff;display:grid;place-items:center;font-size:12px;font-weight:650}
+.refresh{margin-left:10px;border:1px solid #2f4666;background:#152741;color:#dce6f5;
+font:600 12.5px/1 ui-sans-serif,system-ui;padding:8px 14px;border-radius:8px;cursor:pointer}
+.refresh:hover{background:#1c3355}
+.refresh:disabled{opacity:.55;cursor:default}
+.refresh-note{margin-left:10px;font-size:12px;color:#93a4bd;max-width:320px}
+.refresh-note.bad{color:#f4a3a3}
 .act-title{flex:1;min-width:0;font-weight:600;font-size:15.5px}
 .act-sub{display:block;font-size:12.5px;font-weight:400;color:var(--soft);
 margin-top:2px}
@@ -543,6 +549,47 @@ def shell(title: str, body: str) -> str:
 <script>{JS}</script></body></html>"""
 
 
+# The button only appears when serve.py is behind the page, because a file://
+# page has nothing to send the click to. serve.py swaps the key in as it serves.
+REFRESH_BUTTON = """
+  <button id="refresh" class="refresh" hidden>Refresh</button>
+  <span id="refresh-note" class="refresh-note"></span>
+<script>
+(function () {
+  var key = "__DESK_KEY__";
+  if (location.protocol !== "http:" || key.indexOf("DESK_KEY") > -1) return;
+  var btn = document.getElementById("refresh");
+  var note = document.getElementById("refresh-note");
+  btn.hidden = false;
+
+  function say(text, tone) {
+    note.textContent = text || "";
+    note.className = "refresh-note" + (tone ? " " + tone : "");
+  }
+
+  function poll() {
+    fetch("/api/status").then(function (r) { return r.json(); }).then(function (s) {
+      if (s.state === "running") { say(s.message + "\\u2026"); setTimeout(poll, 2000); return; }
+      if (s.state === "done") { say("Refreshed, reloading"); location.reload(); return; }
+      if (s.state === "failed") { btn.disabled = false; btn.textContent = "Refresh"; say(s.message, "bad"); return; }
+      btn.disabled = false; btn.textContent = "Refresh"; say(s.message);
+    });
+  }
+
+  btn.addEventListener("click", function () {
+    btn.disabled = true;
+    btn.textContent = "Refreshing";
+    say("Starting\\u2026");
+    fetch("/api/refresh?k=" + encodeURIComponent(key), { method: "POST" })
+      .then(poll)
+      .catch(function () { btn.disabled = false; btn.textContent = "Refresh"; say("could not reach the desk server", "bad"); });
+  });
+
+  poll();
+})();
+</script>"""
+
+
 def render(data: dict) -> str:
     global PROGRESS
     meeting_date = data.get("meeting_date") or date.today().isoformat()
@@ -618,6 +665,7 @@ def render(data: dict) -> str:
   <h1>After the TG billing standup</h1>
   <span class="date">{esc(pretty)}</span>
   <span style="margin-left:auto">{link_btn(data.get("notion_url", ""), "Meeting note")}</span>
+  {REFRESH_BUTTON}
 </div></header>
 <div class="wrap">
   <div class="headline"><p>{esc(data.get("headline"))}</p></div>

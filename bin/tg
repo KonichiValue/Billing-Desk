@@ -10,6 +10,7 @@
 #   tg refresh          go and see what moved, rebuild, open
 #   tg chat             open the folder in Cursor to hand work over
 #   tg build            full rebuild from the Notion meeting note
+#   tg stop             shut the local page server down
 #
 # Anything numeric goes straight to tick.py, so the numbers you see on the page
 # are the numbers you type.
@@ -28,16 +29,52 @@ latest() {
   [[ ${#f} -gt 0 ]] && print -r -- "${f[-1]}"
 }
 
+PORT="${TG_DESK_PORT:-8787}"
+CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+
+serve_url() {
+  # The server renders the page on every load and gives the Refresh button
+  # somewhere to send its click. Start it once, reuse it after that.
+  local health
+  health="$(curl -fsS --max-time 2 "http://127.0.0.1:$PORT/health" 2>/dev/null)" || {
+    mkdir -p logs
+    nohup python3 serve.py --port "$PORT" >>logs/serve.log 2>&1 &
+    for _ in {1..25}; do
+      sleep 0.2
+      health="$(curl -fsS --max-time 2 "http://127.0.0.1:$PORT/health" 2>/dev/null)" && break
+    done
+  }
+  [[ -n "$health" ]] || return 1
+  local key="${${health##*\"key\": \"}%%\"*}"
+  print -r -- "http://127.0.0.1:$PORT/?k=$key"
+}
+
 page() {
   local json="$(latest)"
   [[ -n "$json" ]] || { print -u2 "no list built yet, run: tg build"; return 1 }
-  local html="${json:r}.html"
-  # Rebuild first, so a page opened three hours later still shows the truth.
-  python3 render_post.py "$json" "$html" >/dev/null || return 1
-  python3 render_md.py "$json" "${json:r}.md" >/dev/null
   local built="${${json:t:r}#post-}"
   [[ "$built" == "$(date +%Y-%m-%d)" ]] || print -r -- "Showing $built, no list for today yet."
-  open "$html"
+
+  local url
+  if url="$(serve_url)"; then
+    # Its own window, no tabs and no address bar, like a real app.
+    if [[ -x "$CHROME" ]]; then
+      "$CHROME" --app="$url" --window-size=1180,900 >/dev/null 2>&1 &
+      return 0
+    fi
+    open "$url"
+    return 0
+  fi
+
+  print -u2 "desk server would not start, opening the file instead"
+  python3 render_post.py "$json" "${json:r}.html" >/dev/null || return 1
+  python3 render_md.py "$json" "${json:r}.md" >/dev/null
+  open "${json:r}.html"
+}
+
+stop_server() {
+  pkill -f "serve.py --port $PORT" && print -r -- "stopped the desk server" \
+    || print -r -- "no desk server running"
 }
 
 case "${1:-}" in
@@ -54,6 +91,7 @@ case "${1:-}" in
       "$(cat prompt-refresh.md)" || exit 1
     page ;;
   chat)          open -a Cursor "$REPO" ;;
+  stop)          stop_server ;;
   build)         ./run_post.sh --force ;;
   prep)          ./run_prep.sh ;;
   open)          page ;;

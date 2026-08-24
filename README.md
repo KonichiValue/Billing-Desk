@@ -92,8 +92,17 @@ Run `./install.sh` once. It puts **TG Billing Desk** in `~/Applications`, which 
 drag to the Dock, and links `tg` into `~/.local/bin`. Both point at this
 checkout, so pulling changes updates them; rerun it after any change to `bin/tg`.
 
-Clicking the Dock icon rebuilds the page from the current state and opens it, so
-what you see at four in the afternoon reflects everything you have ticked off.
+Clicking the Dock icon opens the desk in its own window, no tabs and no address
+bar. Behind it, `serve.py` runs on `127.0.0.1:8787` and renders the page on every
+load, so what you see at four in the afternoon reflects everything you have
+ticked off. It starts on first use and stays up; `tg stop` ends it.
+
+That server is also what makes the **Refresh** button in the page header work. It
+runs the same routine as `tg refresh`: the button asks the server, the server
+runs the agent, the page reports progress and reloads itself when the work
+lands. If `cursor-agent` is not logged in, the button says so rather than
+failing quietly. Opening the HTML file directly still works and simply has no
+button, since a `file://` page has nothing to send the click to.
 
 ```
 tg              open the page, print where everything sits
@@ -198,6 +207,11 @@ If the agent is not confident about the date it writes nothing and flags it in
 | `render_post.py` | Post-standup JSON into HTML. Imports the shared styling from `render.py`. |
 | `render_md.py` | Post-standup JSON into markdown, for handing work back in chat. |
 | `tick.py` | Close actions and rebuild both pages. The only way progress gets recorded. |
+| `serve.py` | The local page server: renders on every load, and runs the agent when the Refresh button asks. Loopback only, keyed. |
+| `bin/tg` | The one command. Opens the window, moves actions along, starts a refresh. |
+| `install.sh` | Links `tg` and builds the Dock app. Safe to rerun. |
+| `prompt-refresh.md` | What "refresh" means, for the button and for a chat alike. |
+| `app/` | The icon generator and the Tokyo Gas mark. The Kraken mark is read from `~/Projects/kraken-core` at build time. |
 | `run_prep.sh` | Morning entry point. Guards, skip check, timeout, error page. |
 | `run_post.sh` | Afternoon entry point. Polls for the Notion note. |
 | `launchd/` | The two schedules. |

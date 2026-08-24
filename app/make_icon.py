@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Draw the Dock icon: the Kraken mark over a TG wordmark, on a dark tile.
+"""Draw the Dock icon: the Kraken mark over the Tokyo Gas mark, on a dark tile.
 
 Standard library only, so it survives a fresh laptop. Everything is drawn at
 double size and averaged down, which is enough anti-aliasing for an icon. The
@@ -19,19 +19,19 @@ SS = 2
 W = SIZE * SS
 
 KRAKEN_LOGO = Path.home() / "Projects/kraken-core/docs/_static/logo.png"
+TG_LOGO = Path(__file__).resolve().parent / "tg-logo.png"
 
 INK = (10, 17, 30)
 INK_TOP = (30, 47, 76)
-TG_RED = (227, 24, 45)
-PAPER = (245, 247, 251)
 
 
 def load_png(path: Path) -> tuple[int, int, list[list[tuple[int, int, int, int]]]]:
-    """Minimal 8-bit RGBA PNG reader: enough for one known logo file."""
+    """Minimal 8-bit PNG reader, RGB or RGBA, enough for the two logo files."""
     blob = path.read_bytes()
     w, h, depth, colour, _, _, interlace = struct.unpack(">IIBBBBB", blob[16:29])
-    if (depth, colour, interlace) != (8, 6, 0):
-        raise ValueError(f"{path} is not an 8-bit non-interlaced RGBA png")
+    if depth != 8 or interlace or colour not in (2, 6):
+        raise ValueError(f"{path} is not an 8-bit non-interlaced RGB(A) png")
+    channels = 4 if colour == 6 else 3
 
     idat = bytearray()
     i = 8
@@ -43,7 +43,7 @@ def load_png(path: Path) -> tuple[int, int, list[list[tuple[int, int, int, int]]
         i += 12 + length
 
     raw = zlib.decompress(bytes(idat))
-    stride = w * 4
+    stride = w * channels
     out: list[list[tuple[int, int, int, int]]] = []
     prev = bytearray(stride)
     pos = 0
@@ -52,9 +52,9 @@ def load_png(path: Path) -> tuple[int, int, list[list[tuple[int, int, int, int]]
         line = bytearray(raw[pos + 1 : pos + 1 + stride])
         pos += 1 + stride
         for x in range(stride):
-            a = line[x - 4] if x >= 4 else 0
+            a = line[x - channels] if x >= channels else 0
             b = prev[x]
-            c = prev[x - 4] if x >= 4 else 0
+            c = prev[x - channels] if x >= channels else 0
             if filt == 1:
                 line[x] = (line[x] + a) & 0xFF
             elif filt == 2:
@@ -66,9 +66,31 @@ def load_png(path: Path) -> tuple[int, int, list[list[tuple[int, int, int, int]]
                 pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
                 pred = a if (pa <= pb and pa <= pc) else (b if pb <= pc else c)
                 line[x] = (line[x] + pred) & 0xFF
-        out.append([tuple(line[x : x + 4]) for x in range(0, stride, 4)])
+        row = []
+        for x in range(0, stride, channels):
+            px = tuple(line[x : x + channels])
+            row.append(px if channels == 4 else (*px, 255))
+        out.append(row)
         prev = line
     return w, h, out
+
+
+def key_black(img, threshold: int = 42):
+    """The TG mark arrives on black. Drop the black, keep the mark."""
+    for row in img:
+        for x, (r, g, b, a) in enumerate(row):
+            if max(r, g, b) < threshold:
+                row[x] = (r, g, b, 0)
+    return img
+
+
+def crop_to_content(img, w: int, h: int):
+    xs = [x for y in range(h) for x in range(w) if img[y][x][3] > 8]
+    ys = [y for y in range(h) for x in range(w) if img[y][x][3] > 8]
+    if not xs:
+        return w, h, img
+    x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
+    return x1 - x0 + 1, y1 - y0 + 1, [row[x0 : x1 + 1] for row in img[y0 : y1 + 1]]
 
 
 def sample(src, sw: int, sh: int, u: float, v: float) -> tuple[int, int, int, int]:
@@ -126,20 +148,16 @@ def letter_g(x: float, y: float, w: float, h: float, t: float):
 def draw() -> list[list[tuple[int, int, int, int]]]:
     body = rounded(0, 0, W, W, W * 0.225)
 
-    sw, sh, logo = load_png(KRAKEN_LOGO)
-    lw = W * 0.55
-    lh = lw * sh / sw
-    lx, ly = (W - lw) / 2, W * 0.115
+    kw, kh, kraken = load_png(KRAKEN_LOGO)
+    tw, th, tg = load_png(TG_LOGO)
+    tw, th, tg = crop_to_content(key_black(tg), tw, th)
 
-    glyph_h = W * 0.150
-    glyph_w = glyph_h * 0.82
-    stroke = glyph_h * 0.235
-    gap = glyph_h * 0.18
-    tx = (W - (glyph_w * 2 + gap)) / 2
-    ty = W * 0.665
-    tee = letter_t(tx, ty, glyph_w, glyph_h, stroke)
-    gee = letter_g(tx + glyph_w + gap, ty, glyph_w, glyph_h, stroke)
-    rule = rounded(W * 0.355, W * 0.862, W * 0.29, W * 0.028, W * 0.014)
+    marks = []
+    kwidth = W * 0.50
+    marks.append((kraken, kw, kh, (W - kwidth) / 2, W * 0.10, kwidth, kwidth * kh / kw))
+    theight = W * 0.275
+    twidth = theight * tw / th
+    marks.append((tg, tw, th, (W - twidth) / 2, W * 0.585, twidth, theight))
 
     px = []
     for py in range(W):
@@ -150,17 +168,14 @@ def draw() -> list[list[tuple[int, int, int, int]]]:
                 continue
             t = py / W
             colour = tuple(int(a + (b - a) * t) for a, b in zip(INK_TOP, INK))
-            if lx <= pxx < lx + lw and ly <= py < ly + lh:
-                r, g, b, a = sample(logo, sw, sh, (pxx - lx) / lw, (py - ly) / lh)
-                if a:
-                    colour = tuple(
-                        int(c * (255 - a) / 255 + s * a / 255)
-                        for c, s in zip(colour, (r, g, b))
-                    )
-            if tee(pxx, py) or gee(pxx, py):
-                colour = PAPER
-            elif rule(pxx, py):
-                colour = TG_RED
+            for img, sw, sh, x, y, w, h in marks:
+                if x <= pxx < x + w and y <= py < y + h:
+                    r, g, b, a = sample(img, sw, sh, (pxx - x) / w, (py - y) / h)
+                    if a:
+                        colour = tuple(
+                            int(c * (255 - a) / 255 + s * a / 255)
+                            for c, s in zip(colour, (r, g, b))
+                        )
             row.append((*colour, 255))
         px.append(row)
     return px
