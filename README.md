@@ -85,6 +85,20 @@ Every action has one number, unique across the page, and the running order is
 built from those numbers rather than written separately. So "do 4" always means
 the same thing, and the table and the ticket sections cannot disagree.
 
+## Refreshing during the day
+
+Type `refresh` into a chat opened on this folder. The assistant re-reads the
+Asana comments and Slack threads behind the open actions, adds what it finds to
+each ticket's timeline, moves the actions the replies affect, and rebuilds both
+pages. `AGENTS.md` defines exactly what that word means, so every model does the
+same thing with it.
+
+Two things it deliberately does not do: reopen closed actions, and start again
+from scratch. For a clean rebuild from the meeting note, run `./run_post.sh
+--force`, which throws away the day's hand edits.
+
+For status alone, `./tick.py` prints where everything sits and costs nothing.
+
 ## Keeping the list honest
 
 An action is with you, with somebody else, or finished. Sending a message

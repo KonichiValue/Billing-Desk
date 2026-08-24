@@ -31,6 +31,35 @@ because the context is in the file:
   the `threads` links if the answer is not there. Say plainly when the file is
   stale rather than guessing.
 
+## "refresh"
+
+One word, in a chat opened on this folder. It means: go and see what has moved
+since the page was last built, then rebuild it. Do this and nothing else.
+
+1. Read `output/post-<today>.json` and `state/progress-<today>.json` to see
+   where each action sits and when the last timeline entry was written.
+2. Check only what the open actions point at: new Asana comments on those
+   tickets, new replies in the Slack threads listed under `threads`, and the
+   internal build ticket for anything TG is waiting on. Closed actions stay
+   closed; do not go back over them.
+3. Add anything new to that ticket's `changed_today` as timeline entries, in
+   time order, including messages Rei sent himself.
+4. Move the actions the replies affect. An answer to something he sent comes
+   back on the same number, with the draft rewritten and a `progress_note`.
+   Genuinely new work takes the next free number. Something now unblocked loses
+   its `hold`.
+5. Rebuild with `python3 render_post.py` and `python3 render_md.py`, then open
+   the HTML.
+6. Report only what changed since the last build, in a few lines. If nothing
+   moved, say so in one line rather than restating the list.
+
+`./tick.py` on its own prints the same status without spending a single token,
+so use that when he only wants to know where he is.
+
+The unattended full rebuild, which starts again from the Notion meeting note, is
+`./run_post.sh --force` in the terminal. It needs `cursor-agent login` once and
+it discards the day's hand edits, so prefer "refresh" during the day.
+
 ## When Rei says he has done something
 
 Run `./tick.py` and nothing else. It records the state in
