@@ -43,6 +43,29 @@ onboarding or training tasks). These are not TG tickets.
 If zero tickets come back, still write the JSON with an empty `tickets` array
 and set `headline` to say there is nothing open. Do not fail.
 
+### Ticket order matters
+
+The standup works down the 2-week cycle board in the order the cards appear on
+screen, so the page must present tickets in that same order. Rei follows along
+with it live.
+
+Call `get_tasks` with `section: "1212703668929156"` (This Cycle's Priority) and
+`limit: 60`. That endpoint returns tasks in board order. Find Rei's tickets in
+that list and use their positions.
+
+Set `order` on each ticket to 1, 2, 3 by board position, and `board_position` to
+a human string like `"1 of 14 on the board"` so Rei knows roughly when he is up.
+
+If the section GID has changed because a new cycle started, find the current
+"This Cycle's Priority" section on project `1209230965235758` and use that.
+
+### Ticket labels
+
+Do not label tickets T1, T2, T3. Those mean nothing to a reader. Set `ref` to a
+short Japanese tag taken from how the team actually refers to the ticket, for
+example `託送HOLD`, `請求未発行`, `保安閉栓`. Four to six characters. Use the same
+tag in `action_board[].ticket_ref` so the two line up.
+
 ## Step 2: read each ticket properly
 
 For every ticket, call `get_task` for the full description and custom fields,
@@ -102,6 +125,13 @@ dataset: instructions, corrections, and answers that never reach Asana. Anything
 he said in the last 24 hours matters more than almost anything else you will
 find.
 
+**Always read refinement threads in full.** When Rei has posted a refinement
+request in `#client-eng-jpn-refinement` (`C09NZHG077Y`), open the whole thread
+with `slack_read_thread` (it needs `channel_id` and `message_ts`). Objections
+from Markets, Ops and other teams land in those replies and almost never reach
+the Asana ticket. A scope challenge sitting in a thread reply is exactly the
+kind of thing that ambushes Rei at standup.
+
 Use the channel hints in `config.json` to recognise which results matter, not to
 limit the search. Prioritise anything from the last 14 days.
 
@@ -145,11 +175,34 @@ Cover, in this order, skipping any section that does not apply:
 
 Style:
 - N2 level, ですます form. Business-polite but plain.
-- One idea per line. Aim for under 30 characters per line. Two short lines
+- One idea per line. Aim for **under 20 characters** per line. Two short lines
   always beat one long one.
+- **Cut every word that is not load-bearing.** Rei is scanning this at speed
+  before he speaks. Drop お疲れ様です, ありがとうございます and similar padding, or
+  keep at most one instance in the whole script. Never write a line that only
+  restates the previous line in different words.
+- Lead each block with the noun, not the wind-up. 「請求未発行の恒久対応です。」
+  beats 「請求未発行の恒久対応について、お話しさせていただきたいと思います。」
+- Three to five lines per block. At most four blocks per ticket.
 - No English loanwords where a normal Japanese term exists.
 - Rei will read these aloud verbatim, so they must be natural spoken Japanese,
   not written report style.
+
+### Do not manufacture asks
+
+If Rei genuinely needs nothing from TG on a ticket, say so and stop. Set
+`tg_ask_needed` to `false`, leave `open_questions` empty, and give that ticket a
+`現状` block of two to four lines and nothing else. A ticket sitting with Kraken
+engineering with no open TG question is a perfectly good thing to report in one
+breath.
+
+Never invent a question just to fill the 質問 block. A weak question wastes
+standup time and makes Rei look like he has not read his own ticket.
+
+Where a delivery estimate exists **and has already been shared with TG**, put it
+in `estimate` as a short string. Never surface internal sizing, story points or
+queue position this way. If no estimate has been agreed, leave it out rather
+than hedging about timing.
 
 **Furigana markup.** Wrap any kanji word above N3 difficulty as
 `{漢字|かんじ}`. The reading goes on the whole word, not per character. Common
@@ -198,7 +251,7 @@ Write `output/prep-<YYYY-MM-DD>.json` using today's date in JST.
   "action_board": [
     {
       "rank": 1,
-      "ticket_ref": "T1",
+      "ticket_ref": "The ticket's short tag, e.g. 請求未発行",
       "action": "Imperative, under 12 words.",
       "where": "Asana | Slack #channel-name | Standup (verbal) | Offline",
       "link": "Direct URL to the message or ticket. Empty string if none.",
@@ -209,7 +262,9 @@ Write `output/prep-<YYYY-MM-DD>.json` using today's date in JST.
   ],
   "tickets": [
     {
-      "ref": "T1",
+      "ref": "Short Japanese tag, 4 to 6 characters, e.g. 請求未発行",
+      "order": 1,
+      "board_position": "1 of 14 on the board",
       "title_ja": "Exact Asana task title.",
       "title_en": "Short English title, under 10 words.",
       "asana_url": "permalink_url from Asana",
@@ -218,6 +273,8 @@ Write `output/prep-<YYYY-MM-DD>.json` using today's date in JST.
       "status_label": "Waiting on TG | Waiting on Kraken | Action on Rei | In progress | Monitoring",
       "status_tone": "red | amber | green | grey",
       "days_since_activity": 3,
+      "tg_ask_needed": true,
+      "estimate": "Only if already agreed with TG. Otherwise omit.",
       "the_issue": [
         "2 to 3 bullets. Plain English, no jargon, no Japanese.",
         "Someone who has never seen this ticket should understand it here."
@@ -274,5 +331,8 @@ Write `output/prep-<YYYY-MM-DD>.json` using today's date in JST.
 }
 ```
 
-Order `tickets` to match `action_board` ranking. Use `ref` values T1, T2, T3 and
-keep them consistent between the two arrays.
+The two arrays are ordered on different principles, deliberately.
+`action_board` is ranked by urgency, because that is what Rei does first.
+`tickets` follows the 2-week cycle board order, because that is the order the
+meeting walks through them. Keep the `ref` tags consistent between the two so he
+can jump from one to the other.

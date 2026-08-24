@@ -196,7 +196,7 @@ def render_drafts(drafts: list[dict]) -> str:
       </details>"""
 
 
-def render_ticket(t: dict, index: int) -> str:
+def render_ticket(t: dict) -> str:
     issue = "".join(f"<li>{esc(b)}</li>" for b in t.get("the_issue", []))
     unknowns = t.get("unknowns", [])
     unknown_block = ""
@@ -230,17 +230,21 @@ def render_ticket(t: dict, index: int) -> str:
         else ""
     )
 
+    estimate = (
+        f'<span class="est">{esc(t.get("estimate"))}</span>' if t.get("estimate") else ""
+    )
+
     return f"""
-    <article class="ticket" id="{esc(t.get("ref", f"T{index}"))}">
+    <article class="ticket" id="{esc(t.get("ref"))}">
       <header class="t-head">
-        <div class="t-ref">{esc(t.get("ref"))}</div>
+        <div class="t-ref">{esc(t.get("order", "?"))}</div>
         <div class="t-titles">
-          <h2>{esc(t.get("title_en"))}</h2>
+          <h2><span class="tag">{esc(t.get("ref"))}</span>{esc(t.get("title_en"))}</h2>
           <p class="t-ja">{esc(t.get("title_ja"))}</p>
           <p class="t-meta">
             {pill(t.get("status_label", "-"), t.get("status_tone", "grey"))}
-            <span>{esc(t.get("project"))}</span>
-            {f'<span>{esc(t.get("section"))}</span>' if t.get("section") else ""}
+            {f'<span>{esc(t.get("board_position"))}</span>' if t.get("board_position") else ""}
+            {estimate}
             {stale}
           </p>
         </div>
@@ -266,6 +270,7 @@ def render_ticket(t: dict, index: int) -> str:
 
       <section class="sub script">
         <h3>What I say today</h3>
+        {'<p class="noask">Nothing needed from TG on this one. Status only.</p>' if t.get("tg_ask_needed") is False else ""}
         {render_script(t.get("jp_script", []))}
       </section>
 
@@ -328,7 +333,13 @@ border-bottom:1px solid var(--line);margin-bottom:4px}
 .t-ref{width:30px;height:30px;flex:none;border-radius:8px;background:var(--accent-bg);
 color:var(--accent);display:grid;place-items:center;font-size:13px;font-weight:700}
 .t-titles{flex:1;min-width:0}
-.t-titles h2{margin:0;font-size:19px;letter-spacing:-.015em;line-height:1.3}
+.t-titles h2{margin:0;font-size:19px;letter-spacing:-.015em;line-height:1.35}
+.tag{display:inline-block;font-size:12.5px;font-weight:650;padding:2px 8px;
+border-radius:6px;background:#f2f4f7;color:var(--mut);margin-right:9px;
+vertical-align:2px;letter-spacing:0}
+.est{color:#067647;font-weight:600}
+.noask{margin:0 0 13px;padding:9px 13px;background:#ecfdf3;border:1px solid #abefc6;
+border-radius:8px;color:#067647;font-size:14.5px;font-weight:550}
 .t-ja{margin:3px 0 0;color:var(--mut);font-size:14px}
 .t-meta{margin:9px 0 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap;
 font-size:12.5px;color:var(--soft)}
@@ -453,8 +464,8 @@ def render(data: dict) -> str:
     except ValueError:
         pretty = meeting_date
 
-    tickets = data.get("tickets", [])
-    cards = "".join(render_ticket(t, i + 1) for i, t in enumerate(tickets))
+    tickets = sorted(data.get("tickets", []), key=lambda t: t.get("order", 99))
+    cards = "".join(render_ticket(t) for t in tickets)
 
     gaps = data.get("gaps", [])
     gap_block = ""
@@ -475,7 +486,7 @@ def render(data: dict) -> str:
     <h2 class="board-h">Do first</h2>
     {render_action_board(data.get("action_board", []))}
   </div>
-  <h2 class="tickets-h">{len(tickets)} open ticket{"s" if len(tickets) != 1 else ""}</h2>
+  <h2 class="tickets-h">{len(tickets)} open ticket{"s" if len(tickets) != 1 else ""}, in the order they come up on the board</h2>
   {cards}
   {gap_block}
   <p class="foot">Generated {esc(data.get("generated_at"))}</p>
