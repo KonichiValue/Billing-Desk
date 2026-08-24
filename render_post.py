@@ -115,6 +115,25 @@ letter-spacing:.06em;margin-right:8px}
 .closed{margin:0 0 11px;font-size:14px;color:#067647}
 .closed b{display:inline-block;font-size:11px;text-transform:uppercase;
 letter-spacing:.05em;margin-right:8px}
+.ev-start{margin:0 0 13px;font-size:14.5px;color:var(--mut)}
+.ev-start b{display:block;font-size:11px;text-transform:uppercase;
+letter-spacing:.07em;color:var(--soft);margin-bottom:2px}
+.evs{list-style:none;margin:0;padding:0;position:relative}
+.evs:before{content:"";position:absolute;left:44px;top:6px;bottom:10px;width:2px;
+background:var(--line)}
+.ev{display:flex;gap:16px;padding:0 0 15px;position:relative}
+.ev:last-child{padding-bottom:0}
+.ev-at{flex:none;width:36px;text-align:right;font-size:12.5px;font-weight:650;
+color:var(--soft);font-variant-numeric:tabular-nums;padding-top:1px}
+.ev-body{flex:1;min-width:0;padding-left:18px;position:relative}
+.ev-body:before{content:"";position:absolute;left:-5px;top:6px;width:10px;
+height:10px;border-radius:50%;background:#fff;border:2px solid var(--accent)}
+.ev-who{display:block;font-size:12px;font-weight:650;color:var(--accent);
+text-transform:uppercase;letter-spacing:.04em}
+.ev-what{display:block;font-size:14.5px;margin-top:2px}
+.ev-so{display:block;margin-top:6px;padding:8px 12px;background:var(--accent-bg);
+border-radius:8px;font-size:14px;color:#194185;font-weight:550}
+.ev-src{display:block;font-size:12px;color:var(--soft);margin-top:6px}
 .chg{border-left:3px solid #067647;padding:2px 0 2px 13px;margin-bottom:14px}
 .chg-line{display:flex;gap:10px;font-size:14.5px;margin-bottom:5px}
 .chg-line .k{flex:none;width:44px;font-size:11.5px;font-weight:650;
@@ -163,6 +182,10 @@ border:1px solid #fedf89;border-radius:8px;font-size:13.5px;color:#b54708}
 font-size:13px;color:var(--soft);font-style:italic}
 .act-draft{margin:13px 0 0;border:1px solid var(--line);border-radius:9px;
 overflow:hidden}
+.act-draft.sent{background:#fcfcfd}
+.act-draft.sent>summary{padding:9px 13px;cursor:pointer;font-size:12.5px;
+font-weight:650;color:var(--soft);text-transform:uppercase;letter-spacing:.05em}
+.act-draft.sent[open]>summary{border-bottom:1px solid var(--line)}
 .wait{list-style:none;margin:0;padding:0}
 .wait li{display:flex;gap:13px;padding:11px 0;border-bottom:1px dashed var(--line);
 align-items:flex-start}
@@ -285,30 +308,40 @@ def render_threads(rows: list[dict]) -> str:
       </section>"""
 
 
-def render_changed(rows: list[dict]) -> str:
-    if not rows:
+def render_changed(rows: list[dict], started: str) -> str:
+    """One chronological thread. Where it stood, then each move, in order."""
+    if not rows and not started:
         return ""
     out = []
-    for r in rows:
+    for r in sorted(rows, key=lambda x: x.get("at", "")):
         src = r.get("source_url", "")
-        where = r.get("where", "")
         out.append(
             f"""
-        <div class="chg">
-          <div class="chg-line was"><span class="k">Was</span><span class="v">{esc(r.get("before"))}</span></div>
-          <div class="chg-line"><span class="k">Now</span><span class="v">{esc(r.get("after"))}</span></div>
-          {f'<p class="chg-so">{esc(r.get("so_what"))}</p>' if r.get("so_what") else ""}
-          <div class="chg-src">{esc(where)} {link_btn(src, "Source") if src else ""}</div>
-        </div>"""
+        <li class="ev">
+          <span class="ev-at">{esc(r.get("at", ""))}</span>
+          <span class="ev-body">
+            <span class="ev-who">{esc(r.get("who", ""))}</span>
+            <span class="ev-what">{esc(r.get("what"))}</span>
+            {f'<span class="ev-so">{esc(r.get("so_what"))}</span>' if r.get("so_what") else ""}
+            <span class="ev-src">{esc(r.get("where", ""))} {link_btn(src, "Source") if src else ""}</span>
+          </span>
+        </li>"""
         )
+    start = (
+        f'<p class="ev-start"><b>Where it stood this morning</b>{esc(started)}</p>'
+        if started
+        else ""
+    )
     return f"""
       <section class="sub">
-        <h3>What changed today</h3>
-        {"".join(out)}
+        <h3>How today went, in order</h3>
+        {start}
+        <ol class="evs">{"".join(out)}</ol>
       </section>"""
 
 
-def render_draft(d: dict) -> str:
+def render_draft(d: dict, st: dict | None = None) -> str:
+    """A draft to paste, or, once it has gone, a folded record of what went."""
     if not d:
         return ""
     body = d.get("body_ruby", "")
@@ -319,16 +352,23 @@ def render_draft(d: dict) -> str:
         if is_ja and d.get("body_en")
         else ""
     )
-    return f"""
-        <div class="act-draft">
+    inner = f"""
           <div class="draft-head">
             <span>{esc(d.get("target"))}</span>
             {link_btn(d.get("link", ""), "Go there")}
             <button class="copy" data-copy="{esc(plain(body))}">copy</button>
           </div>
           <div class="draft-body {"ja" if is_ja else ""}">{rendered}</div>
-          {trans}
-        </div>"""
+          {trans}"""
+    gone = st and st["state"] != "todo" and st["state"] != "hold"
+    if gone:
+        when = f" at {esc(st.get('at'))}" if st.get("at") else ""
+        return f"""
+        <details class="act-draft sent">
+          <summary>What you sent{when}</summary>
+          {inner}
+        </details>"""
+    return f'<div class="act-draft">{inner}</div>'
 
 
 def render_actions(rows: list[dict]) -> str:
@@ -356,11 +396,11 @@ def render_actions(rows: list[dict]) -> str:
                 f'{esc(st.get("at", ""))}.{note}</p>'
             )
         elif st["state"] == "waiting":
-            note = f" {esc(st['note'])}" if st.get("note") else ""
+            note = f" {esc(st['note'])}." if st.get("note") else ""
             status_block = (
                 f'<p class="sent-note"><b>Sent {esc(st.get("at", ""))}</b>'
-                f'Nothing more from you until {esc(st.get("who", "they"))} '
-                f"come back.{note}</p>"
+                f'Nothing further from you until {esc(st.get("who", "they"))} '
+                f"replies.{note}</p>"
             )
         elif hold:
             revisit = hold.get("revisit")
@@ -390,7 +430,7 @@ def render_actions(rows: list[dict]) -> str:
               {link_btn(r.get("link", ""), "Act here")}
             </div>
             {f'<p class="act-quote">{esc(quote)} {link_btn(r.get("source_url", ""), "Source") if r.get("source_url") else ""}</p>' if quote else ""}
-            {render_draft(r.get("draft") or {})}
+            {render_draft(r.get("draft") or {}, st)}
           </div>
         </div>"""
         )
@@ -483,7 +523,7 @@ def render_ticket(t: dict, ident: str) -> str:
         <p class="status">{esc(t.get("where_it_stands"))}</p>
       </section>
 
-      {render_changed(t.get("changed_today", []))}
+      {render_changed(t.get("changed_today", []), t.get("started_the_day", ""))}
       {render_actions(t.get("actions", []))}
       {render_waiting(t.get("waiting_on", []))}
       {render_decisions(t.get("open_decisions", []))}

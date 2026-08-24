@@ -40,13 +40,18 @@ def first_sentence(text: str) -> str:
     return head if head.endswith(".") else f"{head}."
 
 
-def render_draft(d: dict, indent: str = "") -> list[str]:
+def render_draft(d: dict, st: dict | None = None) -> list[str]:
     if not d:
         return []
     lang = "Japanese" if d.get("language") == "ja" else "English"
+    gone = st and st["state"] not in {"todo", "hold"}
+    head = (
+        f"**Sent {st.get('at', '')}** to {d.get('target', '')}"
+        if gone
+        else f"**Draft ({lang})** for {d.get('target', '')}"
+    )
     out = [
-        f"{indent}**Draft ({lang})** for {d.get('target', '')}"
-        + (f" ({link('open thread', d['link'])})" if d.get("link") else ""),
+        head + (f" ({link('open thread', d['link'])})" if d.get("link") else ""),
         "",
         "```",
         plain(d.get("body_ruby", "")),
@@ -85,15 +90,17 @@ def render_ticket(t: dict) -> list[str]:
     out += block("What the shorthand means", terms)
 
     changed = []
-    for c in t.get("changed_today", []):
+    if t.get("started_the_day"):
+        changed += [f"Where it stood this morning: {t['started_the_day']}", ""]
+    for c in sorted(t.get("changed_today", []), key=lambda x: x.get("at", "")):
+        changed.append(f"- **{c.get('at', '')} {c.get('who', '')}** {c.get('what', '')}")
+        if c.get("so_what"):
+            changed.append(f"  So: {c['so_what']}")
         changed += [
-            f"- **Was:** {c.get('before', '')}",
-            f"  **Now:** {c.get('after', '')}",
-            f"  **So:** {c.get('so_what', '')}",
             f"  Source: {c.get('where', '')} {link('link', c.get('source_url', ''))}",
             "",
         ]
-    out += block("What changed today", changed)
+    out += block("How today went, in order", changed)
 
     actions: list[str] = []
     for a in sorted(
@@ -110,9 +117,10 @@ def render_ticket(t: dict) -> list[str]:
         if st["closed"]:
             actions += [f"> {st['label']} {st.get('at', '')}.{note}", ""]
         elif st["state"] == "waiting":
+            tail = f" {st['note']}." if st.get("note") else ""
             actions += [
-                f"> Sent {st.get('at', '')}. Nothing more from you until "
-                f"{st.get('who', 'they')} come back.{note}",
+                f"> Sent {st.get('at', '')}. Nothing further from you until "
+                f"{st.get('who', 'they')} replies.{tail}",
                 "",
             ]
         if a.get("progress_note"):
@@ -142,7 +150,7 @@ def render_ticket(t: dict) -> list[str]:
                 f"> {link('source', a.get('source_url', ''))}",
             ]
         actions.append("")
-        actions += render_draft(a.get("draft") or {})
+        actions += render_draft(a.get("draft") or {}, st)
     out += block("Actions, and where each one sits", actions)
 
     waiting = [

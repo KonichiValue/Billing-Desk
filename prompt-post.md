@@ -162,9 +162,20 @@ Set `note_found: true` once you have it and carry on.
 
 ## Step 2: load this morning's prep
 
-Read `output/prep-<today>.json`. That is what Rei believed at 10:30, and you need
-it to populate `changed_today`, which is the most useful thing on the page. Carry
-the `ref` tags across unchanged so the two pages line up.
+Read `output/prep-<today>.json`. That is what Rei believed at 10:30, and it gives
+you `started_the_day` plus the baseline for the timeline, which is the most
+useful thing on the page. Carry the `ref` tags across unchanged so the two pages
+line up.
+
+`changed_today` is a timeline, one per ticket, and it has to read as a single
+story from morning to now. Every entry carries the time it happened and who
+moved it, and they are ordered by time no matter which channel each came from.
+Never split it by source, and never write two entries for one exchange. Say the
+side a person is on the first time they appear, because "Tanaka confirmed" tells
+Rei nothing about whether that was a commitment from TG or a colleague agreeing.
+
+`so_what` is for the entries that change what Rei does. Leave it empty on the
+ones that are only steps in the story, so the ones that carry it stand out.
 
 If the file is missing, carry on and note it in `gaps`.
 
@@ -361,6 +372,17 @@ the end when he needs a decision. No preamble, no recap of process, no "just
 wanted to check in". Warmth belongs in the first line to someone he knows, and
 nowhere else.
 
+### If the action says to ask someone, write the message
+
+An action whose `detail` tells Rei to ask, tell, confirm or reply to a person is
+an outgoing message, and it needs a `draft`. Never leave the instruction on its
+own, because then he has to work out the wording himself, which is the part this
+page exists to do.
+
+If a bullet is genuinely a note to himself and nothing leaves, say so in the
+bullet. And if one action would send two messages to different people, split it:
+one action, one recipient, one draft, one number.
+
 ### Never say back what they already wrote
 
 Before every paragraph, ask what the reader does not already know. Agreeing with
@@ -534,11 +556,13 @@ Write `output/post-<YYYY-MM-DD>.json` using today's date in JST.
         }
       ],
       "where_it_stands": "2 to 4 sentences. Where the ticket actually is and who owns the next move. This is for Rei only, so internal detail is fine here.",
+      "started_the_day": "One or two sentences on where this ticket stood before today, so the timeline below has something to move from.",
       "changed_today": [
         {
-          "before": "What this morning's prep said, or what was believed yesterday.",
-          "after": "What is true now.",
-          "so_what": "One sentence on what Rei must do differently.",
+          "at": "HH:MM, 24-hour JST, of the message itself",
+          "who": "Who moved it, with their side: 'TG, Tanaka' or 'Kevin Mann, Kraken' or 'You'",
+          "what": "What they did or said, in one or two sentences.",
+          "so_what": "What it changes for Rei. Empty string when the entry is only a step in the story.",
           "where": "Standup | Slack #channel-name | Asana",
           "source_url": "Permalink"
         }
