@@ -104,10 +104,18 @@ ticket numbering. So:
 - Name people the way that thread names them. "Fukutaro raised above" works when
   he posted in that thread. "Heqing asked TG" needs to become what TG said or
   what is still pending, because they cannot see the asking.
-- Check the person's side before you name them. Sagayama and Nakayama are Kraken,
-  Tanaka and Komiyama are TG, and a draft that puts someone on the wrong side of
-  that line is unsendable. Read the email domain in the Slack profile or the
-  Asana member list rather than guessing from the name.
+- Check the person's side before you name them, from the email domain in the
+  Slack profile or the Asana member list, never from the name. Kraken is
+  `@kraken.tech`, so Sagayama and Nakayama. TG is `@tokyo-gas.co.jp` or
+  `@tg-inet.co.jp`, so Tanaka, Komiyama, Koume, Tamanoi and Murakami.
+- Then name the side, not only the person. To an engineer who does not sit in
+  the TG meetings, "Tanaka confirmed this afternoon" reads as though he is a
+  Kraken colleague. Write "TG came back", or attach his side the first time he
+  appears and use "they" after that.
+- Never call a scope settled from the ticket alone. Read the transcript for
+  whether it was reopened in the meeting, because a requirement written two
+  weeks ago and a requirement someone put back on the table this morning need
+  different sentences. Say which it is and what closed it.
 - Before you tell someone their objection is answered, reread the objection.
   Sagayama's Friday comment raised two things, categories 1 and 2 and the 01
   mismatch in pattern #3, and TG only answered the first. Say which half is
