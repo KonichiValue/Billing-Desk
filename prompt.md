@@ -318,6 +318,12 @@ Asana, so never use `-` or `*` for lists. Slack English uses `•` and `1.` with
 `*bold*` in single asterisks. Asana English uses `•` and `1.` with no emphasis
 markers. Asana Japanese uses `・`, which is what TG already use in these tickets.
 
+In Slack, wrap anything that is code in single backticks, the way the CE team
+already write: field and column names, pathway and action names, hold names,
+account and charge IDs. So `reading_date`, `HAS-MISMATCHED-TAKUSO-NUMBER`,
+`A-BF48216B`. Reading reason codes stay plain as 開栓 (04), because that is how
+both sides write them.
+
 Where you do **not** have enough information to draft a reply, do not guess. Put
 the missing piece in `unknowns` if Rei can find it, or in `open_questions` if
 only TG can answer it. A question in the script is more useful than a wrong draft.

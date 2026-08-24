@@ -63,6 +63,12 @@ min-width:190px}
 .thr-when{flex:none;font-size:12px;color:var(--soft);text-align:right;
 font-variant-numeric:tabular-nums}
 .thr-when b{display:block;color:var(--mut);font-weight:600}
+.terms{margin:0;display:grid;gap:1px;background:var(--line);border:1px solid var(--line);
+border-radius:10px;overflow:hidden}
+.term{background:#fcfcfd;padding:10px 13px;display:flex;gap:14px;align-items:baseline;
+flex-wrap:wrap}
+.terms dt{flex:none;min-width:150px;font-weight:650;font-size:14px;color:var(--accent)}
+.terms dd{flex:1;min-width:240px;margin:0;font-size:14px;color:var(--mut)}
 .chg{border-left:3px solid #067647;padding:2px 0 2px 13px;margin-bottom:14px}
 .chg-line{display:flex;gap:10px;font-size:14.5px;margin-bottom:5px}
 .chg-line .k{flex:none;width:44px;font-size:11.5px;font-weight:650;
@@ -166,6 +172,22 @@ def render_index(tickets: list[dict], refs: dict[str, str]) -> str:
       </a>"""
         )
     return f'<div class="index">{"".join(out)}</div>'
+
+
+def render_terms(rows: list[dict]) -> str:
+    if not rows:
+        return ""
+    items = "".join(
+        f'<div class="term"><dt>{esc(r.get("term"))}</dt>'
+        f'<dd>{esc(r.get("means"))} '
+        f'{link_btn(r.get("source_url", ""), "Source") if r.get("source_url") else ""}</dd></div>'
+        for r in rows
+    )
+    return f"""
+      <section class="sub">
+        <h3>What the shorthand means</h3>
+        <dl class="terms">{items}</dl>
+      </section>"""
 
 
 def render_threads(rows: list[dict]) -> str:
@@ -366,6 +388,8 @@ def render_ticket(t: dict, ident: str) -> str:
         </p>
         {int_block}
       </header>
+
+      {render_terms(t.get("terms", []))}
 
       <section class="sub">
         <h3>Where it stands</h3>

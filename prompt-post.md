@@ -31,6 +31,22 @@ Asana ticket it belongs to. "Follow up on the hold question" is useless.
 "Reply to Nakayama-san in #client-eng-jpn-refinement on the same-day definition,
 on 改修依頼：託送番号不一致HOLD" is usable.
 
+## Define your shorthand, every time
+
+TG tickets are full of numbered cases, hold names and codes: "cases 1 and 2",
+"pattern #3", "the 07 hold", `HAS-MISMATCHED-TAKUSO-NUMBER`. These are meaningless
+to anyone who has not just read the thread they came from, and Rei reads this page
+days later.
+
+So every ticket carries a `terms` array defining each piece of shorthand the page
+uses for it, and the definition comes from the source, not from your inference.
+Find the comment or description where the numbering was set out and quote its
+substance. Where you cannot find it, say so in `gaps` and do not use the term.
+
+Then write the prose so it stands alone anyway. "Cases 1 and 2, the accounts that
+never produce a bill" costs six words and saves a lookup. Never write a bare
+"cases 1 and 2".
+
 ## Include less than you found
 
 Rei reads this page once and then works from it. Everything on it has to earn a
@@ -286,6 +302,20 @@ the end when he needs a decision. No preamble, no recap of process, no "just
 wanted to check in". Warmth belongs in the first line to someone he knows, and
 nowhere else.
 
+### Short is not the same as compressed
+
+Cut words, never steps. A sentence that only parses if the reader already knows
+the answer has failed, and a reply that skips the mechanism reads as though Rei
+did not follow the argument.
+
+So when he is agreeing with someone's technical reasoning, say the reasoning back
+in full: the condition, what happens because of it, and what that means for the
+decision. "`start_at` would miss the cases this skip is for" is not an
+explanation. "Both readings are on the same 検針日, but we shift the billing
+periods so they do not overlap, which puts their `start_at` values on different
+calendar days, so a same-day check on `start_at` would never fire" is. It is
+three times as long and worth every word.
+
 ### Claim only what you can stand behind
 
 Rei has to defend every sentence he sends, and a lot of what goes in these drafts
@@ -311,6 +341,13 @@ or `*` for lists. Use these instead:
 
 - Slack, English: `•` for bullets, `1.` `2.` for numbers, `*bold*` with single
   asterisks, `_italic_`. Never `**bold**`.
+- Slack, English: wrap anything that is code in single backticks, the way the CE
+  team already write in these threads. Field and column names, pathway and action
+  names, hold names, account and charge IDs, status values. So `reading_date`,
+  `start_at`, `HAS-MISMATCHED-TAKUSO-NUMBER`, `A-BF48216B`,
+  `create_and_issue_statement_for_new_charges`. Reading reason codes written as
+  Japanese plus a number stay plain, as in 開栓 (04), because that is how both
+  sides write them.
 - Asana, English: `•` for bullets, `1.` for numbers, no emphasis markers at all,
   because they render literally.
 - Asana, Japanese: `・` for bullets, which is the convention TG already use in
@@ -384,6 +421,13 @@ Write `output/post-<YYYY-MM-DD>.json` using today's date in JST.
       "status_label": "Waiting on TG | Waiting on Kraken | Action on Rei | In progress | Monitoring",
       "status_tone": "red | amber | green | grey",
       "raised_at_standup": true,
+      "terms": [
+        {
+          "term": "The shorthand as it appears in the tickets, e.g. ケース1・2",
+          "means": "What it actually refers to, taken from the source that defined it.",
+          "source_url": "Permalink to where it was defined"
+        }
+      ],
       "where_it_stands": "2 to 4 sentences. Where the ticket actually is and who owns the next move. This is for Rei only, so internal detail is fine here.",
       "changed_today": [
         {

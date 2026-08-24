@@ -67,6 +67,13 @@ def render_ticket(t: dict) -> list[str]:
         )
     out += ["", t.get("where_it_stands", ""), ""]
 
+    terms = [
+        f"- **{tm.get('term', '')}**: {tm.get('means', '')} "
+        f"{link('source', tm.get('source_url', ''))}"
+        for tm in t.get("terms", [])
+    ]
+    out += block("What the shorthand means", terms)
+
     changed = []
     for c in t.get("changed_today", []):
         changed += [
