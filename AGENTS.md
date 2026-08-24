@@ -4,8 +4,9 @@ Guidance for AI agents working in this repository.
 
 ## What this repo is
 
-Two generated pages a day for Rei's Tokyo Gas billing standup: a prep page before
-it and an action list after it. See `README.md` for how they are built.
+Rei's desk for the Tokyo Gas billing work: a prep page before the standup, an
+action list after it, and a tracked state of where every action sits for the
+rest of the day. See `README.md` for how they are built.
 
 ## When Rei asks you to act on the standup
 

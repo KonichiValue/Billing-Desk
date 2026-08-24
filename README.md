@@ -1,7 +1,8 @@
-# TG billing standup
+# TG billing desk
 
-Two pages a day for the Tokyo Gas billing standup, both self-contained HTML,
-both opening themselves in the browser.
+Where the Tokyo Gas billing work sits all day: two generated pages, a tracked
+list of what is with you and what is with somebody else, and a Dock app that
+opens the current state. Both pages are self-contained HTML.
 
 | | When | What it answers |
 |---|---|---|
@@ -87,7 +88,7 @@ the same thing, and the table and the ticket sections cannot disagree.
 
 ## Getting at it during the day
 
-Run `./install.sh` once. It puts **TG Standup** in `~/Applications`, which you
+Run `./install.sh` once. It puts **TG Billing Desk** in `~/Applications`, which you
 drag to the Dock, and links `tg` into `~/.local/bin`. Both point at this
 checkout, so pulling changes updates them; rerun it after any change to `bin/tg`.
 
@@ -218,8 +219,8 @@ that time `launchd` runs the job as soon as it wakes, so opening the laptop at
 built that day.
 
 ```sh
-launchctl unload ~/Library/LaunchAgents/com.tg-billing-standup.prep.plist
-launchctl load  ~/Library/LaunchAgents/com.tg-billing-standup.prep.plist
+launchctl unload ~/Library/LaunchAgents/com.tg-billing-desk.prep.plist
+launchctl load  ~/Library/LaunchAgents/com.tg-billing-desk.prep.plist
 launchctl list | grep -E "tg-(morning-prep|post-standup)"
 ```
 

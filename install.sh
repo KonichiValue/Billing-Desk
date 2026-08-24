@@ -9,7 +9,7 @@
 set -euo pipefail
 
 DIR="${0:A:h}"
-APP="$HOME/Applications/TG Standup.app"
+APP="$HOME/Applications/TG Billing Desk.app"
 BIN="$HOME/.local/bin"
 
 mkdir -p "$BIN" "$HOME/Applications"

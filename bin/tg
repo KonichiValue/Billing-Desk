@@ -16,7 +16,7 @@
 
 set -uo pipefail
 
-REPO="${TG_STANDUP_REPO:-$HOME/Projects/tg-billing-standup}"
+REPO="${TG_STANDUP_REPO:-$HOME/Projects/tg-billing-desk}"
 cd "$REPO" || { print -u2 "no repo at $REPO"; exit 1 }
 
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"

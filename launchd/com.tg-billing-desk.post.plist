@@ -3,17 +3,17 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.tg-billing-standup.post</string>
+    <string>com.tg-billing-desk.post</string>
 
     <!-- Build the post-standup action list and open it in the browser. -->
     <key>ProgramArguments</key>
     <array>
         <string>/bin/zsh</string>
-        <string>/Users/rei.samuelsson/Projects/tg-billing-standup/run_post.sh</string>
+        <string>/Users/rei.samuelsson/Projects/tg-billing-desk/run_post.sh</string>
     </array>
 
     <key>WorkingDirectory</key>
-    <string>/Users/rei.samuelsson/Projects/tg-billing-standup</string>
+    <string>/Users/rei.samuelsson/Projects/tg-billing-desk</string>
 
     <!-- Mon (1), Wed (3), Thu (4) at 11:00 local time, just as the standup ends.
          The Notion meeting note lands about five minutes later, and the meeting
@@ -36,8 +36,8 @@
     </dict>
 
     <key>StandardOutPath</key>
-    <string>/Users/rei.samuelsson/Projects/tg-billing-standup/logs/launchd-post.out.log</string>
+    <string>/Users/rei.samuelsson/Projects/tg-billing-desk/logs/launchd-post.out.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/rei.samuelsson/Projects/tg-billing-standup/logs/launchd-post.err.log</string>
+    <string>/Users/rei.samuelsson/Projects/tg-billing-desk/logs/launchd-post.err.log</string>
 </dict>
 </plist>
