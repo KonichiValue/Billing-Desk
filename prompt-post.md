@@ -361,6 +361,19 @@ the end when he needs a decision. No preamble, no recap of process, no "just
 wanted to check in". Warmth belongs in the first line to someone he knows, and
 nowhere else.
 
+### Answer under the line you are answering
+
+When a draft replies to specific points, quote each one with `>` and put the
+answer directly beneath it, which is how these threads already run. It anchors
+every claim to the thing that prompted it, so nobody has to scroll to work out
+which sentence belongs to which question, and it makes an unanswered point
+visible instead of quietly dropped.
+
+Quote the words that were actually written, trimmed to the clause that carries
+the question. Never paraphrase inside a quote. Two or three quoted points is the
+ceiling for one message; beyond that, answer the important ones and say the rest
+follows separately.
+
 ### Short is not the same as compressed
 
 Cut words, never steps. A sentence that only parses if the reader already knows
