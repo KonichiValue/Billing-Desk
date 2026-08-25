@@ -139,15 +139,27 @@ color:var(--amber-ink)}
 .sess-bring b{display:block;font-size:11px;text-transform:uppercase;
 letter-spacing:.07em;color:var(--amber);margin-bottom:3px}
 
-/* What has to be settled before people leave the room, and the answer ready
-   for the pushback that stops it being settled. */
-.st-land{list-style:none;margin:0;padding:0}
-.st-land li{padding:10px 13px;border:1px solid var(--amber-line);
-background:var(--amber-bg);border-radius:9px;margin-bottom:7px}
-.st-land .need{font-size:14.5px;font-weight:600;color:var(--amber-ink)}
-.st-land .why{display:block;font-size:13.5px;color:var(--mut);margin-top:3px}
-.st-land .fall{display:block;font-size:13px;color:var(--amber);margin-top:5px;
-font-weight:550}
+/* Everything he has to come out of the room with, one list. The label on the
+   left says which kind it is, so a decision to land and a chase are not read
+   with the same weight. */
+.needs{list-style:none;margin:0;padding:0}
+.need-row{display:flex;gap:13px;padding:11px 13px;border-radius:9px;
+margin-bottom:7px;border:1px solid var(--line);background:#fbfcfe}
+.need-row.settle{border-color:var(--amber-line);background:var(--amber-bg)}
+.need-row.ask{border-color:var(--accent-line);background:var(--accent-bg)}
+.need-k{flex:none;width:112px;font-size:10.5px;font-weight:750;
+text-transform:uppercase;letter-spacing:.07em;color:var(--soft);padding-top:3px}
+.need-row.settle .need-k{color:var(--amber)}
+.need-row.ask .need-k{color:var(--accent)}
+.need-row.owed .need-k{color:var(--blue)}
+.need-b{flex:1;min-width:0}
+.need-what{margin:0;font-size:14.5px;font-weight:600;display:flex;gap:9px;
+align-items:baseline;flex-wrap:wrap}
+.need-why{margin:3px 0 0;font-size:13px;color:var(--mut)}
+.need-fall{margin:6px 0 0;font-size:13px;color:var(--amber);font-weight:550}
+.need-fall b{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;
+margin-right:6px}
+.need-b .jp.small{font-size:16px;line-height:1.85;margin-top:5px}
 .st-push{list-style:none;margin:0;padding:0}
 .st-push li{padding:11px 0;border-bottom:1px dashed var(--line)}
 .st-push li:last-child{border-bottom:0}
@@ -230,26 +242,6 @@ def render_session(sess: dict, big: bool) -> str:
   </section>"""
 
 
-def render_land(rows: list[dict]) -> str:
-    """Decisions that have to be settled in the room, not after it."""
-    if not rows:
-        return ""
-    out = "".join(
-        f"""
-      <li>
-        <span class="need">{esc(r.get("need"))}</span>
-        {f'<span class="why">{esc(r.get("why"))}</span>' if r.get("why") else ""}
-        {f'<span class="fall">If they will not settle it: {esc(r.get("fallback"))}</span>' if r.get("fallback") else ""}
-      </li>"""
-        for r in rows
-    )
-    return section(
-        "Settle this before you leave the room",
-        f'<ul class="st-land">{out}</ul>',
-        role="warn",
-        count=f"{len(rows)} to settle",
-        hint="decide it in the room",
-    )
 
 
 def render_pushback(rows: list[dict]) -> str:
@@ -324,50 +316,75 @@ def since_last(t: dict, since: str) -> str:
 
 
 def needs(t: dict, spoken: bool) -> str:
-    """What he has to come out of the room with, split by who owes it.
+    """Everything he has to come out of the room with, in one list.
 
-    A question for TG and a question for a Kraken engineer are answered in
-    different rooms, in different languages, so they are never one list.
+    A decision to land, a question to get answered and a thing somebody already
+    owes him were three blocks under the script, which meant reading three lists
+    to answer one question. They are all the same question, so they are one
+    list, and each row says which kind it is and who has to move.
     """
     prep = t.get("prep") or {}
+    rows, hardest = [], 0
+    for d in prep.get("decisions", []):
+        hardest = 2
+        rows.append(
+            f"""
+        <li class="need-row settle">
+          <div class="need-k">Settle it today</div>
+          <div class="need-b">
+            <p class="need-what">{esc(d.get("need"))}</p>
+            {f'<p class="need-why">{esc(d.get("why"))}</p>' if d.get("why") else ""}
+            {f'<p class="need-fall"><b>If they will not settle it</b> {esc(d.get("fallback"))}</p>' if d.get("fallback") else ""}
+          </div>
+        </li>"""
+        )
+
     asks = list(prep.get("open_questions", []))
     if spoken:
         asks = [q for q in asks if q.get("who") not in ("TG", "")]
-    waits = [
-        (i, state_of(i))
-        for i in t.get("items", [])
-        if state_of(i)["state"] == "waiting"
-    ]
-    if not asks and not waits:
-        return ""
-    rows = []
     for q in asks:
+        hardest = max(hardest, 1)
         who = q.get("who", "TG")
         raw = plain(q.get("ja_ruby", ""))
         rows.append(
             f"""
-        <li class="q">
-          <div class="q-en">{esc(q.get("en"))} {pill(who, "amber" if who == "TG" else "grey")}
-            {f'<button class="copy" data-copy="{esc(raw)}">copy</button>' if raw else ""}</div>
-          {f'<div class="q-ja">{furi(q.get("ja_ruby", ""))}</div>' if q.get("ja_ruby") else ""}
+        <li class="need-row ask">
+          <div class="need-k">Answer from {esc(who)}</div>
+          <div class="need-b">
+            <p class="need-what">{esc(q.get("en"))}
+              {f'<button class="copy" data-copy="{esc(raw)}">copy</button>' if raw else ""}</p>
+            {f'<p class="jp small">{furi(q.get("ja_ruby", ""))}</p>' if q.get("ja_ruby") else ""}
+          </div>
         </li>"""
         )
-    for item, st in waits:
+
+    for item in t.get("items", []):
+        st = state_of(item)
+        if st["state"] != "waiting":
+            continue
         owed = (item.get("waits_on") or {}).get("what", "")
         rows.append(
             f"""
-        <li class="q">
-          <div class="q-en">{esc(owed or item.get("title", ""))}
-            {pill(f'Owed by {st.get("who", "them")}', "blue")}</div>
-          <div class="q-side">Item {esc(item.get("id", ""))} on your list,
-          since {esc(st.get("at", ""))}. Chase it in the room if they are there.</div>
+        <li class="need-row owed">
+          <div class="need-k">Already owed</div>
+          <div class="need-b">
+            <p class="need-what">{esc(owed or item.get("title", ""))}</p>
+            <p class="need-why">{esc(st.get("who", "They"))} has had this since
+            {esc(st.get("at", ""))}. Item {esc(item.get("id", ""))} on your list.
+            Chase it here if they are in the room.</p>
+          </div>
         </li>"""
         )
+
+    if not rows:
+        return ""
+    words = {0: "", 1: "to get answered", 2: "one has to be settled today"}
     return section(
-        "What I need out of this",
-        f'<ul class="qlist">{"".join(rows)}</ul>',
+        "What I need back",
+        f'<ul class="needs">{"".join(rows)}</ul>',
         role="warn",
-        count=f"{len(rows)} to get",
+        count=f"{len(rows)} in total",
+        hint=words[hardest],
     )
 
 
@@ -440,14 +457,13 @@ def render_ticket(t: dict, ident: str, desk_id: str, since: str) -> str:
       {since_last(t, since)}
 
       <section class="sub say script">
-        <h3>What I say out loud<span class="hint">read it as written</span></h3>
+        <h3>Say this<span class="hint">out loud, as written</span></h3>
         {'<p class="st-none">Status only. Nothing needed from TG.</p>' if no_ask else ""}
         {render_script(prep.get("script", []))}
       </section>
 
-      {render_land(prep.get("decisions", []))}
-      {needs(t, spoken)}
       {render_pushback(prep.get("pushback", []))}
+      {needs(t, spoken)}
       <section class="st-cons">{render_consequences(prep.get("consequences", {}))}</section>
       {warn}
       {secret}

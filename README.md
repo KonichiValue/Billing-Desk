@@ -203,8 +203,8 @@ which standup it displaces.
 
 An onsite is a day rather than fifteen minutes, so the speaking view carries more
 for one: the shape of the day and what to have ready at the top, then per ticket
-what has to be **settled before you leave the room**, up to six script blocks
-instead of four, and the answer ready for the pushback you can see coming. The
+a decision to land in **What I need back**, up to six script blocks instead of
+four, and the answer ready for the pushback you can see coming. The
 work view says what is next and, when the script in the app was written for a
 different session, says that too rather than letting you walk in with the wrong
 one.
@@ -240,8 +240,9 @@ nothing and flags it, since a missing warning beats a wrong one.
   reference sections (shorthand, threads, a day where nothing moved) start folded.
 - The speaking view is the same card in a plum key, in the order the meeting
   walks: the issue in 20 seconds, where it stands, **what moved since last
-  time**, then the script, then what has to be settled in the room and what you
-  need out of it. Scope and pushback fold away underneath.
+  time**, then **Say this**, then **What I need back**: one list holding the
+  decisions to land, the questions to get answered and anything already owed to
+  you, each row saying which it is. Scope and pushback fold away.
 - Timelines group by day, most recent open and everything older folded behind
   the days it covers.
 - Tickets where you have done your part but Asana has not closed them, and

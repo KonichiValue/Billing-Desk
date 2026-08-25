@@ -56,7 +56,10 @@ changes what has to move into Asana instead.
    preparation shows. Up to six script blocks per ticket, and cover the ground
    properly.
 2. **`prep.decisions`.** What has to be settled before people leave the room, why
-   it cannot wait, and the fallback if TG will not settle it today. This is the
+   it cannot wait, and the fallback if TG will not settle it today. These print
+   in **What I need back** alongside the open questions and anything already
+   owed to him, one list per ticket, so a decision written vaguely reads as a
+   question and loses its force. This is the
    point of an onsite: decisions that die in a standup because there is no time.
 3. **`prep.pushback`.** The objection you can see coming, and the Japanese
    sentence that answers it. Take these from what TG have actually said in the
