@@ -24,6 +24,7 @@ import render_standup
 from render import (
     CSS,
     JS,
+    code,
     day_words,
     esc,
     furi,
@@ -111,15 +112,18 @@ width:44px;text-align:right}
 .tr.shut .tr-title{text-decoration:line-through;text-decoration-color:#a6afbe}
 .tr.shut{opacity:.62}
 
-/* The timeline, oldest first, in days. */
-.evs-earlier{margin:0 0 14px}
-.evs-earlier>summary{cursor:pointer;font-size:12px;font-weight:650;
-color:var(--soft);padding:7px 10px;background:var(--hair);border-radius:8px;
-display:flex;align-items:center;gap:7px}
-.evs-earlier>summary:hover{color:var(--ink)}
-.evs-earlier .evs{margin-top:12px}
-.ev-day{margin:0 0 9px;font-size:11px;font-weight:750;text-transform:uppercase;
-letter-spacing:.08em;color:var(--soft)}
+/* The timeline, oldest first, one fold per day with the day as the handle. */
+.ev-fold{margin-bottom:8px}
+.ev-fold:last-child{margin-bottom:0}
+.ev-fold>summary{cursor:pointer;padding:8px 11px;background:var(--hair);
+border-radius:8px;display:flex;align-items:center;gap:10px}
+.ev-fold[open]>summary{background:transparent;border-bottom:1px solid var(--hair);
+border-radius:0;padding-left:1px;padding-right:1px}
+.ev-fold>summary:hover .ev-d{color:var(--accent-ink)}
+.ev-d{font-size:11.5px;font-weight:750;text-transform:uppercase;
+letter-spacing:.08em;color:var(--mut)}
+.ev-c{font-size:11.5px;color:var(--soft)}
+.ev-fold .evs{margin-top:12px;padding-bottom:4px}
 .evs{list-style:none;margin:0;padding:0;position:relative}
 .evs:before{content:"";position:absolute;left:53px;top:6px;bottom:10px;width:2px;
 background:var(--line)}
@@ -191,13 +195,31 @@ details.act.done .act-title,details.act.sent .act-title{text-decoration:line-thr
 text-decoration-color:#a6afbe}
 .act-min{color:var(--soft);font-size:12px;font-variant-numeric:tabular-nums}
 .act-body{padding:13px 15px}
-.act-why{margin:0 0 10px;font-size:14.5px;color:var(--ink)}
-.act-why b{display:inline-block;font-size:10.5px;text-transform:uppercase;
-letter-spacing:.08em;color:var(--soft);margin-right:8px;font-weight:700;
-vertical-align:1px}
+/* The steps come first and look like the only thing worth doing, because on an
+   open job they are. Everything under them is supporting material. */
+.act-do{margin:0 0 12px}
+.act-lab{margin:0 0 7px;font-size:10.5px;font-weight:750;text-transform:uppercase;
+letter-spacing:.09em;color:var(--accent)}
+ol.steps{margin:0;padding-left:19px;counter-reset:none}
+ol.steps li{margin-bottom:6px;font-size:14.5px;color:var(--ink);line-height:1.5}
+ol.steps li::marker{color:var(--soft);font-weight:700;font-size:12.5px}
+ol.steps li:last-child{margin-bottom:0}
+ol.steps code,.act-done code{font:600 12.5px/1.4 ui-monospace,SFMono-Regular,
+Menlo,monospace;background:var(--hair);border:1px solid var(--line);
+border-radius:5px;padding:1px 5px;word-break:break-all}
+.act-nosteps{margin:0 0 11px;padding:9px 12px;background:var(--amber-bg);
+border:1px solid var(--amber-line);border-radius:8px;font-size:13px;
+color:var(--amber-ink)}
+.act-nosteps b{display:block;font-size:10.5px;text-transform:uppercase;
+letter-spacing:.08em;margin-bottom:2px}
+.act-done{margin:0 0 10px;font-size:13.5px;color:var(--mut)}
+.act-why{margin:0 0 10px;font-size:13.5px;color:var(--mut)}
+.act-done b,.act-why b{display:inline-block;font-size:10.5px;
+text-transform:uppercase;letter-spacing:.08em;color:var(--soft);margin-right:8px;
+font-weight:700;vertical-align:1px}
 .act-body ul{margin:0;padding-left:18px}
 .act-body li{margin-bottom:4px;font-size:14px;color:var(--mut)}
-.act-where{margin:11px 0 0;display:flex;gap:9px;align-items:center;flex-wrap:wrap;
+.act-where{margin:9px 0 0;display:flex;gap:9px;align-items:center;flex-wrap:wrap;
 font-size:12.5px;color:var(--soft)}
 .act-commit{margin:11px 0 0;padding:8px 12px;background:var(--red-bg);
 border:1px solid var(--red-line);border-radius:8px;font-size:13px;color:var(--red);
@@ -277,6 +299,10 @@ border:1px solid var(--red-line);border-radius:10px;font-size:14.5px;
 color:var(--ink)}
 .nk-alert b{display:inline-block;font-size:10px;text-transform:uppercase;
 letter-spacing:.09em;color:var(--red);margin-right:9px;vertical-align:1px}
+/* The same strip in the house colour, for the sentence saying what a meeting
+   has to produce. Not an alarm, but the first thing read on that tab. */
+.nk-alert.plain{background:var(--accent-bg);border-color:var(--accent-line)}
+.nk-alert.plain b{color:var(--accent)}
 .nk-in{padding:15px 18px 17px}
 .nk-next{display:flex;gap:9px;align-items:center;flex-wrap:wrap;padding:11px 13px;
 border:1px solid var(--accent-line);background:var(--accent-bg);border-radius:10px;
@@ -384,8 +410,9 @@ def track_row(
     due, due_kind = when_tag(item, st, sess)
     return f"""
       <li class="tr {group}">
-        <span class="tr-rank" title="Item {esc(item.get("id", "-"))}. Say &ldquo;done
-        {esc(item.get("id", "-"))}&rdquo; to close it.">{esc(item.get("id", "-"))}</span>
+        <span class="tr-rank" title="Job {esc(item.get("id", "-"))}. It keeps this
+        number until it closes, so &ldquo;done {esc(item.get("id", "-"))}&rdquo; in
+        a chat is enough.">{esc(item.get("id", "-"))}</span>
         <span class="tr-tag">{esc(ref)}</span>
         <a class="tr-title" href="#{esc(refs.get(ref, anchor(ref)))}">{esc(item.get("title"))}
           {f'<span class="tr-note">{sub}</span>' if sub else ""}</a>
@@ -435,7 +462,8 @@ def render_track(
     return f"""
   <div class="track" id="todo">
     <div class="track-head"><h2>To do</h2>
-    <span class="track-key">numbered on the left, so &ldquo;done 3&rdquo; is enough</span>
+    <span class="track-key">Every job keeps the number on its left until it
+    closes</span>
     <span>{esc(summary)}</span></div>
     <ul style="list-style:none;margin:0;padding:0">{"".join(live)}</ul>
     {closed_block}
@@ -522,12 +550,11 @@ def event_li(r: dict, show_date: bool) -> str:
 
 
 def render_events(rows: list[dict]) -> str:
-    """The timeline, in days.
+    """The timeline, one fold per day, oldest at the top so it reads forward.
 
-    Oldest at the top, so it reads as a story. The most recent day is open and
-    named, and everything before it folds behind a summary that says which days
-    they were, because "earlier moves" told him nothing about what he was about
-    to unfold.
+    The day is the handle: press Yesterday and yesterday closes. The most recent
+    day is open because that is the one being asked about, and every other day
+    is a line saying how much is behind it.
     """
     if not rows:
         return ""
@@ -536,33 +563,26 @@ def render_events(rows: list[dict]) -> str:
     for r in ordered:
         days.setdefault(r.get("on", ""), []).append(r)
     keys = list(days)
-    latest, before = keys[-1], keys[:-1]
 
-    folded = ""
-    if before:
-        older = [r for k in before for r in days[k]]
-        span = (
-            f"{day_words(before[0])} to {day_words(before[-1])}"
-            if len(before) > 1
-            else day_words(before[0])
-        )
-        folded = f"""
-        <details class="evs-earlier" >
-          <summary>Before that: {len(older)}
-          {"move" if len(older) == 1 else "moves"}, {esc(span)}
+    out = []
+    for day in keys:
+        moves = days[day]
+        n = len(moves)
+        out.append(
+            f"""
+        <details class="ev-fold" {"open" if day == keys[-1] else ""}>
+          <summary><span class="ev-d">{esc(day_words(day)).capitalize()}</span>
+          <span class="ev-c">{n} {"move" if n == 1 else "moves"}</span>
           <span class="fold-hint"></span></summary>
-          <ol class="evs">{"".join(event_li(r, True) for r in older)}</ol>
+          <ol class="evs">{"".join(event_li(r, False) for r in moves)}</ol>
         </details>"""
-
-    latest_rows = days[latest]
-    body = f"""{folded}
-        <p class="ev-day">{esc(day_words(latest)).capitalize()}</p>
-        <ol class="evs">{"".join(event_li(r, False) for r in latest_rows)}</ol>"""
+        )
     return section(
         "Timeline",
-        body,
+        "".join(out),
         role="log",
-        hint=f"last moved {day_words(latest)}",
+        count=f"{len(keys)} {'day' if len(keys) == 1 else 'days'}",
+        hint=f"last moved {day_words(keys[-1])}",
     )
 
 
@@ -597,6 +617,38 @@ def render_draft(d: dict, st: dict | None = None) -> str:
     return f'<div class="act-draft">{inner}</div>'
 
 
+def steps_block(r: dict, steps: str, active: bool) -> str:
+    """The steps, first thing inside the item, with somewhere to do them.
+
+    This block used to open with Why, which is the one question he never asks of
+    his own list: he knows why it is there, he wants to know what to type. So
+    the hands-on part comes first, numbered because they are in an order, with
+    the place to do it attached to the last step rather than floating below.
+    """
+    where = esc(r.get("where") or "")
+    go = link_btn(r.get("link", ""), "Open where this happens")
+    place = (
+        f'<div class="act-where">{f"<span>{where}</span>" if where else ""}{go}</div>'
+        if where or go
+        else ""
+    )
+    if not steps:
+        # A job with no steps is a job he has to work out from its title, which
+        # is the failure this block exists to prevent. Say so, rather than
+        # leaving a confident-looking gap.
+        if not active:
+            return place
+        return f"""
+            <p class="act-nosteps"><b>No steps written yet</b>Ask the chat to
+            break job {esc(r.get("id", "-"))} down.</p>{place}"""
+    return f"""
+            <div class="act-do">
+              <p class="act-lab">Do this</p>
+              <ol class="steps">{steps}</ol>
+              {place}
+            </div>"""
+
+
 def render_items(
     rows: list[dict], raise_label: str = "Raise at standup", sess: dict | None = None
 ) -> str:
@@ -609,7 +661,7 @@ def render_items(
         )
     out = []
     for r in sorted(rows, key=lambda x: (state_of(x)["order"], x.get("id", 99))):
-        detail = "".join(f"<li>{esc(b)}</li>" for b in r.get("detail", []))
+        steps = "".join(f"<li>{code(b)}</li>" for b in r.get("steps", []))
         mins = r.get("est_minutes")
         committed = r.get("committed_to")
         blocked = r.get("blocked_by")
@@ -667,18 +719,15 @@ def render_items(
             <span class="act-min">{f"{esc(mins)} min" if mins and active else ""}</span>
           </{head_tag}>
           <div class="act-body">
-            {f'<p class="act-why"><b>Why</b>{esc(r.get("why"))}</p>' if r.get("why") else ""}
             {status_block}
+            {steps_block(r, steps, active)}
+            {render_draft(r.get("draft") or {}, st)}
+            {f'<p class="act-done"><b>Finished when</b>{code(r.get("done_when"))}</p>' if r.get("done_when") and not done else ""}
+            {f'<p class="act-why"><b>Why it matters</b>{esc(r.get("why"))}</p>' if r.get("why") else ""}
             {f'<p class="act-quote">Already happened: {esc(r.get("progress_note"))}</p>' if r.get("progress_note") else ""}
-            {f"<ul>{detail}</ul>" if detail else ""}
             {f'<p class="act-commit">You committed this to {esc(committed)}</p>' if committed else ""}
             {f'<p class="act-block">Blocked by: {esc(blocked)}</p>' if blocked else ""}
-            <div class="act-where">
-              <span>{esc(r.get("where"))}</span>
-              {link_btn(r.get("link", ""), "Act here")}
-            </div>
             {f'<p class="act-quote">{esc(quote)} {link_btn(r.get("source_url", ""), "Source") if r.get("source_url") else ""}</p>' if quote else ""}
-            {render_draft(r.get("draft") or {}, st)}
           </div>
         </{tag}>"""
         )
@@ -692,7 +741,7 @@ def render_items(
         "".join(out),
         role="now",
         count=tally,
-        hint="numbers are how you refer to these",
+        hint="each keeps its number until it closes",
     )
 
 
@@ -1326,10 +1375,13 @@ def help_dialog() -> str:
     <code>tg 5 --dropped</code> when it went away, <code>tg 1 --undo</code>
     forgets the state.</p>
 
-    <h3>Item numbers</h3>
-    <p>Every job has a number, and it keeps it until it closes. That is why
-    &ldquo;do 3&rdquo; works with nothing else said, and why the numbers have
-    gaps in them.</p>
+    <h3>The numbers</h3>
+    <p>The number to the left of a job is its own for life: job 3 is job 3 until
+    it closes, tomorrow and next week. That is why &ldquo;do 3&rdquo; needs
+    nothing else said, and why the list runs 3, 5, 2, 7 with gaps where closed
+    work used to be. On <b>TG what I say</b> the numbers are different: those are
+    each card's place on TG's own board, in the order the meeting works down
+    them.</p>
 
     <h3>The buttons</h3>
     <p><b>Refresh</b> re-reads Asana and every thread behind your open work,
@@ -1341,11 +1393,21 @@ def help_dialog() -> str:
     <b>Meeting note</b> opens the last standup's Notion note.
     <b>Japanese only</b> strips the prep tab back to the lines you read aloud.</p>
 
+    <h3>Where this page actually lives</h3>
+    <p>On this laptop, and nowhere else. It is a small server on
+    <code>127.0.0.1</code>, which is an address only this machine can reach, and
+    the URL carries a random key on top of that. Nothing is hosted, so there is
+    no address anyone else can type. The private GitHub repo holds the code and
+    the prompts, never <code>state/</code> or <code>output/</code>, so your
+    tickets, threads and drafts have never left the machine.</p>
+
     <h3>On your phone</h3>
-    <p>Run <code>tg phone</code> and it prints an address for the same page,
-    readable on anything on the same wifi. The page never leaves the laptop, so
-    it works while the laptop is awake and not otherwise. TG threads, drafts and
-    ticket detail are not going onto a hosted site.</p>
+    <p><code>tg phone</code> opens the page to your current wifi for an hour and
+    prints the address, then puts it back to laptop-only on its own. During that
+    hour anything on the same network needs the key to see anything, and the
+    laptop has to be awake. <code>tg phone 15</code> for a shorter window,
+    <code>tg stop</code> to end it now. On cafe or office wifi, prefer the short
+    window.</p>
 
     <h3>Keys</h3>
     <p><kbd>1</kbd> your work, <kbd>2</kbd> what you say, <kbd>/</kbd> find

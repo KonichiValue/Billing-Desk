@@ -68,6 +68,16 @@ def plain(raw: str) -> str:
     return RUBY.sub(r"\1", raw or "")
 
 
+def code(raw: Any) -> str:
+    """Escape, then let `backticks` become code. For instructions to Rei.
+
+    A step that names `billing.unstatemented-supply-charges` is naming a thing
+    he has to type or search for exactly, and a dotted string in running prose
+    is where a typo hides.
+    """
+    return re.sub(r"`([^`]+)`", r"<code>\1</code>", esc(raw))
+
+
 def item_state(item: dict) -> dict:
     """Where one item sits: its state, label, tone, and who is holding it.
 

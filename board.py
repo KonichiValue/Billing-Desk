@@ -97,13 +97,22 @@ An item with `at_standup` true is work that has to be spoken about rather than
 only done, so it shows on both views: on the desk with a "raise at" pill naming
 the session, in the script under the ticket it belongs to.
 
-An item is an action with a life:
+An item is a piece of work with a life:
 
-            {"id": 3, "title", "why", "detail": [], "state": "todo|waiting|hold|done|
-             sent|dropped", "state_at", "state_note", "waits_on", "hold", "draft",
+            {"id": 3, "title", "steps": [], "done_when", "why",
+             "state": "todo|waiting|hold|done|sent|dropped",
+             "state_at", "state_note", "waits_on", "hold", "draft",
              "where", "link", "urgency", "est_minutes", "opened", "closed_at",
              "at_standup", "at_standup_note",
              "history": [{"at", "state", "note"}]}
+
+`steps` is what he actually does, in order, verb first, and it is the one field
+an item cannot be useful without. `done_when` is the finished thing in a line,
+so he can tell whether he is there. `why` is last on the card and shortest: he
+does not need persuading about his own list, he needs to know what to type.
+
+`draft` is the whole of the doing when the step is "send this", so a step that
+tells him to ask, tell, confirm or reply and carries no draft is a bug.
 
 Only `tick.py` and the agents write here. Renderers read it and never change it.
 """

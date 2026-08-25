@@ -210,7 +210,7 @@ those tickets and does not get told what is queued.
 
 What Rei may say is the shape of the work: requirements are agreed, Kraken is
 working on it, here is what will change. Nothing about when or how big. Keep the
-internal detail on the desk side, in item `why` and `detail`, which is for him.
+internal detail on the desk side, in item `why` and `steps`, which is for him.
 
 ## What you write into the board
 

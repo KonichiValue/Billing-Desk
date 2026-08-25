@@ -91,6 +91,14 @@ changes what he does.
 
 Set `checked_at` to now, in ISO 8601 with the offset.
 
+Whenever you touch an item, leave its `steps` fit to act on: two to four, in
+order, verb first, aimed at Rei, naming the place and the thing. Commentary is
+not a step and belongs in `why`. Leave a `done_when` saying what the finished
+thing is. If the steps tell him to ask, tell, confirm or reply, there is a
+`draft`; if they tell him to read or compare, say so in a step and leave the
+draft out. An item with no steps renders as a warning on the page, so never
+leave one behind.
+
 ## 6. Keep the news honest
 
 `news` is what is moving around him that is not one of his tickets: a priority

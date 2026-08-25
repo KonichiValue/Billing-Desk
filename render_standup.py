@@ -114,17 +114,14 @@ color:var(--amber-ink)}
 .sess{background:var(--card);border:1px solid var(--line);border-radius:14px;
 box-shadow:var(--shadow);padding:15px 20px;margin-bottom:18px;
 border-left:4px solid var(--accent)}
-.sess-top{display:flex;gap:11px;align-items:baseline;flex-wrap:wrap}
-.sess-kind{font:700 10.5px/1 inherit;text-transform:uppercase;letter-spacing:.1em;
-color:var(--accent);background:var(--accent-bg);border:1px solid var(--accent-line);
-padding:5px 9px;border-radius:6px}
-.sess-top h2{margin:0;font-size:17px;letter-spacing:-.015em;font-weight:650}
-.sess-when{font-size:13px;color:var(--mut);font-weight:600}
-.sess-where{font-size:12.5px;color:var(--soft)}
-.sess-focus{margin:9px 0 0;font-size:14.5px;color:var(--mut)}
+.sess-focus{margin:0;font-size:14.5px;color:var(--mut)}
 .sess.big{border-left-width:5px}
-.sess.big .sess-top h2{font-size:19px}
-.agenda{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:1px;
+.sess.bare{background:none;border:0;box-shadow:none;padding:0;margin-bottom:14px}
+.sess.bare .sess-bring{margin:0}
+.day-fold{margin-top:10px}
+.day-fold>summary{cursor:pointer;padding:8px 11px;background:var(--hair);
+border-radius:8px;display:flex;align-items:center;gap:10px}
+.agenda{list-style:none;margin:11px 0 0;padding:0;display:grid;gap:1px;
 background:var(--line);border:1px solid var(--line);border-radius:10px;
 overflow:hidden}
 .agenda li{background:#fff;padding:9px 13px;display:flex;gap:12px;
@@ -201,44 +198,33 @@ def raise_rows(t: dict, desk_id: str) -> str:
 
 
 def render_session(sess: dict, big: bool) -> str:
-    """What Rei is walking into, and for an onsite, the shape of the day."""
+    """What this room has to produce, and what he has to walk in holding.
+
+    The agenda that used to sit here was a second copy of every ticket's asks,
+    one screen above them. What survives is the sentence saying what the room is
+    for, and the things he promised to bring, because forgetting one of those is
+    the only failure this block can actually prevent.
+    """
     if not sess.get("date") and not sess.get("focus"):
         return ""
-    agenda = "".join(
-        f"""
-      <li>
-        <span class="ag-t">{esc(row.get("topic"))}</span>
-        <span class="ag-w">{esc(row.get("why"))}</span>
-        {f'<span class="ag-o">{esc(row.get("owner"))}</span>' if row.get("owner") else ""}
-      </li>"""
-        for row in sess.get("agenda", [])
-    )
     bring = sess.get("bring", [])
     bring_block = ""
     if bring:
         rows = "".join(f"<li>{esc(b)}</li>" for b in bring)
         bring_block = (
-            f'<div class="sess-bring"><b>Have this ready</b>'
+            f'<div class="sess-bring"><b>Walk in with</b>'
             f'<ul style="margin:0;padding-left:17px">{rows}</ul></div>'
         )
-    # The kind chip only earns its space when the session is not the usual
-    # standup, which is the whole point of having it.
-    chip = (
-        f'<span class="sess-kind">{esc(sess.get("kind"))}</span>'
-        if sess.get("kind") != "standup"
+    focus = (
+        f'<p class="sess-focus">{esc(sess.get("focus"))}</p>'
+        if sess.get("focus")
         else ""
     )
+    # With nothing but the bring list in it, the frame is a box drawn round a
+    # box. Drop it and let the list stand on its own.
     return f"""
-  <section class="sess {"big" if big else ""}">
-    <div class="sess-top">
-      {chip}
-      <h2>{esc(sess.get("title") or sess.get("name"))}</h2>
-      <span class="sess-when">{esc(when_words(sess.get("date", ""), sess.get("at", "")))}</span>
-      {f'<span class="sess-where">{esc(sess.get("place"))}</span>' if sess.get("place") else ""}
-    </div>
-    {f'<p class="sess-focus">{esc(sess.get("focus"))}</p>' if sess.get("focus") else ""}
-    {f'<ul class="agenda">{agenda}</ul>' if agenda else ""}
-    {bring_block}
+  <section class="sess {"big" if big else ""} {"" if focus else "bare"}">
+    {focus}{bring_block}
   </section>"""
 
 
@@ -428,7 +414,7 @@ def render_ticket(t: dict, ident: str, desk_id: str, since: str) -> str:
         <div class="tk-id">
           <span class="tag">{esc(t.get("ref"))}</span>
           <span class="tk-kind">Asana ticket</span>
-          {pill("Nothing to ask", "green") if no_ask else pill("Ask on the table", "amber")}
+          {pill("Nothing to ask", "green") if no_ask else pill("You need an answer", "amber")}
         </div>
         <h2>{esc(t.get("title_en"))}</h2>
         <p class="ja">{esc(t.get("title_ja"))}</p>
@@ -471,16 +457,21 @@ def render_ticket(t: dict, ident: str, desk_id: str, since: str) -> str:
 
 
 def running_order(tickets: list[dict], ids: dict[str, str]) -> str:
+    """The order the meeting reaches his tickets, and what each one needs.
+
+    The number is the card's place on TG's board, which is the order they work
+    down, so 2 then 11 then 15 is right and is not a count of anything.
+    """
     rows = []
     for n, t in enumerate(tickets, 1):
         prep = t.get("prep") or {}
         blocks = len(prep.get("script", []))
         decisions = len(prep.get("decisions", []))
         note = (
-            f"{decisions} to settle" if decisions
-            else "status only" if prep.get("tg_ask_needed") is False
-            else f"{blocks} block{'s' if blocks != 1 else ''} to say" if blocks
-            else "no script yet"
+            f"{decisions} to settle today" if decisions
+            else "status only, nothing to ask" if prep.get("tg_ask_needed") is False
+            else f"{blocks} thing{'s' if blocks != 1 else ''} to say" if blocks
+            else "nothing written yet"
         )
         rows.append(
             f"""
@@ -511,6 +502,31 @@ def prep_jump(tickets: list[dict], ids: dict[str, str]) -> str:
   </nav>"""
 
 
+def whole_day(sess: dict) -> str:
+    """The rest of the meeting, folded, for a long session with other people's
+    topics in it. Useful to know where his parts sit in the day, and not worth a
+    single line of vertical space until he asks for it."""
+    rows = sess.get("agenda", [])
+    if not rows:
+        return ""
+    out = "".join(
+        f"""
+      <li>
+        <span class="ag-t">{esc(r.get("topic"))}</span>
+        <span class="ag-w">{esc(r.get("why"))}</span>
+        {f'<span class="ag-o">{esc(r.get("owner"))}</span>' if r.get("owner") else ""}
+      </li>"""
+        for r in rows
+    )
+    return f"""
+      <details class="day-fold">
+        <summary><span class="ev-d">The whole day</span>
+        <span class="ev-c">{len(rows)} items, yours and everyone else's</span>
+        <span class="fold-hint"></span></summary>
+        <ul class="agenda">{out}</ul>
+      </details>"""
+
+
 def last_session(board: dict, sess: dict) -> str:
     """The date of the meeting before this one, for "what moved since".
 
@@ -531,7 +547,12 @@ def render(board: dict, desk_ids: dict[str, str], built: str, stale: bool) -> st
     yet, which is the normal state until Rei presses the button."""
     sess = script_session(board)
     onsite = sess.get("kind") != "standup"
-    banner = render_session(sess, onsite)
+    # The script's own headline and the session's focus are two people answering
+    # "what is this meeting for", and printed together they read as a stutter.
+    # The headline was written for this script, so it wins.
+    lead = script_meta(board).get("headline") or ""
+    room = dict(sess, focus="") if lead else sess
+    banner = render_session(room, onsite)
 
     tickets = [t for t in board.get("tickets", []) if (t.get("prep") or {}).get("script")]
     if not tickets:
@@ -570,31 +591,37 @@ def render(board: dict, desk_ids: dict[str, str], built: str, stale: bool) -> st
         if stale
         else ""
     )
-    lead = script_meta(board).get("headline") or board.get("headline") or ""
+    settle = sum(len((t.get("prep") or {}).get("decisions", [])) for t in tickets)
     asks = sum(
         1
         for t in tickets
         if (t.get("prep") or {}).get("tg_ask_needed") is not False
         or (t.get("prep") or {}).get("decisions")
     )
-    order_h = "Running order" + ("" if not onsite else ", the room walks these")
+    # The summary line answers the two questions he has walking in: which room,
+    # and how much of it is his. Everything else is a click away.
+    room = esc(sess.get("title") or sess.get("name"))
+    when = esc(when_words(sess.get("date", ""), sess.get("at", "")))
+    speak = f'{len(tickets)} of your tickets, {asks} needing an answer from them'
+    if settle:
+        speak += f', {settle} to settle in the room'
     return f"""
   {prep_jump(tickets, ids)}
   {stale_note}
   <details class="nk" id="prep-need" data-remember="prep-need" open>
     <summary>
       <span class="nk-k">Need to know</span>
-      <span class="nk-sum">{esc(sess.get("title") or sess.get("name"))},
-      {esc(when_words(sess.get("date", ""), sess.get("at", "")))}</span>
-      <span class="nk-n">{len(tickets)} to speak on, {asks} with an ask</span>
+      <span class="nk-n">what the room is for, then the order</span>
       <span class="fold-hint"></span>
+      <span class="nk-sum"><b>{room}, {when}.</b> You speak on {esc(speak)}.</span>
     </summary>
     <div class="nk-in">
-      {f'<p class="nk-lead">{esc(lead)}</p>' if lead else ""}
+      {f'<p class="nk-alert plain"><b>What today has to produce</b>{esc(lead)}</p>' if lead else ""}
       {banner}
-      <h3 class="run-h">{esc(order_h)}<span class="q">TG's numbering on the
-      board, not a count of yours</span></h3>
+      <h3 class="run-h">The order they reach your tickets<span class="q">the
+      number is the card's place on TG's board</span></h3>
       {running_order(tickets, ids)}
+      {whole_day(sess)}
     </div>
   </details>
   {cards}

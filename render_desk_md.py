@@ -125,10 +125,6 @@ def render_ticket(t: dict) -> list[str]:
                 f"{st.get('who', 'they')} answers.{owed}{tail}{chase}",
                 "",
             ]
-        if a.get("progress_note"):
-            actions += [f"> Already happened: {a['progress_note']}", ""]
-        if a.get("why"):
-            actions += [f"**Why:** {a['why']}", ""]
         if hold:
             revisit = f" Chase on {hold['revisit']}." if hold.get("revisit") else ""
             actions += [
@@ -136,15 +132,27 @@ def render_ticket(t: dict) -> list[str]:
                 f"Wait for: {hold.get('until', '')}.{revisit}",
                 "",
             ]
-        for b in a.get("detail", []):
-            actions.append(f"- {b}")
-        if a.get("committed_to"):
-            actions.append(f"- **You committed this to {a['committed_to']}.**")
-        if a.get("blocked_by"):
-            actions.append(f"- Blocked by: {a['blocked_by']}")
+        steps = a.get("steps", [])
+        if steps:
+            actions.append("**Do this**")
+            actions.append("")
+            for n, b in enumerate(steps, 1):
+                actions.append(f"{n}. {b}")
+            actions.append("")
         actions.append(
-            f"- Act in: {a.get('where', '')} {link('open', a.get('link', ''))}"
+            f"Do it in: {a.get('where', '')} {link('open', a.get('link', ''))}"
         )
+        actions.append("")
+        if a.get("done_when") and not st["closed"]:
+            actions += [f"**Finished when:** {a['done_when']}", ""]
+        if a.get("why"):
+            actions += [f"**Why it matters:** {a['why']}", ""]
+        if a.get("progress_note"):
+            actions += [f"> Already happened: {a['progress_note']}", ""]
+        if a.get("committed_to"):
+            actions += [f"**You committed this to {a['committed_to']}.**", ""]
+        if a.get("blocked_by"):
+            actions += [f"Blocked by: {a['blocked_by']}", ""]
         if a.get("source_quote"):
             actions += [
                 "",

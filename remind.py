@@ -87,7 +87,9 @@ def build(data: dict) -> list[dict]:
                 body.append(f"Waiting for: {hold.get('until', '')}")
             elif waits.get("what"):
                 body.append(f"{waits.get('who', 'They')} owe: {waits['what']}")
-            body += [b for b in action.get("detail", [])]
+            body += [f"{n}. {b}" for n, b in enumerate(action.get("steps", []), 1)]
+            if action.get("done_when"):
+                body.append(f"Finished when: {action['done_when']}")
             if action.get("link"):
                 body.append(action["link"])
             if action.get("draft"):

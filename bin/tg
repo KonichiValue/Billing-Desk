@@ -12,7 +12,7 @@
 #   tg chat             open the folder in Cursor to hand work over
 #   tg build            rebuild the page from the board, no agent
 #   tg post             fold today's Notion meeting note into the board
-#   tg phone            print an address for this page, for a phone on the wifi
+#   tg phone [mins]     open this page to the wifi for an hour, for a phone
 #   tg stop             shut the local page server down
 #
 # Anything numeric goes straight to tick.py, so the numbers you see on the page
@@ -73,18 +73,20 @@ page() {
 
 phone_url() {
   # The same page, over the wifi, so it is readable on a phone. Nothing is
-  # published: it is this laptop answering, and the key still has to be right.
-  local url ip
+  # published: it is this laptop answering, the key still has to be right, and
+  # the window shuts by itself so an open port is never something to remember.
+  local url ip mins="${2:-60}"
   url="$(serve_url)" || { print -u2 "desk server would not start"; return 1 }
   ip="$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null)"
   [[ -n "$ip" ]] || { print -u2 "not on a network"; return 1 }
   pkill -f "serve.py --port $PORT" >/dev/null 2>&1
   mkdir -p logs
-  nohup python3 serve.py --port "$PORT" --lan >>logs/serve.log 2>&1 &
+  nohup python3 serve.py --port "$PORT" --lan "$mins" >>logs/serve.log 2>&1 &
   sleep 1
   url="$(serve_url)" || return 1
   print -r -- "On the same wifi, open: ${url/127.0.0.1/$ip}"
-  print -r -- "Works while this laptop is awake. Nothing is hosted anywhere."
+  print -r -- "Open for $mins min, then it goes back to this laptop only."
+  print -r -- "Only reachable from this wifi, and only while the laptop is awake."
 }
 
 stop_server() {
@@ -123,7 +125,7 @@ case "${1:-}" in
     run_agent prompt-prep.md "Sweeping everything, then writing today's script..." || exit 1
     page ;;
   chat)          open -a Cursor "$REPO" ;;
-  phone)         phone_url ;;
+  phone)         phone_url "$@" ;;
   stop)          stop_server ;;
   build)
     python3 render_desk.py "$BOARD" output/desk.html || exit 1

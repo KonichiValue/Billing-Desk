@@ -256,9 +256,12 @@ nothing and flags it, since a missing warning beats a wrong one.
   markup.
 - The amber **Check before you speak** box holds unknowns and hard cautions,
   including anything you must not say to TG.
-- It reads on a phone: `tg phone` prints an address for the same page for
-  anything on the same wifi, while the laptop is awake. Nothing is hosted, so no
-  TG thread or draft leaves the machine.
+- Every job carries the steps to do it, in order, before anything else on the
+  card. The reason it exists is at the bottom in one line, because it is the one
+  question you never ask of your own list.
+- It reads on a phone: `tg phone` opens the page to your wifi for an hour, then
+  closes it again on its own. `tg phone 15` for less, `tg stop` to end it now.
+  Nothing is hosted, so no TG thread or draft leaves the machine.
 - It is plain HTML in one file. Keep it, mail it, print it.
 
 ## Pieces

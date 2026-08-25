@@ -11,7 +11,8 @@ generated at startup, so nothing else on the machine can start an agent run.
 
     python3 serve.py            start on 127.0.0.1:8787
     python3 serve.py --port N   somewhere else
-    python3 serve.py --lan      answer on the wifi too, for a phone
+    python3 serve.py --lan 60   answer on the wifi for an hour, for a phone,
+                                then go back to loopback by itself
 """
 
 from __future__ import annotations
@@ -398,25 +399,44 @@ def main() -> int:
     parser.add_argument("--port", type=int, default=8787)
     parser.add_argument(
         "--lan",
-        action="store_true",
-        help="answer on the local network too, so a phone on the same wifi can "
-        "read the page. Still key-protected, still nothing published.",
+        type=int,
+        default=0,
+        metavar="MINUTES",
+        help="answer on the local network for this many minutes, so a phone on "
+        "the same wifi can read the page, then go back to loopback on its own. "
+        "Key-protected either way, and nothing is published.",
     )
     args = parser.parse_args()
 
-    host = "0.0.0.0" if args.lan else "127.0.0.1"
-    server = ThreadingHTTPServer((host, args.port), Handler)
     (ROOT / "state").mkdir(exist_ok=True)
     (ROOT / "state" / "serve.json").write_text(
         json.dumps({"port": args.port, "key": KEY, "started": time.time()}) + "\n",
         encoding="utf-8",
     )
     print(f"http://127.0.0.1:{args.port}/?k={KEY}", flush=True)
-    if args.lan:
+
+    minutes = max(0, args.lan)
+    if minutes:
         addr = lan_address()
         if addr:
-            print(f"phone on the same wifi: http://{addr}:{args.port}/?k={KEY}",
-                  flush=True)
+            print(
+                f"phone on the same wifi, for {minutes} min: "
+                f"http://{addr}:{args.port}/?k={KEY}",
+                flush=True,
+            )
+        # Off the wifi again on its own. A window left open all week is the
+        # thing that turns a convenience into an exposure, and remembering to
+        # close it is not a plan.
+        server = ThreadingHTTPServer(("0.0.0.0", args.port), Handler)
+        threading.Timer(minutes * 60, server.shutdown).start()
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            return 0
+        server.server_close()
+        print("wifi access closed, loopback only", flush=True)
+
+    server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

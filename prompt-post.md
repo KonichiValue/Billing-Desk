@@ -281,11 +281,10 @@ it is allocated once from `next_id` and stays with the item until it closes, so
 priority. The page orders itself from state and consequence.
 
 Every item carries a `why`: **one sentence, 15 words at most**, on what goes
-wrong if he skips it. It sits in the running order table, so it has to be
-scannable. "Nakayama is refining this today and is blocked on the answer" works.
-"Important for the ticket" does not, and neither does a paragraph. Longer
-reasoning belongs in `detail`. If you cannot write the why, the item does not
-belong on the page.
+wrong if he skips it. It sits low on the card and has to be scannable. "Nakayama
+is refining this today and is blocked on the answer" works. "Important for the
+ticket" does not, and neither does a paragraph. If you cannot write the why, the
+item does not belong on the page.
 
 Rank by consequence.
 
@@ -299,9 +298,35 @@ Rank by consequence.
    Cheap, high value, usually worth doing today.
 5. Investigation with no deadline goes last.
 
-`detail` says what actually needs doing, in one to three bullets. "Follow up on
-X" is not an item. "Comment on the ticket confirming cases 1 and 2 keep the
-hold, and ask Tanaka who runs the filter query" is an item.
+### `steps` and `done_when`, the part he actually reads
+
+`steps` is the item. Two to four of them, in order, each starting with a verb
+aimed at Rei, each one a thing he can do without going and working out what you
+meant. This is the field the whole page exists to deliver, so write it as if he
+is reading it with the ticket already open in front of him.
+
+- Name the place and the thing: "Open Murakami's comment and copy the three
+  conditions out of it" beats "review the conditions".
+- Say what to write, not that writing is needed: "Against each one write covered,
+  partly covered or not covered, with the reason in one line."
+- Put the constraint in a step of its own when there is one: "Nothing goes on the
+  ticket before the onsite."
+- Never use a step for commentary, background or reassurance. If a sentence does
+  not tell him to do something, it belongs in `why`, `progress_note` or the
+  ticket's `where_it_stands`.
+
+"Follow up on X" is not an item. Neither is "her reasoning matches the existing
+helpers, so this is a confirmation rather than a decision", which is a remark.
+
+`done_when` is one sentence describing the finished thing, so he can tell when he
+is done and so nothing gets half-carried into the next day. "The three conditions
+sit against the two checks with a call on each, and that sheet is what goes on
+screen at the onsite" works. "Comparison complete" does not.
+
+An item whose steps say to send, ask, tell, confirm or reply carries a `draft`.
+If the step is to think, compare or read, it carries no draft and a step saying
+so in plain words. An item with neither a draft nor steps is a bug: the page
+prints a warning in its place, and it will be the first thing Rei sees.
 
 Give every item an honest `est_minutes`. If a ticket has more than three
 items, cut the weakest rather than shrinking estimates.
@@ -390,14 +415,14 @@ nowhere else.
 
 ### If the item says to ask someone, write the message
 
-An item whose `detail` tells Rei to ask, tell, confirm or reply to a person is
-an outgoing message, and it needs a `draft`. Never leave the instruction on its
-own, because then he has to work out the wording himself, which is the part this
-page exists to do.
+An item whose `steps` tell Rei to ask, tell, confirm or reply to a person is an
+outgoing message, and it needs a `draft`. Never leave the instruction on its own,
+because then he has to work out the wording himself, which is the part this page
+exists to do.
 
-If a bullet is genuinely a note to himself and nothing leaves, say so in the
-bullet. And if one item would send two messages to different people, split it:
-one item, one recipient, one draft, one number.
+If a step is genuinely a note to himself and nothing leaves, say so in the step.
+And if one item would send two messages to different people, split it: one item,
+one recipient, one draft, one number.
 
 ### Never say back what they already wrote
 
@@ -499,8 +524,8 @@ or `*` for lists. Use these instead:
 Put a real newline between list items. Keep paragraphs short enough to read in a
 Slack thread without expanding.
 
-Where you lack the information to draft something, say so in the item's
-`detail` and leave `draft` out. Do not guess at content Rei will send.
+Where you lack the information to draft something, say so in the item's `steps`
+and leave `draft` out. Do not guess at content Rei will send.
 
 ## Step 9: what is the next room, and is it the usual one?
 
@@ -636,11 +661,13 @@ everything you are not changing.
         {
           "id": 8,
           "title": "Imperative, under 12 words.",
-          "why": "One line on what goes wrong if he skips this. Never a restatement of the title.",
-          "detail": [
-            "One to three bullets on what actually needs doing.",
-            "Concrete enough to start without rereading anything."
+          "steps": [
+            "Two to four steps, in order, each starting with a verb aimed at Rei.",
+            "Concrete enough to start on without working out what you meant.",
+            "Never commentary or background. That goes in why."
           ],
+          "done_when": "One sentence describing the finished thing, so he can tell when he is done.",
+          "why": "One line on what goes wrong if he skips this. Never a restatement of the title.",
           "state": "todo | hold | waiting | done | sent | dropped",
           "state_at": "HH:MM the state last changed, or empty string",
           "state_note": "A few words on why it is in that state. Empty string otherwise.",
