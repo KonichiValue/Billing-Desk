@@ -262,7 +262,7 @@ And once at board level:
   "for_date": "YYYY-MM-DD, the session you wrote for",
   "at": "10:30",
   "built_at": "ISO 8601 with +09:00",
-  "headline": "One sentence. The single most important thing about this session."
+  "headline": "One sentence naming what this room has to produce. It sits under the session name on the prep tab, so it must read to someone who has opened nothing else: name the ticket and name the decision. Never a recap of what changed, and never a verdict on how big the problem turned out to be."
 },
 "sessions": [
   {"kind": "onsite", "date": "YYYY-MM-DD", "at": "", "title": "Billing onsite",

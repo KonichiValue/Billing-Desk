@@ -538,6 +538,30 @@ that was waiting for the next meeting now has nowhere to go, so it has to move
 into Asana or into whatever replaces the meeting. Say that in the affected
 ticket's items.
 
+## Step 10: do not write the top line
+
+The first line of the page is worked out from the items themselves: how many
+things are his, which one to start on, and the room it is material for. You
+cannot improve on that and you must not try, because anything you write there is
+a sentence about a conversation, and by the time he reads it he has had the
+conversation. "So Wednesday is an argument about what happens after detection"
+means nothing to a man opening a page cold, and it was the first thing on it.
+
+`alert` is the one exception, and the bar is high. Write it only when all four
+are true:
+
+1. It needs him inside the hour.
+2. It is not already an item, and cannot be made into one, because there is
+   nothing for him to do until somebody else moves.
+3. It would change what he does this morning if he knew, and hurt if he did not.
+4. You can quote the message it came from.
+
+It must read to someone who has read nothing else. Name the person, name the
+ticket, say what has happened and what it means for him, in two sentences at
+most. If nothing meets all four, leave the field out entirely. An empty top
+block is the correct answer most days, and it is how the red one keeps its
+meaning.
+
 ## What you write into the board
 
 Merge into `state/board.json`. Set `checked_at` to now and keep `next_id` above
@@ -548,7 +572,10 @@ everything you are not changing.
 {
   "checked_at": "ISO 8601 with +09:00 offset",
   "next_id": 8,
-  "headline": "One sentence. The most consequential thing for Rei right now.",
+  "alert": {
+    "what": "Leave this out unless something needs him inside the hour and is not already an item. Read the rule below before writing it.",
+    "source_url": "Permalink to the message it came from."
+  },
   "notion_url": "URL of today's meeting note",
   "meeting_note": {
     "date": "YYYY-MM-DD of the standup you just processed",

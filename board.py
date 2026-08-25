@@ -51,9 +51,22 @@ into a room not knowing. Five rows at most, dropped as they go stale.
 
     [{"topic", "what", "why", "on": "2026-08-24", "source_url"}]
 
-`news` is drawn inside Need to know at the top of the work view, which is also
-where the headline and the next session sit. One block, because they are one
-question asked once a morning.
+`news` is drawn inside Need to know at the top of the work view, along with the
+next session and `alert`. One block, because they are one question asked once a
+morning, and it folds.
+
+The first line of that block is not stored anywhere. It is counted from the
+items every time the page is drawn: how many are his, which one to start on, how
+long they add up to, and whether the next room is close enough to matter. It
+used to be a sentence an agent wrote, and a sentence written yesterday about a
+conversation reads as a riddle this morning.
+
+`alert` is the exception, and it is empty almost every day: something that needs
+him inside the hour and is not an item, because there is nothing to do until
+somebody else moves. Two sentences that make sense to someone who has read
+nothing else, and a link to the message.
+
+    {"what": "...", "source_url": "..."}
 
 `terms` carries the vocabulary of the ticket in both languages: `term` in
 English, `say` as TG say it with furigana as `{漢字|かんじ}`, `means` in a

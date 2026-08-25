@@ -538,10 +538,10 @@ body[data-view="desk"] #view-standup,body[data-view="standup"] #view-desk{displa
 /* Cards. Every panel on both views is the same object. */
 .tk,.st-tk,.track,.panel,.st-run,.st-empty,.gaps{background:var(--card);
 border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
-.headline,.st-lead{background:var(--card);border:1px solid var(--line);
+.st-lead{background:var(--card);border:1px solid var(--line);
 border-left:4px solid var(--accent);border-radius:13px;padding:16px 20px;
 margin-bottom:20px;box-shadow:var(--shadow)}
-.headline p,.st-lead p{margin:0;font-size:17px;line-height:1.5;font-weight:550;
+.st-lead p{margin:0;font-size:17px;line-height:1.5;font-weight:550;
 letter-spacing:-.01em}
 h2.tickets-h{font-size:11.5px;text-transform:uppercase;letter-spacing:.09em;
 color:var(--soft);margin:28px 0 11px;font-weight:700}

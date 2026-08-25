@@ -99,7 +99,16 @@ be quoted back at one of his. Add a row only when you can name the route by
 which it reaches him, and take a row off once that route has closed. Five at the
 outside. Each row carries `topic`, `what`, `why`, `on` and `source_url`.
 
-## 7. Keep the shorthand current
+## 7. Clear the alert, or leave it alone
+
+`alert` is the red strip at the top of the page, for something that needs him
+inside the hour and is not an item. If the board carries one, decide whether it
+is still true: the moment somebody has answered, or the thing has become an item
+with a number, take it off. Do not write a new one to fill the space. The line
+above it, what needs him and which item to start on, is counted from the board
+by the renderer, so never write a headline or a summary of the day anywhere.
+
+## 8. Keep the shorthand current
 
 `terms` is the vocabulary of the ticket, and it has to carry the Japanese TG
 actually say, because that is what he hears in the room and has to place inside
@@ -109,7 +118,7 @@ with what the thing is. A term nobody has used in a fortnight comes off. Add one
 the moment TG use a word twice and it is not on the list: their reading codes,
 their 暫定 and 恒久 pairing, whatever they are calling the hold this week.
 
-## 8. Rebuild
+## 9. Rebuild
 
 ```
 python3 render_desk.py    state/board.json output/desk.html
@@ -119,7 +128,7 @@ python3 render_desk_md.py state/board.json output/desk.md
 `tg refresh` and the Refresh button open the page themselves, so do not open it
 again.
 
-## 9. Say what changed, briefly
+## 10. Say what changed, briefly
 
 Always end with this, even when the answer is dull. A run that finishes silently
 is indistinguishable from a run that died, and the log is the only place Rei can

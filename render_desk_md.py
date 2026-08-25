@@ -253,13 +253,21 @@ def render(data: dict) -> str:
     out = [
         f"# Billing desk, {pretty}",
         "",
-        data.get("headline", ""),
-        "",
         f"Board last checked {data.get('checked_at', 'never')}. "
         f"Numbers stay with an item until it is closed, so 'do 4' means the same "
         f"thing tomorrow.",
         "",
     ]
+
+    alert = data.get("alert") or {}
+    if isinstance(alert, str):
+        alert = {"what": alert}
+    if alert.get("what"):
+        out += [
+            f"> **Needs him now.** {alert['what']} "
+            f"{link('source', alert.get('source_url', ''))}",
+            "",
+        ]
 
     live = next_live(data)
     if live.get("date"):

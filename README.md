@@ -224,9 +224,13 @@ nothing and flags it, since a missing warning beats a wrong one.
   ticket on it, and the chip for the card you are looking at lights up as you
   scroll. `/` opens a finder that takes a ticket tag, an item number or any word
   from a title.
-- **Need to know** is one block at the top: the line of the day, the next room
-  and whether it has a prep, and TG news. It folds, and it remembers being
-  folded, because none of it is news by eleven.
+- **Need to know** opens with the only line the page writes itself: what needs
+  you, which item to start on, how long it all adds up to, and whether the next
+  room is close enough to matter. It is counted from the items rather than
+  written by an agent, so it cannot editorialise and cannot go stale. Under it,
+  the things you cannot act on: the next room, TG news, and, on the rare day it
+  is filled, a red **Needs you now** strip for something that wants you inside
+  the hour and is not yet an item. The block folds and remembers being folded.
 - On the work view, **To do** is one list: yours at the top,
   then what you may not send yet, then what sits with someone else, with finished
   work folded away behind a count. Each ticket header carries what Asana currently

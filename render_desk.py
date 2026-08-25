@@ -255,24 +255,29 @@ body[data-view="desk"] #scriptonly{display:none}
 .nk{background:var(--card);border:1px solid var(--line);border-left:4px solid
 var(--accent);border-radius:13px;box-shadow:var(--shadow);margin-bottom:18px;
 overflow:hidden}
+.nk.hot{border-left-color:var(--red)}
 .nk>summary{cursor:pointer;list-style:none;display:flex;gap:11px;
-align-items:center;flex-wrap:wrap;padding:13px 18px}
+align-items:center;flex-wrap:wrap;padding:12px 18px 14px}
 .nk>summary::-webkit-details-marker{display:none}
 .nk>summary::before{display:none}
 .nk[open]>summary{border-bottom:1px solid var(--line);background:#fbfcfe}
 .nk-k{flex:none;font:750 10.5px/1 inherit;text-transform:uppercase;
 letter-spacing:.1em;color:var(--accent);background:var(--accent-bg);
 border:1px solid var(--accent-line);padding:5px 9px;border-radius:6px}
-.nk-sum{flex:1;min-width:220px;font-size:15px;font-weight:600;
-letter-spacing:-.01em}
-/* Open, the block says it all below, so the summary line stops repeating it. */
-.nk[open] .nk-sum{font-size:12.5px;font-weight:550;color:var(--soft)}
-.nk[open] .nk-sum.dup{display:none}
+.nk.hot .nk-k{color:var(--red);background:var(--red-bg);border-color:var(--red-line)}
+/* The one line that is true whether the block is open or shut: what needs him.
+   It is worked out from the items, so it cannot drift into commentary. */
+.nk-sum{flex-basis:100%;font-size:16px;line-height:1.5;font-weight:450;
+letter-spacing:-.01em;color:var(--mut)}
+.nk-sum b{font-weight:700;color:var(--ink)}
 .nk-n{flex:none;font-size:11.5px;font-weight:650;color:var(--soft)}
-.nk[open] .nk-n{margin-left:0}
+/* Something that needs him inside the hour and is not yet an item. Rare. */
+.nk-alert{margin:0 0 11px;padding:11px 14px;background:var(--red-bg);
+border:1px solid var(--red-line);border-radius:10px;font-size:14.5px;
+color:var(--ink)}
+.nk-alert b{display:inline-block;font-size:10px;text-transform:uppercase;
+letter-spacing:.09em;color:var(--red);margin-right:9px;vertical-align:1px}
 .nk-in{padding:15px 18px 17px}
-.nk-lead{margin:0 0 14px;font-size:16.5px;line-height:1.5;font-weight:550;
-letter-spacing:-.01em}
 .nk-next{display:flex;gap:9px;align-items:center;flex-wrap:wrap;padding:11px 13px;
 border:1px solid var(--accent-line);background:var(--accent-bg);border-radius:10px;
 margin-bottom:10px}
@@ -1037,18 +1042,117 @@ def news_rows(rows: list[dict]) -> str:
     </div>"""
 
 
-def need_to_know(board: dict, has_script: bool, news: list[dict]) -> str:
+def first_line(tickets: list[dict], soon: dict) -> str:
+    """The first sentence on the page, worked out from the board itself.
+
+    This used to be a sentence an agent wrote about yesterday, and by the time
+    he read it the words were a recap of a conversation he had already had. The
+    only thing worth the top line is what needs him, so it is counted rather
+    than composed: the page cannot editorialise, and it cannot go stale.
+    """
+    mine, held, waiting = [], [], []
+    for t in tickets:
+        for item in t.get("items", []):
+            st = state_of(item)
+            row = (t, item, st)
+            if st["state"] == "todo":
+                mine.append(row)
+            elif st["state"] == "hold":
+                held.append(row)
+            elif st["state"] == "waiting":
+                waiting.append(row)
+
+    today = date.today().isoformat()
+    before = ""
+    if soon.get("date"):
+        when = when_words(soon.get("date", ""))
+        if when in ("today", "tomorrow"):
+            room = esc(soon.get("name", "standup")).lower()
+            before = (
+                f" Material for the {room} {when}."
+                if when == "tomorrow"
+                else f" The {room} is {when}."
+            )
+
+    if mine:
+        # The one to start on: something promised to a person outranks a
+        # deadline, and a deadline outranks the order the numbers happen to be
+        # in. Everything else is on its card.
+        def urgency(row: tuple) -> tuple:
+            _, item, _ = row
+            return (
+                0 if item.get("committed_to") else 1,
+                0 if item.get("at_standup") else 1,
+                item.get("id", 99),
+            )
+
+        ticket, item, _ = sorted(mine, key=urgency)[0]
+        mins = sum(i.get("est_minutes") or 0 for _, i, _ in mine)
+        n = len(mine)
+        clock = f", about {mins} min" if mins else ""
+        lead = (
+            f"<b>One thing needs you{clock}.</b>"
+            if n == 1
+            else f"<b>{n} things need you{clock} in total.</b>"
+        )
+        owed = (
+            f' You promised it to {esc(item["committed_to"])}.'
+            if item.get("committed_to")
+            else before
+        )
+        which = "Item" if n == 1 else "Start with item"
+        return (
+            f'{lead} {which} <b>{esc(item.get("id"))}</b> on '
+            f'{esc(ticket.get("ref"))}: {esc(item.get("title"))}.{owed}'
+        )
+
+    due = [
+        row
+        for row in held + waiting
+        if ((row[1].get("hold") or {}).get("revisit") or "") <= today
+        and ((row[1].get("hold") or {}).get("revisit") or "")
+        or ((row[1].get("waits_on") or {}).get("chase_on") or "") <= today
+        and ((row[1].get("waits_on") or {}).get("chase_on") or "")
+    ]
+    if due:
+        ticket, item, st = due[0]
+        return (
+            f"<b>Nothing is yours to write, but {len(due)} "
+            f'{"chase is" if len(due) == 1 else "chases are"} due.</b> '
+            f'<b>{esc(item.get("id"))}</b>, {esc(item.get("title"))}, has been '
+            f'with {esc(st.get("who") or "them")} since {esc(st.get("at", ""))}.'
+        )
+    if held or waiting:
+        n = len(held) + len(waiting)
+        return (
+            f"<b>Nothing needs you right now.</b> {n} "
+            f'{"thing is" if n == 1 else "things are"} sitting with other people, '
+            "none of them due a chase today."
+        )
+    return "<b>Nothing open across any ticket.</b> Enjoy it."
+
+
+def need_to_know(
+    board: dict, has_script: bool, news: list[dict], tickets: list[dict], soon: dict
+) -> str:
     """Everything he has to know before he starts, in one block he can shut.
 
-    Three things used to be three separate cards at the top of the page: the
-    line of the day, the next room, and what moved around him. They are one
-    question, asked once each morning, so they are one block, and it folds
-    because the answer stops being news by eleven.
+    The first line is always what needs him, and it stays visible folded, so the
+    top of the page answers the only question he opens it with. Underneath, the
+    things he has to know but cannot act on: anything flagged as needing him
+    inside the hour, the next room, and what moved around him.
     """
     rows = sessions(board)
     live = next((s for s in rows if not s.get("skipped")), {})
     skipped = [s for s in rows if s.get("skipped")]
-    headline = board.get("headline", "")
+    alert = board.get("alert") or {}
+    if isinstance(alert, str):
+        alert = {"what": alert}
+    alert_block = ""
+    if alert.get("what"):
+        alert_block = f"""
+      <p class="nk-alert"><b>Needs you now</b>{esc(alert["what"])}
+      {link_btn(alert.get("source_url", ""), "Source")}</p>"""
 
     next_block = ""
     if live:
@@ -1079,30 +1183,28 @@ def need_to_know(board: dict, has_script: bool, news: list[dict]) -> str:
         for that meeting has to move into Asana.</span>
       </div>"""
 
-    if not headline and not next_block and not news:
-        return ""
-    count = len(news)
+    inside = []
+    if alert_block:
+        inside.append("something urgent")
+    if next_block:
+        inside.append("the next room")
+    if news:
+        inside.append(f"{len(news)} TG updates" if len(news) != 1 else "1 TG update")
     return f"""
-  <details class="nk" id="need" data-remember="need" open>
+  <details class="nk{" hot" if alert_block else ""}" id="need"
+           data-remember="need" open>
     <summary>
       <span class="nk-k">Need to know</span>
-      <span class="nk-sum dup">{esc(first_clause(headline) or "Where the week stands")}</span>
-      <span class="nk-n">the day, the next room,
-      {count} TG update{"s" if count != 1 else ""}</span>
+      <span class="nk-n">{esc(", ".join(inside))}</span>
       <span class="fold-hint"></span>
+      <span class="nk-sum">{first_line(tickets, soon)}</span>
     </summary>
     <div class="nk-in">
-      {f'<p class="nk-lead">{esc(headline)}</p>' if headline else ""}
+      {alert_block}
       {next_block}
       {news_rows(news)}
     </div>
   </details>"""
-
-
-def first_clause(text: str) -> str:
-    """The first sentence, short enough to sit on a summary line."""
-    head = re.split(r"(?<=[.!?])\s", (text or "").strip(), maxsplit=1)[0]
-    return head if len(head) <= 96 else head[:93].rstrip() + "..."
 
 
 def jump_bar(tickets: list[dict], refs: dict[str, str], has_news: bool) -> str:
@@ -1395,8 +1497,8 @@ def render(data: dict) -> str:
 </div></header>
 <div class="wrap" id="top">
   <div id="view-desk" role="tabpanel">
-    {jump_bar(tickets, refs, bool(news or data.get("headline")))}
-    {need_to_know(data, has_script, news)}
+    {jump_bar(tickets, refs, True)}
+    {need_to_know(data, has_script, news, tickets, soon)}
     {render_track(tickets, refs, soon)}
     <div class="howto">
       <span>{f"About <b>{total} min</b> of this is yours. " if total else ""}Nothing here can be closed from the page. Say &ldquo;<b>done 3</b>&rdquo; to the Cursor chat open on this folder, or run <code>tg 3</code> in a terminal.</span>
