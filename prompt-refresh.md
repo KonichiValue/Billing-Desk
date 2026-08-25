@@ -48,11 +48,13 @@ Asana first, because the board should match it:
   `Billing 2-Week Cycle [TG shared]`. That is the ticket set. A ticket that is
   open in Asana belongs on the board even when nothing needs him today.
 - For each ticket, refresh `asana`: `status`, `section`, `priority`, `category`,
-  `assignee`. These are what Asana says, not your reading of it.
+  `severity`, `assignee`. These are what Asana says, not your reading of it, and
+  the page prints them under Asana's own field names.
 - New tickets since the last sweep get added, with `where_it_stands`, `terms`
   and `threads` filled in the same way the morning prep does it.
-- A ticket completed in Asana, or reassigned away from Rei, comes off the board.
-  Close its open items as `dropped` with a note saying why.
+- A ticket completed in Asana keeps its card, with `asana.completed` true, and
+  moves into the closed fold. A ticket reassigned away from Rei comes off the
+  board, its open items `dropped` with a note saying why.
 
 Check `modified_at` before pulling comment bodies, so an unchanged ticket costs
 one call.
@@ -97,7 +99,17 @@ be quoted back at one of his. Add a row only when you can name the route by
 which it reaches him, and take a row off once that route has closed. Five at the
 outside. Each row carries `topic`, `what`, `why`, `on` and `source_url`.
 
-## 7. Rebuild
+## 7. Keep the shorthand current
+
+`terms` is the vocabulary of the ticket, and it has to carry the Japanese TG
+actually say, because that is what he hears in the room and has to place inside
+two seconds. Each row is `term` in English, `say` in Japanese with furigana as
+`{漢字|かんじ}` on whole words, and `means` in one or two sentences that open
+with what the thing is. A term nobody has used in a fortnight comes off. Add one
+the moment TG use a word twice and it is not on the list: their reading codes,
+their 暫定 and 恒久 pairing, whatever they are calling the hold this week.
+
+## 8. Rebuild
 
 ```
 python3 render_desk.py    state/board.json output/desk.html
@@ -107,7 +119,7 @@ python3 render_desk_md.py state/board.json output/desk.md
 `tg refresh` and the Refresh button open the page themselves, so do not open it
 again.
 
-## 8. Say what changed, briefly
+## 9. Say what changed, briefly
 
 Always end with this, even when the answer is dull. A run that finishes silently
 is indistinguishable from a run that died, and the log is the only place Rei can

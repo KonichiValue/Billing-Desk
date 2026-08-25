@@ -79,11 +79,12 @@ def render_ticket(t: dict) -> list[str]:
     out += ["", t.get("where_it_stands", ""), ""]
 
     terms = [
-        f"- **{tm.get('term', '')}**: {tm.get('means', '')} "
-        f"{link('source', tm.get('source_url', ''))}"
+        f"- **{tm.get('term', '')}**"
+        + (f" ({plain(tm['say'])})" if tm.get("say") else "")
+        + f": {tm.get('means', '')} {link('source', tm.get('source_url', ''))}"
         for tm in t.get("terms", [])
     ]
-    out += block("What the shorthand means", terms)
+    out += block("Words and shorthand on this ticket", terms)
 
     changed = []
     for c in sorted(t.get("events", []), key=lambda x: (x.get("on", ""), x.get("at", ""))):
@@ -95,7 +96,7 @@ def render_ticket(t: dict) -> list[str]:
             f"  Source: {c.get('where', '')} {link('link', c.get('source_url', ''))}",
             "",
         ]
-    out += block("How this got here, in order", changed)
+    out += block("Timeline", changed)
 
     actions: list[str] = []
     for a in sorted(
@@ -293,7 +294,7 @@ def render(data: dict) -> str:
             if counts.get(k)
         )
         out += [
-            "## Everything you are carrying",
+            "## To do",
             "",
             f"**{summary}.**"
             + (f" About {total} min of work still with you." if total else ""),
@@ -340,7 +341,7 @@ def render(data: dict) -> str:
 
     news = data.get("news") or data.get("watch") or []
     if news:
-        out += ["## Around you at TG", "",
+        out += ["## TG news", "",
                 "Not his tickets. Things that move them.", ""]
         for w in news:
             line = f"- **{w.get('topic', '')}**"

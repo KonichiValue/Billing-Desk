@@ -24,6 +24,7 @@ import render_standup
 from render import (
     CSS,
     JS,
+    day_words,
     esc,
     furi,
     item_state as state_of,
@@ -44,10 +45,22 @@ from render import (
 EXTRA_CSS = """
 .panel{background:var(--card);border:1px solid var(--line);border-radius:13px}
 .tk .sub:last-of-type{border-bottom:0;padding-bottom:0}
-.tk{padding:20px 22px;margin-bottom:18px;scroll-margin-top:78px}
-.tk-head{padding-bottom:14px;border-bottom:1px solid var(--hair)}
-.tk-head h2{margin:0;font-size:17.5px;letter-spacing:-.015em;line-height:1.35;
-font-weight:650}
+/* A card is one ticket. The bar across the top and the tinted header block are
+   there so the eye never has to work out where one ticket ends. */
+.tk{padding:0 22px 20px;margin-bottom:20px;scroll-margin-top:96px;
+border-top:4px solid var(--line);overflow:hidden}
+.tk.mine{border-top-color:var(--red)}
+.tk.theirs{border-top-color:#8fbcf7}
+.tk.clear{border-top-color:var(--green)}
+.tk-head{margin:0 -22px;padding:14px 22px 15px;border-bottom:1px solid var(--line);
+background:linear-gradient(180deg,#fbfcfe,#fff)}
+.tk.mine .tk-head{background:linear-gradient(180deg,var(--red-bg),#fff)}
+.tk-id{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:7px}
+.tk-id .tag{margin:0;font-size:14px;padding:3px 11px;vertical-align:0}
+.tk-kind{font-size:10px;text-transform:uppercase;letter-spacing:.09em;
+color:#9aa3b2;font-weight:700}
+.tk-head h2{margin:0;font-size:18.5px;letter-spacing:-.018em;line-height:1.3;
+font-weight:700}
 .tk-ja{margin:4px 0 0;font-size:14px;color:var(--mut)}
 .tk-meta{margin:10px 0 0;display:flex;gap:7px;align-items:center;flex-wrap:wrap;
 font-size:12px;color:var(--soft)}
@@ -72,9 +85,12 @@ border-bottom:1px solid var(--line)}
 .track-head h2{margin:0;font-size:14px;letter-spacing:-.01em;font-weight:650}
 .track-head span{font-size:12.5px;color:var(--soft);margin-left:auto;
 font-variant-numeric:tabular-nums}
-.track-closed>summary{cursor:pointer;padding:10px 18px;font-size:12px;
-font-weight:650;color:var(--soft);border-top:1px solid var(--line);
-background:var(--hair)}
+.track-head .track-key{margin-left:0;font-size:11.5px;color:#9aa3b2}
+.track-closed>summary{cursor:pointer;padding:11px 18px;font-size:12.5px;
+color:var(--soft);border-top:1px solid var(--line);background:var(--hair);
+display:flex;gap:8px;align-items:center}
+.track-closed>summary b{font-weight:700;color:var(--mut)}
+.track-closed>summary:hover{color:var(--ink)}
 .tr{display:flex;gap:11px;padding:10px 18px;border-bottom:1px solid var(--hair);
 align-items:center;border-left:3px solid transparent}
 .tr:last-child{border-bottom:0}
@@ -95,18 +111,26 @@ width:44px;text-align:right}
 .tr.shut .tr-title{text-decoration:line-through;text-decoration-color:#a6afbe}
 .tr.shut{opacity:.62}
 
-/* One chronological thread per ticket. */
-.evs-earlier{margin:0 0 12px}
+/* The timeline, oldest first, in days. */
+.evs-earlier{margin:0 0 14px}
 .evs-earlier>summary{cursor:pointer;font-size:12px;font-weight:650;
-color:var(--soft);padding:6px 0}
-.evs-earlier .evs{margin-top:8px}
+color:var(--soft);padding:7px 10px;background:var(--hair);border-radius:8px;
+display:flex;align-items:center;gap:7px}
+.evs-earlier>summary:hover{color:var(--ink)}
+.evs-earlier .evs{margin-top:12px}
+.ev-day{margin:0 0 9px;font-size:11px;font-weight:750;text-transform:uppercase;
+letter-spacing:.08em;color:var(--soft)}
 .evs{list-style:none;margin:0;padding:0;position:relative}
-.evs:before{content:"";position:absolute;left:41px;top:6px;bottom:10px;width:2px;
+.evs:before{content:"";position:absolute;left:53px;top:6px;bottom:10px;width:2px;
 background:var(--line)}
 .ev{display:flex;gap:15px;padding:0 0 14px;position:relative}
 .ev:last-child{padding-bottom:0}
-.ev-at{flex:none;width:34px;text-align:right;font-size:12px;font-weight:700;
-color:var(--soft);font-variant-numeric:tabular-nums;padding-top:2px}
+.ev-at{flex:none;width:46px;text-align:right;padding-top:1px;
+font-variant-numeric:tabular-nums;line-height:1.35}
+.ev-at b{display:block;font-size:10px;font-weight:700;color:#9aa3b2;
+text-transform:uppercase;letter-spacing:.03em}
+.ev-at i{display:block;font-size:11.5px;font-weight:700;color:var(--soft);
+font-style:normal}
 .ev-body{flex:1;min-width:0;padding-left:18px;position:relative}
 .ev-body:before{content:"";position:absolute;left:-5px;top:6px;width:10px;
 height:10px;border-radius:50%;background:#fff;border:2px solid var(--accent)}
@@ -135,9 +159,12 @@ font-variant-numeric:tabular-nums}
 border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .term{background:#fbfcfe;padding:10px 13px;display:flex;gap:14px;
 align-items:baseline;flex-wrap:wrap}
-.terms dt{flex:none;min-width:145px;font-weight:700;font-size:13.5px;
+.terms dt{flex:none;width:172px;font-weight:700;font-size:13.5px;
 color:var(--accent-ink)}
 .terms dd{flex:1;min-width:240px;margin:0;font-size:13.5px;color:var(--mut)}
+.term-ja{display:block;margin-top:3px;font-size:14px;font-weight:600;
+color:var(--ink);line-height:1.7}
+.term-ja ruby rt{font-size:.5em}
 
 /* An item, and the colour of its left edge is where it sits. */
 .act{border:1px solid var(--line);border-left:3px solid var(--line);
@@ -199,13 +226,6 @@ color:var(--amber-ink)}
 .hold b{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.07em;
 color:var(--amber);margin-bottom:3px}
 .hold-until{color:#7a2e0e;font-weight:600}
-.holds{background:var(--amber-bg);border:1px solid var(--amber-line);
-border-left:4px solid var(--amber);border-radius:13px;padding:14px 19px;
-margin-bottom:20px}
-.holds h2{margin:0 0 8px;font-size:11.5px;text-transform:uppercase;
-letter-spacing:.09em;color:var(--amber);font-weight:700}
-.holds ul{margin:0;padding-left:18px}
-.holds li{font-size:14px;color:var(--amber-ink);margin-bottom:4px}
 .dec{background:var(--amber-bg);border:1px solid var(--amber-line);
 border-radius:10px;padding:12px 15px;margin-bottom:10px}
 .dec-q{font-weight:600;font-size:14.5px;color:var(--amber-ink)}
@@ -227,6 +247,91 @@ body[data-view="standup"] #prep:hover{background:#c33bab}
 a.refresh{text-decoration:none}
 .refresh-note{font-size:11.5px;color:#93a4bd;max-width:280px}
 .refresh-note.bad{color:#f6b0ac}
+/* Buttons that only mean something on one view stay on that view. */
+body[data-view="desk"] #scriptonly{display:none}
+
+/* Need to know: the line of the day, the next room, and TG news, in one block
+   that shuts. Everything in it stops being news by the middle of the morning. */
+.nk{background:var(--card);border:1px solid var(--line);border-left:4px solid
+var(--accent);border-radius:13px;box-shadow:var(--shadow);margin-bottom:18px;
+overflow:hidden}
+.nk>summary{cursor:pointer;list-style:none;display:flex;gap:11px;
+align-items:center;flex-wrap:wrap;padding:13px 18px}
+.nk>summary::-webkit-details-marker{display:none}
+.nk>summary::before{display:none}
+.nk[open]>summary{border-bottom:1px solid var(--line);background:#fbfcfe}
+.nk-k{flex:none;font:750 10.5px/1 inherit;text-transform:uppercase;
+letter-spacing:.1em;color:var(--accent);background:var(--accent-bg);
+border:1px solid var(--accent-line);padding:5px 9px;border-radius:6px}
+.nk-sum{flex:1;min-width:220px;font-size:15px;font-weight:600;
+letter-spacing:-.01em}
+/* Open, the block says it all below, so the summary line stops repeating it. */
+.nk[open] .nk-sum{font-size:12.5px;font-weight:550;color:var(--soft)}
+.nk[open] .nk-sum.dup{display:none}
+.nk-n{flex:none;font-size:11.5px;font-weight:650;color:var(--soft)}
+.nk[open] .nk-n{margin-left:0}
+.nk-in{padding:15px 18px 17px}
+.nk-lead{margin:0 0 14px;font-size:16.5px;line-height:1.5;font-weight:550;
+letter-spacing:-.01em}
+.nk-next{display:flex;gap:9px;align-items:center;flex-wrap:wrap;padding:11px 13px;
+border:1px solid var(--accent-line);background:var(--accent-bg);border-radius:10px;
+margin-bottom:10px}
+.nk-next.off{border-color:var(--amber-line);background:var(--amber-bg)}
+.nk-tag{font:750 10px/1 inherit;text-transform:uppercase;letter-spacing:.09em;
+color:var(--accent-ink)}
+.nk-next.off .nk-tag{color:var(--amber)}
+.nk-next strong{font-size:15px;letter-spacing:-.01em}
+.nk-when{font-size:13px;font-weight:650;color:var(--mut)}
+.nk-where{font-size:12.5px;color:var(--soft)}
+.nk-focus{flex-basis:100%;font-size:13.5px;color:var(--mut);margin:0}
+.nk-news h3{margin:14px 0 8px;font-size:12px;font-weight:750;display:flex;
+gap:9px;align-items:center}
+.nk-news h3:before{content:"";width:3px;height:13px;border-radius:2px;
+background:var(--accent-line)}
+.nk-news h3 .q{font-weight:500;font-size:11.5px;color:var(--soft)}
+.nk-news ul{list-style:none;margin:0;padding:0;border:1px solid var(--line);
+border-radius:10px;overflow:hidden}
+.nk-news li{padding:10px 13px;border-bottom:1px solid var(--hair);display:flex;
+gap:11px;align-items:baseline;flex-wrap:wrap;background:#fff}
+.nk-news li:last-child{border-bottom:0}
+.n-what{flex:1;min-width:250px;font-size:13.5px}
+.n-what b{font-weight:650}
+.n-why{display:block;font-size:12.5px;color:var(--mut);margin-top:2px}
+.n-when{flex:none;font-size:11px;color:var(--soft);font-weight:650}
+
+/* The section header for the cards, with where each ticket stands on it. */
+.tickets-bar{margin:26px 0 12px;padding:13px 17px;background:var(--card);
+border:1px solid var(--line);border-radius:13px;box-shadow:var(--shadow);
+scroll-margin-top:96px}
+.tb-head{display:flex;gap:10px;align-items:baseline}
+.tb-head h2{margin:0;font-size:14px;font-weight:750;letter-spacing:-.01em}
+.tb-n{font-size:12px;color:var(--soft);margin-left:auto}
+.tb-chips{display:flex;gap:7px;flex-wrap:wrap;margin-top:11px}
+.tb-chip{display:flex;gap:7px;align-items:center;text-decoration:none;
+font-size:12.5px;font-weight:650;color:var(--ink);border:1px solid var(--line);
+background:#fff;border-radius:8px;padding:5px 10px}
+.tb-chip:hover{border-color:var(--accent-line);background:var(--accent-bg)}
+.tb-chip .dot{width:8px;height:8px;border-radius:50%;background:var(--line);
+flex:none}
+.tb-chip.mine .dot{background:var(--red)}
+.tb-chip.theirs .dot{background:#8fbcf7}
+.tb-chip.clear .dot{background:var(--green)}
+.tb-chip .s{font-weight:500;font-size:11.5px;color:var(--soft)}
+
+/* Tickets that need nothing, and tickets that are over. */
+.tk-fold{background:var(--card);border:1px solid var(--line);border-radius:13px;
+box-shadow:var(--shadow);margin-bottom:18px;padding:0 16px}
+.tk-fold>summary{display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+padding:13px 2px;font-size:13.5px;font-weight:700;cursor:pointer}
+.tk-fold>summary .n{font-size:11px;font-weight:700;color:var(--soft);
+background:var(--hair);border:1px solid var(--line);border-radius:20px;
+padding:0 7px}
+.tk-fold>summary .q{font-weight:500;font-size:12px;color:var(--soft)}
+.tk-fold[open]{padding-bottom:14px}
+.tk-fold[open]>summary{border-bottom:1px solid var(--line);margin-bottom:16px}
+.tk-fold .tk{margin-bottom:14px;border:1px solid var(--line);
+border-top:4px solid var(--line);border-radius:12px}
+.tk-fold .tk:last-child{margin-bottom:0}
 """
 
 
@@ -237,8 +342,13 @@ def anchor(ref: str) -> str:
     return f"t-{ascii_part}{digest}" if ascii_part else f"t-{digest}"
 
 
-def sub_line(st: dict) -> str:
-    """The one line under a title saying what has already happened to it."""
+def sub_line(st: dict, item: dict | None = None) -> str:
+    """The one line under a title saying what has already happened to it.
+
+    A held item says what it is held for right here. That used to be a separate
+    amber box above the list, which meant reading two lists to find out that one
+    of the four things in front of him was not his to send yet.
+    """
     bits = []
     if st["state"] == "waiting":
         who = st.get("who", "them")
@@ -246,6 +356,10 @@ def sub_line(st: dict) -> str:
         bits.append(
             f"sent {since}, with {who}" if st.get("sent") else f"with {who} since {since}"
         )
+    elif st["state"] == "hold" and item:
+        hold = item.get("hold") or {}
+        if hold.get("until"):
+            bits.append(f"do not send yet, waiting for {hold['until']}")
     elif st["closed"]:
         bits.append(f"{st['label'].lower()} {st.get('at', '')}")
     if st.get("note"):
@@ -260,12 +374,13 @@ def track_row(
     ref: str, item: dict, st: dict, refs: dict[str, str], sess: dict | None
 ) -> str:
     mins = item.get("est_minutes")
-    sub = sub_line(st)
+    sub = sub_line(st, item)
     group = "shut" if st["closed"] else GROUPS.get(st["state"], "")
     due, due_kind = when_tag(item, st, sess)
     return f"""
       <li class="tr {group}">
-        <span class="tr-rank">{esc(item.get("id", "-"))}</span>
+        <span class="tr-rank" title="Item {esc(item.get("id", "-"))}. Say &ldquo;done
+        {esc(item.get("id", "-"))}&rdquo; to close it.">{esc(item.get("id", "-"))}</span>
         <span class="tr-tag">{esc(ref)}</span>
         <a class="tr-title" href="#{esc(refs.get(ref, anchor(ref)))}">{esc(item.get("title"))}
           {f'<span class="tr-note">{sub}</span>' if sub else ""}</a>
@@ -298,23 +413,24 @@ def render_track(
             (counts["todo"], "with you"),
             (counts["hold"], "not yet"),
             (counts["waiting"], "with someone else"),
-            (counts["closed"], "finished"),
         )
         if n
     )
     # Finished work folds away by default. It is a record, not a list.
     closed_block = (
         f"""
-    <details class="track-closed">
-      <summary>{len(shut)} finished</summary>
+    <details class="track-closed" data-remember="done">
+      <summary><b>{len(shut)} finished</b> on these tickets, kept for the record
+      <span class="fold-hint"></span></summary>
       <ul style="list-style:none;margin:0;padding:0">{"".join(shut)}</ul>
     </details>"""
         if shut
         else ""
     )
     return f"""
-  <div class="track">
-    <div class="track-head"><h2>Everything you are carrying</h2>
+  <div class="track" id="todo">
+    <div class="track-head"><h2>To do</h2>
+    <span class="track-key">numbered on the left, so &ldquo;done 3&rdquo; is enough</span>
     <span>{esc(summary)}</span></div>
     <ul style="list-style:none;margin:0;padding:0">{"".join(live)}</ul>
     {closed_block}
@@ -322,20 +438,35 @@ def render_track(
 
 
 def render_terms(rows: list[dict]) -> str:
+    """The words on this ticket, ours and theirs.
+
+    `say` is what TG call it, and it earns its own line because hearing the
+    Japanese in the room and reading the English here are the same lookup.
+    """
     if not rows:
         return ""
-    items = "".join(
-        f'<div class="term"><dt>{esc(r.get("term"))}</dt>'
-        f'<dd>{esc(r.get("means"))} '
-        f'{link_btn(r.get("source_url", ""), "Source") if r.get("source_url") else ""}</dd></div>'
-        for r in rows
-    )
+    items = ""
+    for r in rows:
+        say = (
+            f'<span class="term-ja">{furi(r.get("say", ""))}</span>'
+            if r.get("say")
+            else ""
+        )
+        items += (
+            f'<div class="term"><dt>{esc(r.get("term"))}{say}</dt>'
+            f'<dd>{esc(r.get("means"))} '
+            f'{link_btn(r.get("source_url", ""), "Source") if r.get("source_url") else ""}'
+            "</dd></div>"
+        )
+    ja = sum(1 for r in rows if r.get("say"))
+    count = f"{len(rows)} terms" + (f", {ja} in Japanese" if ja else "")
     return section(
-        "What the shorthand means",
+        "Words and shorthand on this ticket",
         f'<dl class="terms">{items}</dl>',
         role="ref",
-        count=len(rows),
+        count=count,
         fold=True,
+        hint="what they say, what it means",
     )
 
 
@@ -360,17 +491,22 @@ def render_threads(rows: list[dict]) -> str:
         "Where this is discussed",
         f'<ul class="thr">{"".join(out)}</ul>',
         role="ref",
-        count=len(rows),
+        count=f"{len(rows)} threads",
         fold=True,
     )
 
 
 def event_li(r: dict, show_date: bool) -> str:
     src = r.get("source_url", "")
-    when = f'{r.get("on", "")[5:]} {r.get("at", "")}' if show_date else r.get("at", "")
+    day = day_words(r.get("on", "")) if show_date else ""
+    when = (
+        f'<b>{esc(day)}</b><i>{esc(r.get("at", ""))}</i>'
+        if day
+        else f'<i>{esc(r.get("at", ""))}</i>'
+    )
     return f"""
         <li class="ev">
-          <span class="ev-at">{esc(when)}</span>
+          <span class="ev-at">{when}</span>
           <span class="ev-body">
             <span class="ev-who">{esc(r.get("who", ""))}</span>
             <span class="ev-what">{esc(r.get("what"))}</span>
@@ -381,35 +517,47 @@ def event_li(r: dict, show_date: bool) -> str:
 
 
 def render_events(rows: list[dict]) -> str:
-    """One chronological thread per ticket. Today open, earlier folded."""
+    """The timeline, in days.
+
+    Oldest at the top, so it reads as a story. The most recent day is open and
+    named, and everything before it folds behind a summary that says which days
+    they were, because "earlier moves" told him nothing about what he was about
+    to unfold.
+    """
     if not rows:
         return ""
-    today = date.today().isoformat()
     ordered = sorted(rows, key=lambda x: (x.get("on", ""), x.get("at", "")))
-    now = [r for r in ordered if r.get("on") == today]
-    before = [r for r in ordered if r.get("on") != today]
+    days: dict[str, list[dict]] = {}
+    for r in ordered:
+        days.setdefault(r.get("on", ""), []).append(r)
+    keys = list(days)
+    latest, before = keys[-1], keys[:-1]
 
-    earlier = ""
+    folded = ""
     if before:
-        earlier = f"""
-        <details class="evs-earlier">
-          <summary>{len(before)} earlier {"move" if len(before) == 1 else "moves"}</summary>
-          <ol class="evs">{"".join(event_li(r, True) for r in before)}</ol>
+        older = [r for k in before for r in days[k]]
+        span = (
+            f"{day_words(before[0])} to {day_words(before[-1])}"
+            if len(before) > 1
+            else day_words(before[0])
+        )
+        folded = f"""
+        <details class="evs-earlier" >
+          <summary>Before that: {len(older)}
+          {"move" if len(older) == 1 else "moves"}, {esc(span)}
+          <span class="fold-hint"></span></summary>
+          <ol class="evs">{"".join(event_li(r, True) for r in older)}</ol>
         </details>"""
-    body = (
-        f'{earlier}<ol class="evs">{"".join(event_li(r, False) for r in now)}</ol>'
-        if now
-        else f'{earlier}<p class="empty">Nothing moved today.</p>'
-    )
-    # A day with nothing in it folds away. The timeline is how a ticket got here,
-    # and that is only worth the space when something arrived.
+
+    latest_rows = days[latest]
+    body = f"""{folded}
+        <p class="ev-day">{esc(day_words(latest)).capitalize()}</p>
+        <ol class="evs">{"".join(event_li(r, False) for r in latest_rows)}</ol>"""
     return section(
-        "Today, in order" if now else "How this got here",
+        "Timeline",
         body,
         role="log",
-        count=len(now) or None,
-        fold=not now,
-        hint="what happened",
+        hint=f"last moved {day_words(latest)}",
     )
 
 
@@ -530,12 +678,16 @@ def render_items(
         </{tag}>"""
         )
     live = sum(1 for r in rows if not state_of(r)["closed"])
+    done = len(rows) - live
+    tally = f"{live} open" if live else "all done"
+    if done:
+        tally += f", {done} closed"
     return section(
         "To do on this ticket",
         "".join(out),
         role="now",
-        count=live or None,
-        hint="numbered, say the number",
+        count=tally,
+        hint="numbers are how you refer to these",
     )
 
 
@@ -558,7 +710,7 @@ def render_decisions(rows: list[dict]) -> str:
         "Still undecided",
         "".join(out),
         role="warn",
-        count=len(rows),
+        count=f"{len(rows)} open",
         hint="nobody owns this yet",
     )
 
@@ -566,27 +718,26 @@ def render_decisions(rows: list[dict]) -> str:
 def asana_chips(t: dict) -> str:
     """What Asana itself says about this ticket, not what the agent thinks.
 
-    Every value carries its field name. Without it the row is a line of words
-    with no subjects: 調査中, Other, Issue, and a date range in brackets.
+    Every value carries its field name, and the field names are Asana's own, so
+    what is on the screen matches what he sees when he opens the ticket.
     """
     a = t.get("asana") or {}
     bits = []
-    if a.get("status"):
-        bits.append(pill(f'Asana: {a["status"]}', "blue"))
     labelled = (
-        ("category", "Type"),
+        ("status", "Status"),
+        ("category", "Category"),
         ("priority", "Priority"),
         ("severity", "Severity"),
-        ("section", "Cycle"),
+        ("assignee", "Assignee"),
+        ("section", "Section"),
     )
     for key, label in labelled:
-        if a.get(key):
-            bits.append(
-                f'<span class="tk-chip"><b>{label}</b>{esc(a[key])}</span>'
-            )
-    if a.get("assignee") and "Rei" not in a["assignee"]:
+        if not a.get(key):
+            continue
+        odd = key == "assignee" and "Rei" not in a[key]
         bits.append(
-            f'<span class="tk-chip warn"><b>Assignee</b>{esc(a["assignee"])}</span>'
+            f'<span class="tk-chip{" warn" if odd else ""}">'
+            f"<b>{label}</b>{esc(a[key])}</span>"
         )
     return "".join(bits)
 
@@ -622,28 +773,32 @@ def render_ticket(
     mine = sum(1 for s in states if s["state"] == "todo")
     open_n = sum(1 for s in states if not s["closed"])
     if mine:
-        posture = pill(f"{mine} with you", "red")
+        posture, tone = pill(f"{mine} with you", "red"), "mine"
     elif open_n:
-        posture = pill("Nothing on you", "blue")
+        posture, tone = pill("Nothing on you", "blue"), "theirs"
     else:
-        posture = pill("Clear", "green")
+        posture, tone = pill("Clear", "green"), "clear"
 
     # When there is a script for this ticket, the desk card says so and jumps
     # straight to it, because "what do I say about this" is the next question.
     say_link = (
         f'<a class="btn" href="#{esc(render_standup.anchor(ident))}" '
-        f'data-goto="standup">Script for this ticket</a>'
+        f'data-goto="standup">What I say about this</a>'
         if (t.get("prep") or {}).get("script")
         else ""
     )
 
     return f"""
-    <article class="tk" id="{esc(ident)}">
+    <article class="tk {tone}" id="{esc(ident)}">
       <header class="tk-head">
-        <h2><span class="tag">{esc(t.get("ref"))}</span> {esc(t.get("title_en"))}</h2>
+        <div class="tk-id">
+          <span class="tag">{esc(t.get("ref"))}</span>
+          <span class="tk-kind">Asana ticket</span>
+          {posture}
+        </div>
+        <h2>{esc(t.get("title_en"))}</h2>
         <p class="tk-ja">{esc(t.get("title_ja"))}</p>
         <p class="tk-meta">
-          {posture}
           {asana_chips(t)}
         </p>
         <div class="tk-links">
@@ -804,8 +959,11 @@ def is_stale(stamp: str) -> bool:
 
 
 def view_tabs(mine: int, has_script: bool, sess: dict) -> str:
-    """Two tabs. "My work" and "What I say" name what you get, which "Desk" and
-    "Standup" did not, and the second one carries the room it is written for.
+    """Two tabs, both named for the client, because a second client is coming.
+
+    "TG my work" and "TG what I say" say whose work and which half. The client
+    prefix means a Kyuden pair can sit beside them without either name having to
+    change or a tab having to be read twice.
 
     All on one line: the header sits above everything he reads all day, so it
     stays as short as it can while still being the most obvious thing up there.
@@ -821,10 +979,10 @@ def view_tabs(mine: int, has_script: bool, sess: dict) -> str:
     return f"""
   <div class="views" role="tablist" aria-label="Views">
     <button data-view="desk" role="tab" aria-selected="true">
-      <span class="k">1</span><span class="lbl">My work</span>{badge}
+      <span class="k">1</span><span class="lbl">TG my work</span>{badge}
     </button>
     <button data-view="standup" role="tab" aria-selected="false">
-      <span class="k">2</span><span class="lbl">What I say</span>
+      <span class="k">2</span><span class="lbl">TG what I say</span>
       <span class="sub">{esc(room)}</span>{alert}
     </button>
   </div>"""
@@ -850,60 +1008,7 @@ def opening_view(board: dict, has_script: bool) -> str:
     return "standup" if (now.hour, now.minute) < (hour, minute) else "desk"
 
 
-def next_up(board: dict, has_script: bool) -> str:
-    """A line on the desk about the next room, and whether it has a script.
-
-    Also where a skipped standup gets said out loud, because "no standup
-    Wednesday" changes what has to move into Asana instead.
-    """
-    rows = sessions(board)
-    if not rows:
-        return ""
-    live = next((s for s in rows if not s.get("skipped")), {})
-    skipped = [s for s in rows if s.get("skipped")]
-    if not live and not skipped:
-        return ""
-
-    off = ""
-    if skipped:
-        s = skipped[0]
-        off = (
-            f'<p class="sess-focus"><strong>No {esc(s.get("name", "standup")).lower()} '
-            f'{esc(when_words(s.get("date", "")))}.</strong> {esc(s.get("reason"))} '
-            "Anything that was waiting for that meeting has to move into Asana.</p>"
-        )
-    if not live:
-        return f'<section class="sess">{off}</section>'
-
-    # A script for Thursday is not a script for Wednesday's onsite, and saying
-    # "read the script" when it describes a different room is how you walk into
-    # the wrong one.
-    covered = has_script and script_meta(board).get("for_date") == live.get("date")
-    if covered:
-        script_note = '<a class="btn" href="#top" data-goto="standup">Read the script</a>'
-    elif has_script:
-        for_day = when_words(script_meta(board).get("for_date", ""))
-        script_note = (
-            f'<span class="tk-chip warn">Script is for {esc(for_day)}, '
-            f"not this</span>"
-        )
-    else:
-        script_note = '<span class="tk-chip warn">No script yet</span>'
-    return f"""
-  <section class="sess">
-    <div class="sess-top">
-      <span class="sess-kind">Next up</span>
-      <h2>{esc(live.get("title") or live.get("name"))}</h2>
-      <span class="sess-when">{esc(when_words(live.get("date", ""), live.get("at", "")))}</span>
-      {f'<span class="sess-where">{esc(live.get("place"))}</span>' if live.get("place") else ""}
-      {script_note}
-    </div>
-    {f'<p class="sess-focus">{esc(live.get("focus"))}</p>' if live.get("focus") else ""}
-    {off}
-  </section>"""
-
-
-def render_news(rows: list[dict]) -> str:
+def news_rows(rows: list[dict]) -> str:
     """What is moving around TG that is not one of his tickets.
 
     A ticket page answers "what do I do". It does not answer "what has changed
@@ -926,33 +1031,97 @@ def render_news(rows: list[dict]) -> str:
       </li>"""
         )
     return f"""
-  <section class="news panel">
-    <div class="news-head">
-      <h2>Around you at TG</h2>
-      <span class="why">not your tickets, but they move them</span>
+    <div class="nk-news">
+      <h3>TG news <span class="q">not your tickets, but they move them</span></h3>
+      <ul>{"".join(out)}</ul>
+    </div>"""
+
+
+def need_to_know(board: dict, has_script: bool, news: list[dict]) -> str:
+    """Everything he has to know before he starts, in one block he can shut.
+
+    Three things used to be three separate cards at the top of the page: the
+    line of the day, the next room, and what moved around him. They are one
+    question, asked once each morning, so they are one block, and it folds
+    because the answer stops being news by eleven.
+    """
+    rows = sessions(board)
+    live = next((s for s in rows if not s.get("skipped")), {})
+    skipped = [s for s in rows if s.get("skipped")]
+    headline = board.get("headline", "")
+
+    next_block = ""
+    if live:
+        covered = has_script and script_meta(board).get("for_date") == live.get("date")
+        if covered:
+            note = '<a class="btn" href="#top" data-goto="standup">Read the prep</a>'
+        elif has_script:
+            for_day = when_words(script_meta(board).get("for_date", ""))
+            note = f'<span class="tk-chip warn">Prep is for {esc(for_day)}, not this</span>'
+        else:
+            note = '<span class="tk-chip warn">No prep written yet</span>'
+        next_block = f"""
+      <div class="nk-next">
+        <span class="nk-tag">Next room</span>
+        <strong>{esc(live.get("title") or live.get("name"))}</strong>
+        <span class="nk-when">{esc(when_words(live.get("date", ""), live.get("at", "")))}</span>
+        {f'<span class="nk-where">{esc(live.get("place"))}</span>' if live.get("place") else ""}
+        {note}
+        {f'<span class="nk-focus">{esc(live.get("focus"))}</span>' if live.get("focus") else ""}
+      </div>"""
+    for s in skipped:
+        next_block += f"""
+      <div class="nk-next off">
+        <span class="nk-tag">Not running</span>
+        <strong>No {esc(s.get("name", "standup")).lower()}
+        {esc(when_words(s.get("date", "")))}</strong>
+        <span class="nk-focus">{esc(s.get("reason"))} Anything that was waiting
+        for that meeting has to move into Asana.</span>
+      </div>"""
+
+    if not headline and not next_block and not news:
+        return ""
+    count = len(news)
+    return f"""
+  <details class="nk" id="need" data-remember="need" open>
+    <summary>
+      <span class="nk-k">Need to know</span>
+      <span class="nk-sum dup">{esc(first_clause(headline) or "Where the week stands")}</span>
+      <span class="nk-n">the day, the next room,
+      {count} TG update{"s" if count != 1 else ""}</span>
+      <span class="fold-hint"></span>
+    </summary>
+    <div class="nk-in">
+      {f'<p class="nk-lead">{esc(headline)}</p>' if headline else ""}
+      {next_block}
+      {news_rows(news)}
     </div>
-    <ul>{"".join(out)}</ul>
-  </section>"""
+  </details>"""
 
 
-def jump_bar(tickets: list[dict], refs: dict[str, str]) -> str:
-    """Every ticket, one click away, wherever you are on the page."""
+def first_clause(text: str) -> str:
+    """The first sentence, short enough to sit on a summary line."""
+    head = re.split(r"(?<=[.!?])\s", (text or "").strip(), maxsplit=1)[0]
+    return head if len(head) <= 96 else head[:93].rstrip() + "..."
+
+
+def jump_bar(tickets: list[dict], refs: dict[str, str], has_news: bool) -> str:
+    """The sections and every ticket, one click away, wherever you are."""
     chips = []
+    if has_news:
+        chips.append('<a href="#need">Need to know</a>')
+    chips.append('<a href="#todo">To do</a>')
+    chips.append('<a href="#tickets">Tickets</a>')
     for t in tickets:
         ref = t.get("ref", "")
-        mine = sum(
-            1 for i in t.get("items", []) if state_of(i)["state"] == "todo"
-        )
+        mine = sum(1 for i in t.get("items", []) if state_of(i)["state"] == "todo")
         count = f'<span class="c">{mine}</span>' if mine else ""
-        chips.append(
-            f'<a href="#{esc(refs[ref])}">{esc(ref)}{count}</a>'
-        )
+        chips.append(f'<a class="tkt" href="#{esc(refs[ref])}">{esc(ref)}{count}</a>')
     return f"""
   <nav class="jump">
     <span class="lab">Jump to</span>
-    <a href="#top">Top</a>
     {"".join(chips)}
-    <button class="find" data-find type="button">Find anything <kbd>/</kbd></button>
+    <button class="find" data-find type="button">Find <kbd>/</kbd></button>
   </nav>"""
 
 
@@ -1024,11 +1193,12 @@ def help_dialog() -> str:
     was a grey footnote before, which is why it was never read.
     """
     phrases = [
-        ("refresh", "Re-read every ticket and thread, then update this page."),
-        ("do 3", "Work item 3. Numbers are permanent and unique."),
-        ("draft the reply to Kevin", "Write it in chat. Nothing is ever sent for you."),
-        ("what's the status of 託送HOLD", "Answer from the board, not from memory."),
-        ("I sent 2 to Kevin", "Record it, so the page shows it sitting with him."),
+        ("done 3", "Closes item 3 and rebuilds the page."),
+        ("I sent 2 to Kevin", "Parks it with him, so it stops looking like yours."),
+        ("do 3", "Does the work on item 3, whatever that is."),
+        ("draft the reply to Kevin", "Writes it in chat. Nothing is ever sent for you."),
+        ("refresh", "Re-reads every ticket and thread, then updates this page."),
+        ("what's the status of 託送HOLD", "Answers from the board, not from memory."),
     ]
     said = "".join(
         f'<li><span class="said">&ldquo;{esc(a)}&rdquo;</span>'
@@ -1039,35 +1209,89 @@ def help_dialog() -> str:
 <dialog class="help" id="help">
   <div class="help-in">
     <button class="help-close" type="button">Close</button>
-    <h2>Working this desk</h2>
-    <p class="lead">This page shows where everything is. It cannot change
-    anything, so closing work happens in one of two places.</p>
+    <h2>How to use this</h2>
+    <p class="lead">Two tabs. <b>TG my work</b> is what you do, in one numbered
+    list. <b>TG what I say</b> is the words for the next meeting. Both read the
+    same file, so they can never disagree.</p>
 
-    <h3>Talk to it in Cursor</h3>
-    <p>Open Cursor on <code>~/Projects/tg-billing-desk</code> and type in the
-    chat. It reads this same board, so no context is needed.</p>
+    <h3>Closing something</h3>
+    <p>The page is a window on the board, so a tick on it would be a lie. Do it
+    in whichever is closer to hand:</p>
     <ul class="say-list">{said}</ul>
+    <p>In a terminal, no tokens spent: <code>tg</code> prints where everything
+    is, <code>tg 4</code> finishes item 4, <code>tg 2 -w Kevin</code> parks it
+    with him, <code>tg 2 --mine</code> when he answers,
+    <code>tg 5 --dropped</code> when it went away, <code>tg 1 --undo</code>
+    forgets the state.</p>
 
-    <h3>Or in a terminal, no tokens spent</h3>
-    <p><code>tg</code> on its own prints where everything is.
-    <code>tg 4</code> finishes item 4.
-    <code>tg 2 -w Kevin</code> sends it and parks it with him.
-    <code>tg 2 --mine</code> when he answers.
-    <code>tg 5 --dropped</code> when it went away.
-    <code>tg 1 --undo</code> forgets the state.</p>
+    <h3>Item numbers</h3>
+    <p>Every job has a number, and it keeps it until it closes. That is why
+    &ldquo;do 3&rdquo; works with nothing else said, and why the numbers have
+    gaps in them.</p>
 
-    <h3>The two buttons up top</h3>
-    <p><b>Refresh</b> sweeps Asana and every thread behind your open work, then
-    rewrites this page. A couple of minutes.
-    <b>Build script</b> does that sweep first, then writes what you say in the
-    next room, which is the other tab. Rebuild it if the room changed.</p>
+    <h3>The buttons</h3>
+    <p><b>Refresh</b> re-reads Asana and every thread behind your open work,
+    then rewrites this page. A couple of minutes.
+    <b>Write prep</b> does that same sweep first, then writes the second tab for
+    the next meeting: what happened per ticket, what to say, what you need out of
+    the room. It says <b>Update prep</b> once one exists, and you want that after
+    anything lands that the prep does not know about.
+    <b>Meeting note</b> opens the last standup's Notion note.
+    <b>Japanese only</b> strips the prep tab back to the lines you read aloud.</p>
+
+    <h3>On your phone</h3>
+    <p>Run <code>tg phone</code> and it prints an address for the same page,
+    readable on anything on the same wifi. The page never leaves the laptop, so
+    it works while the laptop is awake and not otherwise. TG threads, drafts and
+    ticket detail are not going onto a hosted site.</p>
 
     <h3>Keys</h3>
     <p><kbd>1</kbd> your work, <kbd>2</kbd> what you say, <kbd>/</kbd> find
-    anything, <kbd>s</kbd> strip the script back to Japanese only,
-    <kbd>?</kbd> this.</p>
+    anything, <kbd>s</kbd> Japanese only, <kbd>?</kbd> this.</p>
   </div>
 </dialog>"""
+
+
+def ticket_group(t: dict) -> str:
+    """Which of the three piles a ticket belongs in.
+
+    "live" is anything with open work on it. "clear" is a ticket where he has
+    done his part and Asana still has it open, which is worth keeping in sight
+    but not worth reading every morning. "closed" is finished on both sides.
+    """
+    if (t.get("asana") or {}).get("completed") or t.get("closed"):
+        return "closed"
+    if any(not state_of(i)["closed"] for i in t.get("items", [])):
+        return "live"
+    return "clear"
+
+
+def tickets_bar(groups: dict[str, list[dict]], refs: dict[str, str]) -> str:
+    """The section header for the cards, with where each ticket stands on it."""
+    chips = []
+    for t in groups["live"] + groups["clear"] + groups["closed"]:
+        ref = t.get("ref", "")
+        mine = sum(1 for i in t.get("items", []) if state_of(i)["state"] == "todo")
+        open_n = sum(1 for i in t.get("items", []) if not state_of(i)["closed"])
+        if mine:
+            tone, what = "mine", f"{mine} with you"
+        elif open_n:
+            tone, what = "theirs", "nothing on you"
+        else:
+            tone, what = "clear", "clear"
+        chips.append(
+            f'<a class="tb-chip {tone}" href="#{esc(refs[ref])}">'
+            f'<span class="dot"></span>{esc(ref)}<span class="s">{esc(what)}</span></a>'
+        )
+    total = sum(len(v) for v in groups.values())
+    return f"""
+  <section class="tickets-bar" id="tickets">
+    <div class="tb-head">
+      <h2>Open Asana tickets</h2>
+      <span class="tb-n">{total} in your name</span>
+    </div>
+    <div class="tb-chips">{"".join(chips)}</div>
+  </section>"""
 
 
 def render(data: dict) -> str:
@@ -1088,9 +1312,32 @@ def render(data: dict) -> str:
     # so the pill says which room it means.
     raise_label = f'Raise at {next_live(data).get("name", "standup").lower()}'
     soon = next_live(data)
-    cards = "".join(
-        render_ticket(t, refs[t.get("ref", "")], raise_label, soon) for t in tickets
-    )
+
+    groups: dict[str, list[dict]] = {"live": [], "clear": [], "closed": []}
+    for t in tickets:
+        groups[ticket_group(t)].append(t)
+
+    def cards_for(rows: list[dict]) -> str:
+        return "".join(
+            render_ticket(t, refs[t.get("ref", "")], raise_label, soon) for t in rows
+        )
+
+    cards = cards_for(groups["live"])
+    for key, title, why in (
+        (
+            "clear",
+            "Done your part, still open in Asana",
+            "Nothing here needs you. It stays because Asana has not closed it.",
+        ),
+        ("closed", "Closed on both sides", "Kept for the record."),
+    ):
+        if groups[key]:
+            cards += f"""
+    <details class="tk-fold" data-remember="tk-{key}">
+      <summary>{esc(title)} <span class="n">{len(groups[key])}</span>
+      <span class="q">{esc(why)}</span><span class="fold-hint"></span></summary>
+      {cards_for(groups[key])}
+    </details>"""
 
     total = sum(
         i.get("est_minutes") or 0
@@ -1098,29 +1345,6 @@ def render(data: dict) -> str:
         for i in t.get("items", [])
         if state_of(i)["state"] == "todo"
     )
-
-    held = [
-        (t.get("ref", ""), i)
-        for t in tickets
-        for i in t.get("items", [])
-        if state_of(i)["state"] == "hold"
-    ]
-    hold_block = ""
-    if held:
-        rows = []
-        for ref, act in held:
-            h = act.get("hold") or {}
-            chase = f" Chase on {esc(h.get('revisit'))}." if h.get("revisit") else ""
-            rows.append(
-                f"<li><strong>{esc(ref)}</strong>: {esc(act.get('title'))}. "
-                f"Wait for {esc(h.get('until'))}.{chase}</li>"
-            )
-        items = "".join(rows)
-        hold_block = f"""
-  <div class="holds">
-    <h2>Wait before you send, {len(held)} thing{"s" if len(held) != 1 else ""}</h2>
-    <ul>{items}</ul>
-  </div>"""
 
     # `watch` was the old name for the same thing, so a board written before the
     # rename still shows its rows rather than dropping them silently.
@@ -1144,7 +1368,7 @@ def render(data: dict) -> str:
     has_script = any((t.get("prep") or {}).get("script") for t in tickets)
     # A script written before the last sweep may not know the newest replies.
     stale = bool(has_script and built and built < (data.get("checked_at") or ""))
-    prep_label = "Rebuild script" if has_script else "Build script"
+    prep_label = "Update prep" if has_script else "Write prep"
 
     # The countdown only makes sense on the day of a session, and an empty value
     # is what tells the page not to draw one at all.
@@ -1163,25 +1387,22 @@ def render(data: dict) -> str:
       {esc(pretty)} &middot; {esc(checked_line(data.get("checked_at", "")))}</span>
     <span id="countdown"></span>
     {link_btn((data.get("meeting_note") or {}).get("url", ""), "Meeting note")}
-    <button class="toggle" id="scriptonly">Script only</button>
+    <button class="toggle" id="scriptonly">Japanese only</button>
     {controls(prep_label)}
-    <button class="toggle" data-help type="button" aria-label="How this works"
-            title="How this works">?</button>
+    <button class="toggle" data-help type="button" aria-label="How to use this"
+            title="How to use this">?</button>
   </span>
 </div></header>
 <div class="wrap" id="top">
   <div id="view-desk" role="tabpanel">
-    {f'<div class="headline"><p>{esc(data.get("headline"))}</p></div>' if data.get("headline") else ""}
-    {next_up(data, has_script)}
-    {jump_bar(tickets, refs)}
+    {jump_bar(tickets, refs, bool(news or data.get("headline")))}
+    {need_to_know(data, has_script, news)}
     {render_track(tickets, refs, soon)}
     <div class="howto">
-      <span>{f"About <b>{total} min</b> of work sits with you. " if total else ""}This page only shows state. To close something, tell the Cursor chat on this folder &ldquo;<b>done 3</b>&rdquo;, or run <code>tg 3</code>.</span>
-      <button class="more" data-help type="button">How this works</button>
+      <span>{f"About <b>{total} min</b> of this is yours. " if total else ""}Nothing here can be closed from the page. Say &ldquo;<b>done 3</b>&rdquo; to the Cursor chat open on this folder, or run <code>tg 3</code> in a terminal.</span>
+      <button class="more" data-help type="button">How to use this</button>
     </div>
-    {hold_block}
-    {render_news(news)}
-    <h2 class="tickets-h">{len(tickets)} open ticket{"s" if len(tickets) != 1 else ""}, everything for each one in one place</h2>
+    {tickets_bar(groups, refs)}
     {cards}
     {gap_block}
   </div>

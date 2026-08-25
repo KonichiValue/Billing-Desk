@@ -20,9 +20,11 @@ Shape of `state/board.json`:
                   "id": "1217430352217964",        Asana gid, so nothing is duplicated
                   "ref": "請求未発行",              short tag Rei uses out loud
                   "title_en", "title_ja", "asana_url",
-                  "asana": {"status", "section", "priority", "assignee", "project"},
+                  "asana": {"status", "section", "priority", "category",
+                            "severity", "assignee", "project", "completed"},
                   "last_activity": {"at", "who", "where"},
-                  "where_it_stands", "terms", "threads", "internal_ticket",
+                  "where_it_stands", "threads", "internal_ticket",
+                  "terms": [{"term", "say", "means", "source_url"}],
                   "events": [{"on": "2026-08-24", "at": "15:14", "who", "what",
                               "so_what", "where", "source_url"}],
                   "prep": { ...see below... },
@@ -49,8 +51,17 @@ into a room not knowing. Five rows at most, dropped as they go stale.
 
     [{"topic", "what", "why", "on": "2026-08-24", "source_url"}]
 
+`news` is drawn inside Need to know at the top of the work view, which is also
+where the headline and the next session sit. One block, because they are one
+question asked once a morning.
+
+`terms` carries the vocabulary of the ticket in both languages: `term` in
+English, `say` as TG say it with furigana as `{漢字|かんじ}`, `means` in a
+sentence or two that opens with what the thing is. He hears the Japanese in the
+room and has two seconds to place it, so the Japanese is not optional.
+
 `prep` is what the ticket sounds like out loud, and only the speaking view reads
-it. It is rebuilt whenever Rei presses Build script, and it deliberately holds no
+it. It is rebuilt whenever Rei presses Write prep, and it deliberately holds no
 status of its own: that view takes `where_it_stands` from the ticket, so a script
 can never contradict the desk.
 

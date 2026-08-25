@@ -224,6 +224,22 @@ def short_when(iso: str, at: str = "") -> str:
     return f"{words} {at}".strip()
 
 
+def day_words(iso: str) -> str:
+    """A date as he would say it: today, yesterday, or "Fri 21 Aug"."""
+    if not iso:
+        return ""
+    try:
+        day = date.fromisoformat(iso)
+    except ValueError:
+        return iso
+    back = (date.today() - day).days
+    if back == 0:
+        return "today"
+    if back == 1:
+        return "yesterday"
+    return day.strftime("%a %-d %b")
+
+
 DATE_IN = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
@@ -276,7 +292,7 @@ def section(
     title: str,
     body: str,
     role: str = "ref",
-    count: int | None = None,
+    count: str = "",
     fold: bool = False,
     hint: str = "",
 ) -> str:
@@ -285,12 +301,19 @@ def section(
     Every section used to open with the same small grey capitals, which made a
     card one undifferentiated column. The marker colour and the weight now say
     what kind of section it is before the words do.
+
+    `count` is words, never a bare number: "3 open" is a fact, "3" is a riddle.
+    A folded section carries a Show or Hide word on the right, because a small
+    triangle is not enough to tell you there is anything behind it.
     """
-    n = f'<span class="n">{count}</span>' if count is not None else ""
+    n = f'<span class="n">{esc(count)}</span>' if count else ""
     aside = f'<span class="hint">{esc(hint)}</span>' if hint else ""
     head = f"<h3>{esc(title)}{n}{aside}</h3>"
     if fold:
-        return f'<details class="sub {role}"><summary>{head}</summary>{body}</details>'
+        return (
+            f'<details class="sub {role}"><summary>{head}'
+            f'<span class="fold-hint"></span></summary>{body}</details>'
+        )
     return f'<section class="sub {role}">{head}{body}</section>'
 
 
@@ -563,15 +586,22 @@ text-transform:uppercase;letter-spacing:.06em}
 .sub.ref h3{color:var(--soft)}
 details>summary{cursor:pointer;list-style:none;padding:15px 0 8px}
 details>summary::-webkit-details-marker{display:none}
-details>summary::before{content:"\\25B8";color:var(--soft);font-size:10px;
-margin-right:7px;display:inline-block;transition:transform .15s}
-details[open]>summary::before{transform:rotate(90deg)}
 details.sub{padding-top:0}
-/* A folded section is one row: the arrow, the marker, the words, the count. */
-details.sub>summary{display:flex;align-items:center;padding:15px 0}
-details.sub[open]>summary{padding-bottom:9px}
+/* A folded section is one row: the marker, the words, the count, and a word
+   saying whether there is anything behind it. */
+details.sub>summary{display:flex;align-items:center;padding:14px 10px;
+margin:0 -10px;border-radius:9px}
+details.sub>summary:hover{background:var(--hair)}
+details.sub[open]>summary{padding-bottom:8px}
 details.sub>summary>h3{margin:0;width:auto;flex:1}
-details.sub>summary::before{line-height:1}
+details.sub>summary:hover .fold-hint{color:var(--accent);border-color:var(--accent-line)}
+/* Say Show or Hide in words. A triangle alone does not tell you there is
+   anything behind it, which is how a folded section reads as an empty one. */
+.fold-hint{flex:none;margin-left:auto;font:650 10.5px/1 inherit;
+text-transform:uppercase;letter-spacing:.07em;color:var(--soft);
+border:1px solid var(--line);border-radius:5px;padding:4px 7px;background:#fff}
+.fold-hint:after{content:"Show"}
+details[open]>summary .fold-hint:after{content:"Hide"}
 .status,.st-stands{margin:0;font-size:15px;color:var(--ink)}
 .matters{margin:10px 0 0;padding:9px 13px;background:var(--accent-bg);
 border:1px solid var(--accent-line);border-radius:8px;font-size:14px;
@@ -642,6 +672,7 @@ padding:3px 9px;border-radius:7px;border:1px solid transparent;white-space:nowra
 .jump a.on{background:var(--accent-bg);color:var(--accent-ink);
 border-color:var(--accent-line)}
 .jump a .c{font-size:10.5px;font-weight:700;color:var(--red);margin-left:5px}
+.jump a .ord{font-size:10.5px;font-weight:600;color:var(--soft);margin-left:6px}
 .jump .find{margin-left:auto;font:600 11.5px/1 inherit;color:var(--soft);
 background:#fff;border:1px solid var(--line);border-radius:7px;padding:5px 9px;
 cursor:pointer;display:flex;gap:6px;align-items:center}
@@ -714,21 +745,6 @@ border:1px solid var(--line);border-radius:7px;padding:6px 11px;cursor:pointer;
 color:var(--accent)}
 .howto .more:hover{border-color:var(--accent-line);background:var(--accent-bg)}
 
-/* Everything moving around TG that is not one of his tickets. */
-.news{overflow:hidden;margin-bottom:18px}
-.news-head{display:flex;gap:10px;align-items:center;padding:12px 17px;
-border-bottom:1px solid var(--line);background:#fbfcfe}
-.news-head h2{margin:0;font-size:13px;font-weight:750;letter-spacing:-.005em}
-.news-head .why{font-size:11.5px;color:var(--soft);margin-left:auto}
-.news ul{list-style:none;margin:0;padding:0}
-.news li{padding:11px 17px;border-bottom:1px solid var(--hair);display:flex;
-gap:12px;align-items:baseline;flex-wrap:wrap}
-.news li:last-child{border-bottom:0}
-.news .n-what{flex:1;min-width:260px;font-size:14px}
-.news .n-what b{font-weight:650}
-.news .n-why{display:block;font-size:13px;color:var(--mut);margin-top:2px}
-.news .n-when{flex:none;font-size:11.5px;color:var(--soft);font-weight:600}
-
 /* Script-only: everything that is not Japanese gets out of the way. */
 body.script-only .sub:not(.script),body.script-only .st-head .pos,
 body.script-only details,body.script-only .st-brief,body.script-only .st-raise,
@@ -741,7 +757,36 @@ body.script-only .st-tk{padding:18px 22px}
 padding:22px;color:var(--red)}
 .err pre{white-space:pre-wrap;font-size:13px;background:#fff;padding:13px;
 border-radius:8px;margin:13px 0 0;color:var(--ink)}
-@media print{header.top,.btn,.copy,.toggle,.views{display:none}
+/* On a phone the whole page is one column, and the header keeps the tabs, the
+   two buttons and nothing else. */
+@media (max-width:640px){
+.wrap{padding:14px 12px 60px}
+.top-in{padding:5px 10px;gap:6px;min-width:0}
+.brand,.date,#countdown,.views .sub,.views .k{display:none}
+.top .btn{display:none}
+.views,.acts{min-width:0}
+.top-in{overflow-x:hidden}
+.views,.acts{overflow-x:auto;scrollbar-width:none}
+.views::-webkit-scrollbar,.acts::-webkit-scrollbar{display:none}
+.views button{padding:0 9px;flex:none}
+/* Flex children default to their content width, which is what pushes a phone
+   into sideways scrolling. Nothing on this page needs to be wider than it. */
+.tr-title,.act-title,.n-what,.thr-body,.nk-sum,.q-en,.mv-what,.terms dd,
+.howto>span,.act-head,.tk-meta,.st-run a{min-width:0}
+.terms dt{width:auto}
+.term{flex-direction:column;gap:4px}
+.tk,.st-tk{padding-left:14px;padding-right:14px}
+.tk-head{margin:0 -14px;padding-left:14px;padding-right:14px}
+.tr,.news li,.nk-news li{flex-wrap:wrap}
+.tr-title,.n-what{flex-basis:100%;order:-1}
+.tr-min,.act-min{display:none}
+.thr-where{min-width:0;flex-basis:100%}
+.cons-row{flex-wrap:wrap}
+.cons-row dt{width:100%;padding-bottom:0}
+.jp{font-size:17.5px;line-height:1.9}
+.jump{position:static}
+}
+@media print{header.top,.btn,.copy,.toggle,.views,.jump,.howto{display:none}
 body{background:#fff}.tk,.st-tk{break-inside:avoid;border-color:#ccc;box-shadow:none}
 details{display:block}details>summary{display:none}}
 """
@@ -785,7 +830,7 @@ JS = """
   if(t)t.addEventListener('click',function(){
     document.body.classList.toggle('script-only');
     t.textContent=document.body.classList.contains('script-only')
-      ?'Show everything':'Script only';
+      ?'Show everything':'Japanese only';
   });
 
   // The view lives on the body, so CSS does the switching and nothing reloads.
@@ -868,6 +913,19 @@ JS = """
       b.addEventListener('click',openPal);
     });
   }
+
+  // A fold he shut stays shut. Reopening the page every hour and closing the
+  // same three sections again is how a page stops being used.
+  [].forEach.call(document.querySelectorAll('details[data-remember]'),function(d){
+    var key='fold-'+d.dataset.remember;
+    try{
+      var was=localStorage.getItem(key);
+      if(was!==null)d.open=was==='1';
+    }catch(e){}
+    d.addEventListener('toggle',function(){
+      try{localStorage.setItem(key,d.open?'1':'0')}catch(e){}
+    });
+  });
 
   var help=document.getElementById('help');
   function openHelp(){if(help&&!help.open)help.showModal()}

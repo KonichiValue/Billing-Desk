@@ -65,7 +65,7 @@ so use that when he only wants to know where he is.
 
 ## "prep" or "build the script"
 
-**Read `prompt-prep.md` and follow it exactly.** Same routine as the Build script
+**Read `prompt-prep.md` and follow it exactly.** Same routine as the Write prep
 button and `tg prep`: the refresh sweep first, then the speaking half. It writes
 each ticket's `prep` block, `sessions` and `script`, and nothing else, so item
 states stay where the sweep left them. Check which session you are writing for

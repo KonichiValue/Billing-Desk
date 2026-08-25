@@ -11,6 +11,7 @@ generated at startup, so nothing else on the machine can start an agent run.
 
     python3 serve.py            start on 127.0.0.1:8787
     python3 serve.py --port N   somewhere else
+    python3 serve.py --lan      answer on the wifi too, for a phone
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ import json
 import os
 import re
 import secrets
+import socket
 import subprocess
 import sys
 import threading
@@ -375,18 +377,46 @@ class Handler(BaseHTTPRequestHandler):
         self.json_out(404, {"error": "not here"})
 
 
+def lan_address() -> str:
+    """The address this machine answers on over the local network.
+
+    Only used to print a URL he can type into a phone. Nothing is published:
+    the page still lives on this laptop and still needs the key.
+    """
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        probe.connect(("192.168.1.1", 1))
+        return probe.getsockname()[0]
+    except OSError:
+        return ""
+    finally:
+        probe.close()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=8787)
+    parser.add_argument(
+        "--lan",
+        action="store_true",
+        help="answer on the local network too, so a phone on the same wifi can "
+        "read the page. Still key-protected, still nothing published.",
+    )
     args = parser.parse_args()
 
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    host = "0.0.0.0" if args.lan else "127.0.0.1"
+    server = ThreadingHTTPServer((host, args.port), Handler)
     (ROOT / "state").mkdir(exist_ok=True)
     (ROOT / "state" / "serve.json").write_text(
         json.dumps({"port": args.port, "key": KEY, "started": time.time()}) + "\n",
         encoding="utf-8",
     )
     print(f"http://127.0.0.1:{args.port}/?k={KEY}", flush=True)
+    if args.lan:
+        addr = lan_address()
+        if addr:
+            print(f"phone on the same wifi: http://{addr}:{args.port}/?k={KEY}",
+                  flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

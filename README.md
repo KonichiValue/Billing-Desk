@@ -11,7 +11,8 @@ finished, and it keeps its number until it closes, so "do 4" means the same
 thing next week. Everything else in the repo either writes to the board or draws
 it.
 
-**One page, two views.** *My work* answers "what do I do". *What I say* answers
+**One page, two views.** *TG my work* answers "what do I do". *TG what I say*
+answers
 "what comes out of my mouth in the next meeting", in the order that meeting walks
 the board, with the Japanese script. Same tickets, same file, and `1` and `2`
 switch between them. A ticket that needs airtime carries a *raise at* pill on the
@@ -29,7 +30,7 @@ function:
 | | When | What it does |
 |---|---|---|
 | **Refresh** | any time you press it | Sweeps every open ticket and thread, moves what changed. |
-| **Build script** | when you sit down before a meeting | Refresh, then writes what you say in the next session. |
+| **Write prep** | when you sit down before a meeting | Refresh, then writes what you say in the next session. It reads **Update prep** once one exists. |
 | **Standup fold-in** | from 11:00, Mon/Wed/Thu | Reads the meeting note and moves the board. Scheduled, because the note appears while you are still in meetings. |
 
 Before a standup you have 20 minutes and you spend them reading, so the speaking
@@ -43,7 +44,7 @@ the markdown so it starts with the full picture.
 
 ## The script
 
-Press **Build script** in the app, or run `tg prep`. Nothing is scheduled for the
+Press **Write prep** in the app, or run `tg prep`. Nothing is scheduled for the
 morning, deliberately: you build it when you sit down, so it is written against
 the replies that landed overnight rather than against 09:10.
 
@@ -113,7 +114,7 @@ bar. Behind it, `serve.py` runs on `127.0.0.1:8787` and renders the page on ever
 load, so what you see at four in the afternoon reflects everything you have
 ticked off. It starts on first use and stays up; `tg stop` ends it.
 
-That server is also what makes the **Refresh** and **Build script** buttons in
+That server is also what makes the **Refresh** and **Write prep** buttons in
 the header work: the button asks the server, the server runs the agent, the page
 reports progress and reloads itself when the work lands. Both take the same lock,
 so a terminal run and a button press can never write the board at once.
@@ -159,7 +160,7 @@ the work is not over.
 ./tick.py 1 --undo                   # forget the state entirely
 ```
 
-The desk opens with **Everything you are carrying**: one list, yours at the top,
+The desk opens with **Need to know**, then **To do**: one list, yours at the top,
 then what you are not allowed to send yet, then what sits with someone else.
 Finished work folds away behind a count. Each line carries how it got there, so a
 waiting row says who has it and since when, and the minutes count only what is
@@ -219,28 +220,40 @@ nothing and flags it, since a missing warning beats a wrong one.
   were on survives a reload, each view remembers where you had scrolled to, and
   the morning of a session opens on the script when one has been built and the
   meeting has not started yet.
-- **Jump to** sits under the banner with every ticket on it, and the chip for the
-  card you are looking at lights up as you scroll. `/` opens a finder over the
-  page that takes a ticket tag, an item number or any word from a title.
-- On the work view, **Everything you are carrying** is one list: yours at the top,
+- **Jump to** is the first thing on both views, with the sections and every
+  ticket on it, and the chip for the card you are looking at lights up as you
+  scroll. `/` opens a finder that takes a ticket tag, an item number or any word
+  from a title.
+- **Need to know** is one block at the top: the line of the day, the next room
+  and whether it has a prep, and TG news. It folds, and it remembers being
+  folded, because none of it is news by eleven.
+- On the work view, **To do** is one list: yours at the top,
   then what you may not send yet, then what sits with someone else, with finished
   work folded away behind a count. Each ticket header carries what Asana currently
   says about it, every value labelled with its field, and links out live on their
   own row underneath. A draft always sits inside the item that needs it.
-- **Around you at TG** is the news panel: things that are not your tickets but
+- **TG news**, inside Need to know, is things that are not your tickets but
   move them, each with the route by which it reaches you and a link to where it
   was said.
 - Inside a card the sections are colour-keyed by what they are for. Red is the
   work, blue is the short answer and the timeline, amber is undecided, and grey
   reference sections (shorthand, threads, a day where nothing moved) start folded.
-- On the speaking view, cards run in board order: the issue in 20 seconds, where
-  it stands, what the fix does not cover, what has to be settled today, then the
-  script.
-- **What I say** is meant to be read aloud verbatim. Furigana sits above the
+- The speaking view is the same card in a plum key, in the order the meeting
+  walks: the issue in 20 seconds, where it stands, **what moved since last
+  time**, then the script, then what has to be settled in the room and what you
+  need out of it. Scope and pushback fold away underneath.
+- Timelines group by day, most recent open and everything older folded behind
+  the days it covers.
+- Tickets where you have done your part but Asana has not closed them, and
+  tickets closed on both sides, sit in their own folds under the live ones.
+- **TG what I say** is meant to be read aloud verbatim. Furigana sits above the
   kanji, English underneath, and each block copies the Japanese without the
   markup.
 - The amber **Check before you speak** box holds unknowns and hard cautions,
   including anything you must not say to TG.
+- It reads on a phone: `tg phone` prints an address for the same page for
+  anything on the same wifi, while the laptop is awake. Nothing is hosted, so no
+  TG thread or draft leaves the machine.
 - It is plain HTML in one file. Keep it, mail it, print it.
 
 ## Pieces

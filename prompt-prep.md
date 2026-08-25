@@ -1,6 +1,6 @@
-# Write the script for the next session
+# Write the prep for the next session
 
-Rei presses **Build script** when he sits down, and this is what runs. It has two
+Rei presses **Write prep** when he sits down, and this is what runs. It has two
 halves: bring the board up to date, then write what he says out loud into it.
 
 He has 20 minutes with what you produce and he will be speaking Japanese to
@@ -78,6 +78,16 @@ he knows roughly when he is up.
 
 If that section GID has moved because a new cycle started, find the current
 "This Cycle's Priority" section on project `1209230965235758` and use that.
+
+### What moved since the last meeting
+
+The prep page prints each ticket's recent `events` under "What moved since last
+time", so the paragraph he needs at 09:50 is already there if the timeline is
+honest. Two things follow from that. Every event since the last session must be
+on the ticket, his own messages included, and `so_what` must be filled on any
+event that changed what happens next, because that line is what he reads out.
+Nothing is written twice: do not repeat the timeline inside `where_it_stands`,
+which stays one short paragraph on the current position.
 
 ### Trace what the fix does not cover
 

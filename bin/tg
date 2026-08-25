@@ -12,6 +12,7 @@
 #   tg chat             open the folder in Cursor to hand work over
 #   tg build            rebuild the page from the board, no agent
 #   tg post             fold today's Notion meeting note into the board
+#   tg phone            print an address for this page, for a phone on the wifi
 #   tg stop             shut the local page server down
 #
 # Anything numeric goes straight to tick.py, so the numbers you see on the page
@@ -70,6 +71,22 @@ page() {
   open output/desk.html
 }
 
+phone_url() {
+  # The same page, over the wifi, so it is readable on a phone. Nothing is
+  # published: it is this laptop answering, and the key still has to be right.
+  local url ip
+  url="$(serve_url)" || { print -u2 "desk server would not start"; return 1 }
+  ip="$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null)"
+  [[ -n "$ip" ]] || { print -u2 "not on a network"; return 1 }
+  pkill -f "serve.py --port $PORT" >/dev/null 2>&1
+  mkdir -p logs
+  nohup python3 serve.py --port "$PORT" --lan >>logs/serve.log 2>&1 &
+  sleep 1
+  url="$(serve_url)" || return 1
+  print -r -- "On the same wifi, open: ${url/127.0.0.1/$ip}"
+  print -r -- "Works while this laptop is awake. Nothing is hosted anywhere."
+}
+
 stop_server() {
   pkill -f "serve.py --port $PORT" && print -r -- "stopped the desk server" \
     || print -r -- "no desk server running"
@@ -106,12 +123,13 @@ case "${1:-}" in
     run_agent prompt-prep.md "Sweeping everything, then writing today's script..." || exit 1
     page ;;
   chat)          open -a Cursor "$REPO" ;;
+  phone)         phone_url ;;
   stop)          stop_server ;;
   build)
     python3 render_desk.py "$BOARD" output/desk.html || exit 1
     python3 render_desk_md.py "$BOARD" output/desk.md ;;
   post)          ./run_post.sh --force ;;
   open)          page ;;
-  -h|--help|help) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//' ;;
+  -h|--help|help) sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//' ;;
   *)             python3 tick.py "$@" ;;
 esac
