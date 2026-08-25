@@ -305,6 +305,8 @@ def section(
     count: str = "",
     fold: bool = False,
     hint: str = "",
+    open_: bool = False,
+    remember: str = "",
 ) -> str:
     """One section of a ticket card, the same shape wherever it is used.
 
@@ -315,13 +317,18 @@ def section(
     `count` is words, never a bare number: "3 open" is a fact, "3" is a riddle.
     A folded section carries a Show or Hide word on the right, because a small
     triangle is not enough to tell you there is anything behind it.
+
+    `open_` is for a section worth reading but worth getting out of the way once
+    read, and `remember` keeps that choice across page loads.
     """
     n = f'<span class="n">{esc(count)}</span>' if count else ""
     aside = f'<span class="hint">{esc(hint)}</span>' if hint else ""
     head = f"<h3>{esc(title)}{n}{aside}</h3>"
     if fold:
+        keep = f' data-remember="{esc(remember)}"' if remember else ""
         return (
-            f'<details class="sub {role}"><summary>{head}'
+            f'<details class="sub {role}"{" open" if open_ else ""}{keep}>'
+            f'<summary>{head}'
             f'<span class="fold-hint"></span></summary>{body}</details>'
         )
     return f'<section class="sub {role}">{head}{body}</section>'
@@ -586,6 +593,8 @@ background:var(--line)}
 border:1px solid var(--line);border-radius:20px;padding:0 7px}
 .sub h3 .hint{margin-left:auto;font-size:11px;font-weight:600;color:#9aa3b2;
 text-transform:uppercase;letter-spacing:.06em}
+/* On a folded section the hint runs into the Show word, so it gives way. */
+details.sub>summary>h3 .hint{margin-right:10px}
 /* Red is the work, accent is the talking, grey is background you can skip. */
 .sub.now h3{color:var(--ink);font-size:14.5px;letter-spacing:-.01em}
 .sub.now h3:before{background:var(--red);height:17px;width:4px}
@@ -607,9 +616,9 @@ details.sub>summary>h3{margin:0;width:auto;flex:1}
 details.sub>summary:hover .fold-hint{color:var(--accent);border-color:var(--accent-line)}
 /* Say Show or Hide in words. A triangle alone does not tell you there is
    anything behind it, which is how a folded section reads as an empty one. */
-.fold-hint{flex:none;margin-left:auto;font:650 10.5px/1 inherit;
-text-transform:uppercase;letter-spacing:.07em;color:var(--soft);
-border:1px solid var(--line);border-radius:5px;padding:4px 7px;background:#fff}
+.fold-hint{flex:none;margin-left:auto;font:650 9.5px/1 inherit;
+text-transform:uppercase;letter-spacing:.06em;color:var(--soft);
+border:1px solid var(--line);border-radius:4px;padding:3px 5px;background:#fff}
 .fold-hint:after{content:"Show"}
 details[open]>summary .fold-hint:after{content:"Hide"}
 .status,.st-stands{margin:0;font-size:15px;color:var(--ink)}

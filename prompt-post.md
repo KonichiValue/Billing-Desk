@@ -298,6 +298,37 @@ Rank by consequence.
    Cheap, high value, usually worth doing today.
 5. Investigation with no deadline goes last.
 
+### Do the work first, then write down what is left
+
+Before writing an item, ask what of it you could do yourself with the tools you
+have. If the answer is any part of it, do that part now and put the product in
+`prepared`. Steps that could be followed by something without judgement were
+never Rei's work, and an item that tells him to go and read a comment you could
+have read is the page failing at its only job.
+
+What you can do, and therefore must: read every comment and thread and pull out
+the conditions, quotes or numbers; read `~/Projects/kraken-core` for what the
+code actually does, obeying its `AGENTS.md`; compare two things and mark the
+difference; count how many accounts, days or cases; find the source for a claim
+somebody made from memory. Write it as a small table when it is a comparison or
+a list of cases, `findings` when it is a conclusion, and always with `sources` so
+he can check you.
+
+What you cannot do, and must leave to him: anything sent to a person, any choice
+between two positions, anything spoken in a room, and any judgement that needs
+what he knows and you do not. Those are the steps.
+
+    "prepared": {"what", "built_at", "table": {"columns": [], "rows": [[]]},
+                 "findings": [], "sources": [{"label", "url"}]}
+
+An item with a `prepared` block has steps that begin after it. "Read this and
+disagree where you know better", "take this line into the room", "send this".
+Never a step that redoes the work.
+
+If the work needs a tool you do not have, or a codebase read that came back
+empty, say so in a step and name what is missing. Never leave the impression
+that something was checked when it was not.
+
 ### `steps` and `done_when`, the part he actually reads
 
 `steps` is the item. Two to four of them, in order, each starting with a verb
@@ -661,9 +692,16 @@ everything you are not changing.
         {
           "id": 8,
           "title": "Imperative, under 12 words.",
+          "prepared": {
+            "what": "One line naming the thing you built for him. Omit the whole object when there was nothing you could do yourself.",
+            "built_at": "YYYY-MM-DD HH:MM",
+            "table": {"columns": ["..."], "rows": [["..."]]},
+            "findings": ["What the work turned up, the so-what first."],
+            "sources": [{"label": "", "url": ""}]
+          },
           "steps": [
             "Two to four steps, in order, each starting with a verb aimed at Rei.",
-            "Concrete enough to start on without working out what you meant.",
+            "What is left after you did everything you could do yourself.",
             "Never commentary or background. That goes in why."
           ],
           "done_when": "One sentence describing the finished thing, so he can tell when he is done.",

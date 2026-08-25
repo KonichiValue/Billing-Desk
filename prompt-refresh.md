@@ -99,6 +99,14 @@ thing is. If the steps tell him to ask, tell, confirm or reply, there is a
 draft out. An item with no steps renders as a warning on the page, so never
 leave one behind.
 
+**Do the part of the item you can do.** If a step could be followed without
+judgement, following it was your job, not his: read the comments and pull the
+conditions out, read `~/Projects/kraken-core` for what the code does, compare the
+two and mark the difference, count the cases. The product goes in `prepared` with
+its sources, and the steps that remain start after it. `prompt-post.md` has the
+full rule and the shape. What is left for him is what needs him: sending,
+deciding, speaking.
+
 ## 6. Keep the news honest
 
 `news` is what is moving around him that is not one of his tickets: a priority

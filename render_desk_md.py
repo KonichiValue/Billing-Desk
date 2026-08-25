@@ -132,6 +132,32 @@ def render_ticket(t: dict) -> list[str]:
                 f"Wait for: {hold.get('until', '')}.{revisit}",
                 "",
             ]
+        prep = a.get("prepared") or {}
+        if prep:
+            built = f" ({prep['built_at']})" if prep.get("built_at") else ""
+            actions += [f"**Done for you**{built}", ""]
+            if prep.get("what"):
+                actions += [prep["what"], ""]
+            tbl = prep.get("table") or {}
+            if tbl.get("rows"):
+                cols = tbl.get("columns", [])
+                actions.append("| " + " | ".join(cols) + " |")
+                actions.append("|" + "---|" * len(cols))
+                for row in tbl["rows"]:
+                    cells = [str(c).replace("|", "\\|").replace("\n", " ") for c in row]
+                    actions.append("| " + " | ".join(cells) + " |")
+                actions.append("")
+            for f in prep.get("findings", []):
+                actions.append(f"- {f}")
+            if prep.get("findings"):
+                actions.append("")
+            srcs = [s for s in prep.get("sources", []) if s.get("url")]
+            if srcs:
+                actions += [
+                    "Read from: "
+                    + ", ".join(link(s.get("label", "source"), s["url"]) for s in srcs),
+                    "",
+                ]
         steps = a.get("steps", [])
         if steps:
             actions.append("**Do this**")

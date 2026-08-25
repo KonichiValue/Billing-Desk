@@ -264,7 +264,9 @@ def since_last(t: dict, since: str) -> str:
     Reading the ticket cold at 09:50 is the hard part of the morning, harder
     than the Japanese. This is the paragraph that answers "what happened since
     I last talked about this", which is also the first thing anyone in the room
-    asks.
+    asks, so it earns its place here rather than being a link to the work view:
+    that timeline is the whole history, this is only the gap since he last spoke
+    about it out loud. Open on arrival, and it folds once read.
     """
     rows = [e for e in t.get("events", []) if (e.get("on") or "") >= since]
     if not rows:
@@ -298,6 +300,9 @@ def since_last(t: dict, since: str) -> str:
         role="log",
         count=count,
         hint="the question they always ask",
+        fold=True,
+        open_=True,
+        remember=f"moved-{t.get('ref', '')}",
     )
 
 

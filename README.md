@@ -259,6 +259,9 @@ nothing and flags it, since a missing warning beats a wrong one.
 - Every job carries the steps to do it, in order, before anything else on the
   card. The reason it exists is at the bottom in one line, because it is the one
   question you never ask of your own list.
+- Where a job had a part that did not need you, that part is already done and
+  sits above the steps in a green **Done for you** block, with the sources it was
+  read from. What is left underneath is sending, deciding or speaking.
 - It reads on a phone: `tg phone` opens the page to your wifi for an hour, then
   closes it again on its own. `tg phone 15` for less, `tg stop` to end it now.
   Nothing is hosted, so no TG thread or draft leaves the machine.

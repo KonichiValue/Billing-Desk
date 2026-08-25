@@ -41,7 +41,10 @@ because the context is in the file:
   in chat and wait for approval. Never post it.
 - **"Do 3"** &mdash; item numbers are permanent and unique across the board, so
   resolve the number from `state/board.json` and confirm which one you mean
-  before doing work.
+  before doing work. Then do the part of it that does not need him, put the
+  product in the item's `prepared` block with its sources, and leave him only the
+  steps that need judgement, a person or a room. An item is not written until
+  everything that could be done for him has been.
 - **"Check the codebase for X"** &mdash; the Kraken Core checkout is at
   `~/Projects/kraken-core`, not here. Read `~/Projects/kraken-core/AGENTS.md`
   before touching it, and never run `./src/manage.py` directly.

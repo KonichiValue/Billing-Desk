@@ -99,7 +99,7 @@ the session, in the script under the ticket it belongs to.
 
 An item is a piece of work with a life:
 
-            {"id": 3, "title", "steps": [], "done_when", "why",
+            {"id": 3, "title", "prepared", "steps": [], "done_when", "why",
              "state": "todo|waiting|hold|done|sent|dropped",
              "state_at", "state_note", "waits_on", "hold", "draft",
              "where", "link", "urgency", "est_minutes", "opened", "closed_at",
@@ -113,6 +113,19 @@ does not need persuading about his own list, he needs to know what to type.
 
 `draft` is the whole of the doing when the step is "send this", so a step that
 tells him to ask, tell, confirm or reply and carries no draft is a bug.
+
+`prepared` is the part an agent could do and therefore did. If the steps could
+be followed by something without judgement, following them was the agent's job,
+and what is left for Rei is checking it, deciding with it or saying it out loud.
+
+    {"what": "one line naming the thing that now exists",
+     "built_at": "2026-08-25 11:20",
+     "table": {"columns": [], "rows": [[...]]},   optional
+     "findings": ["what the work turned up, so-what first"],
+     "sources": [{"label", "url"}]}
+
+An item with a `prepared` block has steps that start after it: read this, take
+it into the room, send it. Never steps that redo it.
 
 Only `tick.py` and the agents write here. Renderers read it and never change it.
 """

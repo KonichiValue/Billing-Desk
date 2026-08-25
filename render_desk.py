@@ -120,9 +120,9 @@ border-radius:8px;display:flex;align-items:center;gap:10px}
 .ev-fold[open]>summary{background:transparent;border-bottom:1px solid var(--hair);
 border-radius:0;padding-left:1px;padding-right:1px}
 .ev-fold>summary:hover .ev-d{color:var(--accent-ink)}
-.ev-d{font-size:11.5px;font-weight:750;text-transform:uppercase;
-letter-spacing:.08em;color:var(--mut)}
-.ev-c{font-size:11.5px;color:var(--soft)}
+.ev-d{font-size:11px;font-weight:750;text-transform:uppercase;
+letter-spacing:.07em;color:var(--mut)}
+.ev-c{font-size:11px;color:var(--soft)}
 .ev-fold .evs{margin-top:12px;padding-bottom:4px}
 .evs{list-style:none;margin:0;padding:0;position:relative}
 .evs:before{content:"";position:absolute;left:53px;top:6px;bottom:10px;width:2px;
@@ -207,6 +207,32 @@ ol.steps li:last-child{margin-bottom:0}
 ol.steps code,.act-done code{font:600 12.5px/1.4 ui-monospace,SFMono-Regular,
 Menlo,monospace;background:var(--hair);border:1px solid var(--line);
 border-radius:5px;padding:1px 5px;word-break:break-all}
+/* Work already done. It sits above the steps because it is the answer, and the
+   steps under it are only what could not be done without him. */
+.act-prep{margin:0 0 14px;padding:11px 13px 12px;background:var(--green-bg);
+border:1px solid var(--green-line);border-radius:10px}
+.act-lab.done{color:var(--green)}
+.pw-what{margin:0 0 9px;font-size:14.5px;color:var(--ink);font-weight:550}
+.pw-t{width:100%;border-collapse:collapse;margin:0 0 10px;font-size:12.5px;
+background:#fff;border:1px solid var(--green-line);border-radius:8px;
+overflow:hidden}
+.pw-t th{text-align:left;padding:7px 9px;font-size:10.5px;font-weight:750;
+text-transform:uppercase;letter-spacing:.06em;color:var(--soft);
+background:var(--hair);border-bottom:1px solid var(--line);vertical-align:top}
+.pw-t td{padding:7px 9px;border-bottom:1px solid var(--hair);color:var(--mut);
+vertical-align:top;line-height:1.45}
+.pw-t tr:last-child td{border-bottom:0}
+.pw-t td:first-child{color:var(--ink);font-weight:550}
+.pw-t code{font:600 11.5px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;
+word-break:break-all}
+.pw-f{margin:0;padding-left:18px}
+.pw-f li{font-size:14px;color:var(--ink);margin-bottom:5px;line-height:1.5}
+.pw-f li:last-child{margin-bottom:0}
+.pw-f code{font:600 12.5px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;
+background:#fff;border:1px solid var(--green-line);border-radius:5px;
+padding:1px 5px;word-break:break-all}
+.pw-src{margin:10px 0 0;display:flex;gap:7px;align-items:center;flex-wrap:wrap;
+font-size:11.5px;color:var(--soft)}
 .act-nosteps{margin:0 0 11px;padding:9px 12px;background:var(--amber-bg);
 border:1px solid var(--amber-line);border-radius:8px;font-size:13px;
 color:var(--amber-ink)}
@@ -283,9 +309,9 @@ align-items:center;flex-wrap:wrap;padding:12px 18px 14px}
 .nk>summary::-webkit-details-marker{display:none}
 .nk>summary::before{display:none}
 .nk[open]>summary{border-bottom:1px solid var(--line);background:#fbfcfe}
-.nk-k{flex:none;font:750 10.5px/1 inherit;text-transform:uppercase;
-letter-spacing:.1em;color:var(--accent);background:var(--accent-bg);
-border:1px solid var(--accent-line);padding:5px 9px;border-radius:6px}
+.nk-k{flex:none;font:750 9.5px/1 inherit;text-transform:uppercase;
+letter-spacing:.09em;color:var(--accent);background:var(--accent-bg);
+border:1px solid var(--accent-line);padding:4px 7px;border-radius:5px}
 .nk.hot .nk-k{color:var(--red);background:var(--red-bg);border-color:var(--red-line)}
 /* The one line that is true whether the block is open or shut: what needs him.
    It is worked out from the items, so it cannot drift into commentary. */
@@ -617,6 +643,40 @@ def render_draft(d: dict, st: dict | None = None) -> str:
     return f'<div class="act-draft">{inner}</div>'
 
 
+def prepared_block(p: dict) -> str:
+    """Work that was already done for him, above the steps that remain.
+
+    If a step can be followed without judgement then following it was never his
+    job, so the page carries the product rather than the instruction. What is
+    left underneath is the part only he can do: check it, decide with it, say it.
+    """
+    if not p:
+        return ""
+    head = ""
+    tbl = p.get("table") or {}
+    if tbl.get("rows"):
+        cols = "".join(f"<th>{code(c)}</th>" for c in tbl.get("columns", []))
+        body = "".join(
+            "<tr>" + "".join(f"<td>{code(c)}</td>" for c in row) + "</tr>"
+            for row in tbl["rows"]
+        )
+        head = f'<table class="pw-t"><thead><tr>{cols}</tr></thead><tbody>{body}</tbody></table>'
+    finds = "".join(f"<li>{code(f)}</li>" for f in p.get("findings", []))
+    srcs = " ".join(
+        link_btn(s.get("url", ""), s.get("label", "Source"))
+        for s in p.get("sources", [])
+        if s.get("url")
+    )
+    return f"""
+            <div class="act-prep">
+              <p class="act-lab done">Done for you{f' &middot; {esc(p.get("built_at"))}' if p.get("built_at") else ""}</p>
+              {f'<p class="pw-what">{code(p.get("what"))}</p>' if p.get("what") else ""}
+              {head}
+              {f'<ul class="pw-f">{finds}</ul>' if finds else ""}
+              {f'<div class="pw-src"><span>Read from</span>{srcs}</div>' if srcs else ""}
+            </div>"""
+
+
 def steps_block(r: dict, steps: str, active: bool) -> str:
     """The steps, first thing inside the item, with somewhere to do them.
 
@@ -720,6 +780,7 @@ def render_items(
           </{head_tag}>
           <div class="act-body">
             {status_block}
+            {prepared_block(r.get("prepared") or {})}
             {steps_block(r, steps, active)}
             {render_draft(r.get("draft") or {}, st)}
             {f'<p class="act-done"><b>Finished when</b>{code(r.get("done_when"))}</p>' if r.get("done_when") and not done else ""}
