@@ -1,0 +1,398 @@
+
+/* One neutral ramp, one accent that changes with the view, and four semantic
+   colours that only ever mean one thing: red is yours, amber is blocked, blue
+   is with somebody else, green is closed. Nothing else gets to be coloured, so
+   colour on this page always carries information. */
+:root{
+--ink:#151a23;--mut:#4e5666;--soft:#79818f;--line:#e5e8ee;--hair:#f1f3f7;
+--card:#fff;--page:#f4f6fa;--head:#0d1524;--head-2:#1a2740;
+--accent:#0b5cd5;--accent-bg:#eff5ff;--accent-line:#c3daff;--accent-ink:#0a3d94;
+--red:#b42318;--red-bg:#fef4f2;--red-line:#fbd2cd;
+--amber:#b25309;--amber-bg:#fff9ed;--amber-line:#f9dda3;--amber-ink:#8a3d05;
+--green:#046c46;--green-bg:#effaf4;--green-line:#a8e7c5;
+--blue:#1257c9;--blue-bg:#f0f6ff;--blue-line:#bedaff;
+/* Asking, and what came back. Its own colour, because an answer from the desk
+   is neither the work nor the words: it is the thing you did not know. */
+--plum:#7c3aed;--plum-bg:#f7f5ff;--plum-line:#ddd6fe;--plum-ink:#5b21b6;
+--shadow:0 1px 2px rgba(16,24,40,.05),0 1px 3px rgba(16,24,40,.06);
+--lift:0 2px 4px rgba(16,24,40,.06),0 8px 20px rgba(16,24,40,.06)}
+/* The script view is a different room: warmer paper, plum accent. You can tell
+   which view you are in from across the desk, without reading a tab. */
+body[data-view="standup"]{--accent:#9c1b85;--accent-bg:#fdf1fa;--accent-line:#f1c3e6;
+--accent-ink:#78116a;--page:#faf6f9}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+.views button:focus-visible{outline-color:#fff}
+body{margin:0;background:var(--page);color:var(--ink);
+font:15.5px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans",
+"Noto Sans JP",sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:920px;margin:0 auto;padding:22px 20px 90px}
+/* The script is read out loud, so it gets a narrower column than the desk. */
+body[data-view="standup"] .wrap{max-width:840px}
+
+/* Header. Dark, because the switcher has to be the most findable thing here.
+   Its own layer, and the jump bar below it too. Two stacked sticky bars, one of
+   them blurring what is behind it, had the browser repainting both on every
+   frame of a fast scroll, and the header flickered while it caught up. */
+header.top{position:sticky;top:0;z-index:30;
+background:linear-gradient(180deg,var(--head-2),var(--head));color:#e6ecf7;
+box-shadow:inset 0 -1px 0 rgba(255,255,255,.06),0 4px 16px rgba(9,14,26,.14);
+transform:translateZ(0);will-change:transform;backface-visibility:hidden}
+/* Wider than the page it sits over: this row is navigation, not prose, and it
+   has to hold the tabs and the buttons without wrapping. One line tall, since
+   every pixel here is taken off the top of what he is actually reading. */
+.top-in{max-width:1180px;margin:0 auto;padding:4px 20px;display:flex;
+align-items:center;gap:10px;flex-wrap:wrap}
+/* One height for everything in this row, so no single control can push the bar
+   taller than the tabs need. */
+.top .btn,.toggle,.refresh,#countdown,.views button{height:26px;box-sizing:border-box;
+display:inline-flex;align-items:center;line-height:1}
+.brand{display:flex;align-items:center;gap:8px}
+.brand img{width:20px;height:20px;border-radius:6px;display:block}
+/* The name of the page, kept for the tab strip and for a screen reader but not
+   drawn: the icon says which desk this is, the tabs say which half of it, and
+   the width the words cost is the difference between a bar that stays one line
+   and one that grows a second. */
+.top h1{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;
+clip-path:inset(50%);white-space:nowrap;border:0}
+.top .date{color:#8a9bb8;font-size:12px;white-space:nowrap}
+/* Hours old means a reply may have landed unseen, which is worth a colour. */
+.top .date.old{color:#f4c27a}
+.top .btn{color:#c9d6ea;border-color:rgba(255,255,255,.16);
+background:rgba(255,255,255,.07);font-size:12px;padding:0 10px}
+.top .btn:hover{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.28);
+color:#fff}
+.acts{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+justify-content:flex-end}
+#countdown{font-variant-numeric:tabular-nums;font-weight:650;font-size:12.5px;
+padding:0 10px;border-radius:7px;color:#dae4f5;background:rgba(255,255,255,.09);
+border:1px solid rgba(255,255,255,.14)}
+#countdown:empty{display:none}
+#countdown.soon{background:#fee4e2;border-color:#fda29b;color:#912018}
+.toggle{font:600 12px/1 inherit;padding:0 10px;border-radius:7px;
+border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.07);
+cursor:pointer;color:#c9d6ea}
+.toggle:hover{background:rgba(255,255,255,.14);color:#fff}
+/* Stripping the page back to the Japanese is only a thing you want while
+   speaking, so the button lives in that view. */
+body[data-view="desk"] #scriptonly{display:none}
+
+/* Two views, one page. Big target, live count, and the key that switches it. */
+.views{display:flex;gap:3px;padding:3px;background:rgba(255,255,255,.08);
+border:1px solid rgba(255,255,255,.10);border-radius:10px}
+.views button{gap:7px;font:inherit;padding:0 11px;
+border:0;border-radius:8px;background:none;color:#a9b8d2;cursor:pointer;
+text-align:left;white-space:nowrap}
+.views button:hover{color:#fff;background:rgba(255,255,255,.07)}
+.views button[aria-selected="true"]{background:#fff;color:#0d1524;
+box-shadow:0 1px 3px rgba(9,14,26,.4)}
+.views .lbl{font-size:13px;font-weight:650;letter-spacing:-.005em}
+/* The room this script is for, alongside the label rather than under it, so the
+   whole bar stays one line tall. No rule between the two: it read as a border on
+   the tab rather than a divider between two words. */
+.views .sub{font-size:11.5px;font-weight:550;opacity:.62;padding-left:8px}
+.views .k{flex:none;font:700 10px/14px inherit;min-width:14px;text-align:center;
+border-radius:4px;background:rgba(255,255,255,.13);color:#c2cee3}
+.views button[aria-selected="true"] .k{background:#eef1f6;color:#6b7789}
+.views .badge{flex:none;min-width:17px;padding:0 5px;border-radius:9px;
+background:#e0483b;color:#fff;font:700 10.5px/17px inherit;text-align:center}
+.views button[aria-selected="true"] .badge{background:var(--red);color:#fff}
+.views .badge.quiet{background:rgba(255,255,255,.16);color:#dbe4f2}
+body[data-view="desk"] #view-standup,body[data-view="standup"] #view-desk{display:none}
+
+/* Cards. Every panel on both views is the same object. */
+.tk,.st-tk,.track,.panel,.st-run,.st-empty,.gaps{background:var(--card);
+border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+.st-lead{background:var(--card);border:1px solid var(--line);
+border-left:4px solid var(--accent);border-radius:13px;padding:16px 20px;
+margin-bottom:20px;box-shadow:var(--shadow)}
+.st-lead p{margin:0;font-size:17px;line-height:1.5;font-weight:550;
+letter-spacing:-.01em}
+h2.tickets-h{font-size:11.5px;text-transform:uppercase;letter-spacing:.09em;
+color:var(--soft);margin:28px 0 11px;font-weight:700}
+.pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;
+border-radius:20px;border:1px solid;letter-spacing:.01em;white-space:nowrap}
+.btn{font-size:12.5px;text-decoration:none;color:var(--accent);
+border:1px solid var(--line);background:#fff;padding:4px 10px;border-radius:7px;
+white-space:nowrap;font-weight:550}
+.btn:hover{border-color:var(--accent-line);background:var(--accent-bg)}
+.tag{display:inline-block;font-size:12.5px;font-weight:700;padding:2px 9px;
+border-radius:6px;background:var(--accent-bg);color:var(--accent-ink);
+margin-right:8px;vertical-align:2px;letter-spacing:0}
+.est{color:var(--green);font-weight:600}
+/* When a thing is due to move. Deliberately quiet next to the state colour:
+   whose it is comes first, when it moves comes second. */
+.when{flex:none;font-size:11.5px;font-weight:700;color:var(--soft);
+white-space:nowrap;letter-spacing:.01em}
+.when.now{color:var(--red)}
+.when.next{color:var(--amber)}
+.when.none{color:#9aa3b2;font-weight:600;font-style:italic}
+
+/* Sections inside a card. The marker bar says what kind of section it is, so a
+   card reads as parts rather than one column of identical grey capitals. */
+.sub{padding:16px 0;border-bottom:1px solid var(--hair)}
+.tk>*:last-child,.st-tk>*:last-child{border-bottom:0;padding-bottom:0}
+.sub h3{font-size:12.5px;letter-spacing:.005em;color:var(--mut);margin:0 0 10px;
+font-weight:750;display:inline-flex;align-items:center;gap:9px;vertical-align:middle;
+text-transform:none;width:calc(100% - 22px)}
+.sub h3:before{content:"";flex:none;width:3px;height:14px;border-radius:2px;
+background:var(--line)}
+.sub h3 .n{font-size:11px;font-weight:700;color:var(--soft);background:var(--hair);
+border:1px solid var(--line);border-radius:20px;padding:0 7px}
+.sub h3 .hint{margin-left:auto;font-size:11px;font-weight:600;color:#9aa3b2;
+text-transform:uppercase;letter-spacing:.06em}
+/* A hint long enough to be a sentence is set as one, and is allowed to be the
+   thing you read on a shut fold. */
+.sub h3 .hint.long{text-transform:none;letter-spacing:0;font-size:12px;
+font-weight:500;color:var(--mut);text-align:right}
+/* On a folded section the hint runs into the Show word, so it gives way. */
+details.sub>summary>h3 .hint{margin-right:10px}
+/* Red is the work, accent is the talking, grey is background you can skip. */
+.sub.now h3{color:var(--ink);font-size:14.5px;letter-spacing:-.01em}
+.sub.now h3:before{background:var(--red);height:17px;width:4px}
+.sub.say h3,.sub.key h3{color:var(--accent-ink);font-size:14.5px;letter-spacing:-.01em}
+.sub.say h3:before,.sub.key h3:before{background:var(--accent);height:17px;width:4px}
+.sub.log h3:before{background:var(--accent-line)}
+.sub.warn h3:before{background:var(--amber)}
+.sub.ref h3{color:var(--soft)}
+.sub.ask h3{color:var(--soft)}
+.sub.ask h3:before{background:var(--plum,#8b5cf6)}
+.sub.cons h3{color:var(--soft)}
+.sub.cons h3:before{background:var(--amber-line)}
+details>summary{cursor:pointer;list-style:none;padding:15px 0 8px}
+details>summary::-webkit-details-marker{display:none}
+details.sub{padding-top:0}
+/* A folded section is one row: the marker, the words, the count, and a word
+   saying whether there is anything behind it. */
+details.sub>summary{display:flex;align-items:center;padding:14px 10px;
+margin:0 -10px;border-radius:9px}
+details.sub>summary:hover{background:var(--hair)}
+details.sub[open]>summary{padding-bottom:8px}
+details.sub>summary>h3{margin:0;width:auto;flex:1}
+details.sub>summary:hover .fold-hint{color:var(--accent);border-color:var(--accent-line)}
+/* Say Show or Hide in words. A triangle alone does not tell you there is
+   anything behind it, which is how a folded section reads as an empty one. */
+.fold-hint{flex:none;margin-left:auto;font:650 9.5px/1 inherit;
+text-transform:uppercase;letter-spacing:.06em;color:var(--soft);
+border:1px solid var(--line);border-radius:4px;padding:3px 5px;background:#fff}
+.fold-hint:after{content:"Show"}
+details[open]>summary .fold-hint:after{content:"Hide"}
+.status,.st-stands{margin:0;font-size:15px;color:var(--ink)}
+.matters{margin:10px 0 0;padding:9px 13px;background:var(--accent-bg);
+border:1px solid var(--accent-line);border-radius:8px;font-size:14px;
+color:var(--accent-ink)}
+.cons-list{margin:0;display:grid;gap:1px;background:var(--line);
+border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.cons-row{display:flex;background:#fff;align-items:baseline}
+.cons-row dt{flex:none;width:152px;padding:9px 13px;font-size:11.5px;
+font-weight:700;color:var(--soft);background:#fbfcfe;text-transform:uppercase;
+letter-spacing:.04em}
+.cons-row dd{flex:1;min-width:0;margin:0;padding:9px 13px;font-size:14px}
+.cons-row:last-child dd{color:var(--amber);font-weight:550}
+
+/* The spoken script. Smaller than it was: this is read at speed, and 19px with
+   a reading above it is already taller than a normal line. */
+.jp-block{margin-bottom:16px}
+.jp-heading{display:flex;align-items:baseline;gap:10px;margin-bottom:8px;
+padding-bottom:5px;border-bottom:1px solid var(--accent-line)}
+.jp-h-ja{font-size:15px;font-weight:700;color:var(--accent-ink)}
+.jp-h-en{font-size:11.5px;color:var(--soft);text-transform:uppercase;
+letter-spacing:.06em;font-weight:600}
+.copy{margin-left:auto;font:600 11px/1 inherit;color:var(--soft);background:#fff;
+border:1px solid var(--line);border-radius:6px;padding:4px 8px;cursor:pointer}
+.copy:hover{color:var(--accent);border-color:var(--accent-line)}
+.jp-line{margin-bottom:10px;padding-left:12px;border-left:3px solid var(--accent-line)}
+.jp{margin:0;font-size:17.5px;line-height:1.9;letter-spacing:.005em}
+ruby rt{font-size:.48em;color:var(--accent);font-weight:600;letter-spacing:0}
+.en{margin:2px 0 0;font-size:13px;color:var(--soft);line-height:1.45}
+.qlist{list-style:none;margin:0;padding:0}
+.q{padding:9px 0;border-bottom:1px dashed var(--line)}
+.q:last-child{border-bottom:0}
+.q-en{font-weight:600;font-size:14.5px;display:flex;gap:8px;align-items:center;
+flex-wrap:wrap}
+.q-ja{font-size:16px;line-height:1.85;margin-top:3px;color:var(--mut)}
+
+/* Drafts. Monospace-free, but plain enough that pasting is the obvious move. */
+.draft{border:1px solid var(--line);border-radius:10px;margin-bottom:11px;
+overflow:hidden}
+.draft-head{display:flex;gap:9px;align-items:center;padding:8px 12px;
+background:#fbfcfe;border-bottom:1px solid var(--line);font-size:12.5px;
+color:var(--mut);font-weight:550}
+.draft-body{padding:13px;white-space:pre-wrap;font-size:14.5px;line-height:1.6}
+.draft-body.ja{font-size:15px;line-height:1.9}
+.draft-en{margin:0;padding:0 13px 13px;font-size:13px;color:var(--soft)}
+.warn{background:var(--amber-bg);border:1px solid var(--amber-line);
+border-radius:10px;padding:12px 15px;margin-top:15px}
+.warn h3{color:var(--amber)}
+.warn ul{margin:6px 0 0;padding-left:18px;font-size:14px;color:var(--amber-ink)}
+.empty{color:var(--soft);font-style:italic;margin:0;font-size:14.5px}
+.gaps{padding:16px 20px;margin-top:22px}
+.gaps h2{font-size:11.5px;text-transform:uppercase;letter-spacing:.09em;
+color:var(--soft);margin:0;display:inline-block;font-weight:700}
+.gaps ul{margin:8px 0 0;padding-left:18px}
+.foot{text-align:center;color:var(--soft);font-size:12px;margin-top:28px}
+.keys{color:#7b8cab;font-size:11px}
+
+/* Getting somewhere fast. The chips are the obvious way and cost no learning;
+   the finder is the fast way once you know it is there. */
+/* No frost on this one any more. A blurred sticky bar under a sticky header had
+   the compositor re-sampling what was behind it every frame, which is what made
+   the dark bar above stutter on a fast scroll, and at this opacity there was
+   never anything to see through it. */
+.jump{position:sticky;top:42px;z-index:20;display:flex;gap:6px;align-items:center;
+flex-wrap:wrap;margin:0 0 16px;padding:7px 11px;border:1px solid var(--line);
+border-radius:11px;background:#fbfcfe;box-shadow:var(--shadow);
+transform:translateZ(0);will-change:transform;backface-visibility:hidden}
+.jump .lab{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;
+color:var(--soft);font-weight:700;padding-right:2px}
+.jump a{font-size:12.5px;font-weight:600;color:var(--mut);text-decoration:none;
+padding:3px 9px;border-radius:7px;border:1px solid transparent;white-space:nowrap}
+.jump a:hover{background:var(--hair);color:var(--ink)}
+.jump a.on{background:var(--accent-bg);color:var(--accent-ink);
+border-color:var(--accent-line)}
+.jump a .c{font-size:10.5px;font-weight:700;color:var(--red);margin-left:5px}
+.jump a .ord{font-size:10.5px;font-weight:600;color:var(--soft);margin-left:6px}
+.jump .find{margin-left:auto;font:600 11.5px/1 inherit;color:var(--soft);
+background:#fff;border:1px solid var(--line);border-radius:7px;padding:5px 9px;
+cursor:pointer;display:flex;gap:6px;align-items:center}
+.jump .find:hover{color:var(--accent);border-color:var(--accent-line)}
+kbd{font:700 10.5px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+background:var(--hair);border:1px solid var(--line);border-bottom-width:2px;
+border-radius:4px;padding:3px 5px;color:var(--mut)}
+
+/* The finder. Type a ticket, a number or a word and land on it. */
+.pal{position:fixed;inset:0;z-index:60;background:rgba(9,14,26,.44);
+display:flex;align-items:flex-start;justify-content:center;padding:11vh 16px 16px}
+.pal-box{width:min(640px,100%);background:#fff;border-radius:15px;
+box-shadow:0 24px 60px rgba(9,14,26,.35);overflow:hidden;display:flex;
+flex-direction:column;max-height:74vh}
+.pal input{border:0;border-bottom:1px solid var(--line);padding:16px 19px;
+font:16px/1.4 inherit;outline:0;color:var(--ink)}
+.pal ul{list-style:none;margin:0;padding:7px;overflow:auto}
+.pal li{padding:9px 11px;border-radius:9px;display:flex;gap:10px;
+align-items:center;cursor:pointer}
+.pal li[aria-selected="true"]{background:var(--accent-bg)}
+.pal .p-tag{flex:none;font-size:10.5px;font-weight:700;color:var(--accent-ink);
+background:var(--accent-bg);border:1px solid var(--accent-line);padding:1px 7px;
+border-radius:5px}
+.pal .p-t{flex:1;min-width:0;font-size:14px;white-space:nowrap;overflow:hidden;
+text-overflow:ellipsis}
+.pal .p-s{flex:none;font-size:11.5px;color:var(--soft)}
+.pal .p-none{padding:16px 19px;color:var(--soft);font-size:14px;font-style:italic}
+.pal-foot{padding:9px 14px;border-top:1px solid var(--line);background:#fbfcfe;
+font-size:11.5px;color:var(--soft);display:flex;gap:14px}
+
+/* How to work this thing. Reachable from the header on every view, because the
+   answer to "how do I close this" should never be somewhere else. */
+dialog.help{border:0;padding:0;border-radius:16px;width:min(680px,92vw);
+box-shadow:0 24px 60px rgba(9,14,26,.4);color:var(--ink)}
+dialog.help::backdrop{background:rgba(9,14,26,.5)}
+.help-in{padding:24px 28px 26px;position:relative}
+.help-in h2{margin:0 0 4px;font-size:19px;letter-spacing:-.015em}
+.help-in .lead{margin:0 0 18px;color:var(--mut);font-size:14px}
+.help-in h3{margin:18px 0 7px;font-size:12.5px;font-weight:750;color:var(--ink);
+display:flex;align-items:center;gap:8px}
+.help-in h3:before{content:"";width:3px;height:14px;border-radius:2px;
+background:var(--accent)}
+.help-in p{margin:0 0 8px;font-size:14px;color:var(--mut)}
+.help-in code{font:600 12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;
+background:var(--hair);border:1px solid var(--line);border-radius:5px;padding:1px 5px;
+color:var(--accent-ink)}
+.say-list{list-style:none;margin:0;padding:0;display:grid;gap:1px;
+background:var(--line);border:1px solid var(--line);border-radius:10px;
+overflow:hidden}
+.say-list li{background:#fff;padding:8px 12px;display:flex;gap:12px;
+align-items:baseline;font-size:13.5px}
+.say-list .said{flex:none;min-width:186px;font-weight:650;color:var(--accent-ink);
+font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px}
+.say-list .does{flex:1;min-width:0;color:var(--mut)}
+.help-close{position:absolute;top:14px;right:16px;font:700 13px/1 inherit;
+background:#fff;border:1px solid var(--line);border-radius:7px;padding:6px 10px;
+cursor:pointer;color:var(--mut)}
+.help-close:hover{color:var(--ink);border-color:var(--soft)}
+
+/* The strip under your work: how to close something, in the page, not a manual. */
+.howto{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:0 0 20px;
+padding:11px 15px;border:1px dashed var(--line);border-radius:11px;
+background:rgba(255,255,255,.6);font-size:13px;color:var(--mut)}
+.howto b{color:var(--ink);font-weight:650}
+.howto>span{flex:1;min-width:300px}
+.howto code{font:600 12px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+background:#fff;border:1px solid var(--line);border-radius:5px;padding:2px 6px;
+color:var(--accent-ink);white-space:nowrap}
+.howto .more{margin-left:auto;font:650 12px/1 inherit;background:#fff;
+border:1px solid var(--line);border-radius:7px;padding:6px 11px;cursor:pointer;
+color:var(--accent)}
+.howto .more:hover{border-color:var(--accent-line);background:var(--accent-bg)}
+
+/* Script-only: everything that is not Japanese gets out of the way. The one
+   thing that stays is the ask. Reading his own words out loud is exactly when he
+   notices the line is wrong, and having to leave the reading view to say so is
+   how a wrong line survives to the meeting. */
+body.script-only .sub:not(.script):not(.ask),body.script-only .st-head .pos,
+body.script-only details,body.script-only .st-brief,body.script-only .st-raise,
+body.script-only .st-warn,body.script-only .st-cons,body.script-only .st-land,
+body.script-only .st-run,body.script-only .sess{display:none}
+/* Rewrite or ask stays. It sits in the Say this header, on the words themselves,
+   and reading them out loud is when he notices one is wrong. */
+body.script-only .say .ask-here{display:inline-flex}
+body.script-only .sub.ask details{display:block}
+body.script-only .sub.ask{border-top:1px solid var(--line);margin-top:16px}
+body.script-only .sub.ask>h3{display:none}
+body.script-only .jp{font-size:21px;line-height:2}
+body.script-only .en{font-size:13.5px}
+body.script-only .st-tk{padding:18px 22px}
+.err{background:var(--red-bg);border:1px solid var(--red-line);border-radius:12px;
+padding:22px;color:var(--red)}
+.err pre{white-space:pre-wrap;font-size:13px;background:#fff;padding:13px;
+border-radius:8px;margin:13px 0 0;color:var(--ink)}
+/* A window narrower than the desk it was drawn for. The header is navigation and
+   it wraps, so the way to keep it short is to drop what is written elsewhere on
+   the page rather than to let it grow a third line: two is already a lot of the
+   top of the screen, and a bar that changes height as he resizes moves
+   everything he is reading.
+
+   The brand is decoration. The room this script is for is in Next room and at
+   the top of the speaking view. The date and how long ago it was checked are the
+   first real loss, so they go last, and the countdown pill stays throughout
+   because it is the one thing up here that is about the next hour. */
+@media (max-width:1240px){
+.brand,.views .sub{display:none}
+}
+@media (max-width:1020px){
+.top .date{display:none}
+}
+
+/* On a phone the whole page is one column, and the header keeps the tabs, the
+   two buttons and nothing else. */
+@media (max-width:640px){
+.wrap{padding:14px 12px 60px}
+.top-in{padding:5px 10px;gap:6px;min-width:0}
+.brand,.date,#countdown,.views .sub,.views .k{display:none}
+.top .btn{display:none}
+.views,.acts{min-width:0}
+.top-in{overflow-x:hidden}
+.views,.acts{overflow-x:auto;scrollbar-width:none}
+.views::-webkit-scrollbar,.acts::-webkit-scrollbar{display:none}
+.views button{padding:0 9px;flex:none}
+/* Flex children default to their content width, which is what pushes a phone
+   into sideways scrolling. Nothing on this page needs to be wider than it. */
+.tr-title,.act-title,.n-what,.thr-body,.nk-sum,.q-en,.mv-what,.terms dd,
+.howto>span,.act-head,.tk-meta,.st-run a{min-width:0}
+.terms dt{width:auto}
+.term{flex-direction:column;gap:4px}
+.tk,.st-tk{padding-left:14px;padding-right:14px}
+.tk-head{margin:0 -14px;padding-left:14px;padding-right:14px}
+.tr,.news li,.nk-news li{flex-wrap:wrap}
+.tr-title,.n-what{flex-basis:100%;order:-1}
+.tr-min,.act-min{display:none}
+.thr-where{min-width:0;flex-basis:100%}
+.cons-row{flex-wrap:wrap}
+.cons-row dt{width:100%;padding-bottom:0}
+.jp{font-size:16.5px;line-height:1.85}
+.jump{position:static}
+}
+@media print{header.top,.btn,.copy,.toggle,.views,.jump,.howto{display:none}
+body{background:#fff}.tk,.st-tk{break-inside:avoid;border-color:#ccc;box-shadow:none}
+details{display:block}details>summary{display:none}}

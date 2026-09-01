@@ -301,22 +301,18 @@ def load(path: Path | None = None) -> dict:
 
 
 def save(board: dict, path: Path | None = None) -> None:
-    # `by_id` takes the first match, so two items sharing a number means "do 20"
-    # and `./tick.py 20` silently pick one of them. Numbers are how Rei refers to
-    # his work, so refuse to write the board rather than let that sit there.
-    seen: dict[str, str] = {}
-    clashes = []
-    for ticket, item in items(board):
-        key = str(item.get("id"))
-        where = f"{ticket.get('ref')}: {item.get('title', '')[:40]}"
-        if key in seen:
-            clashes.append(f"  {key}: {seen[key]!r} and {where!r}")
-        seen[key] = where
-    if clashes:
+    # The board is written by agents, so this is the only place a bad shape can be
+    # stopped. Two items sharing a number makes "do 20" ambiguous; findings held as
+    # dicts takes the whole page down with a TypeError halfway through a card.
+    # Refusing to write is the kind failure: the board on disk stays readable, and
+    # whoever is holding it gets told what to fix.
+    problems = check(board)
+    if problems:
         raise ValueError(
-            "two items share a number, so the board was not written:\n"
-            + "\n".join(clashes)
-            + "\nUse board.next_id(board) rather than setting id by hand."
+            "the board was not written, because it would not render:\n  "
+            + "\n  ".join(problems)
+            + "\nFix the item in memory and save again. For a new number use "
+            "board.next_id(board) rather than setting id by hand."
         )
 
     path = path or BOARD
@@ -334,6 +330,102 @@ def save(board: dict, path: Path | None = None) -> None:
 def items(board: dict) -> list[tuple[dict, dict]]:
     """Every item with the ticket it belongs to."""
     return [(t, i) for t in board.get("tickets", []) for i in t.get("items", [])]
+
+
+# What each field has to be for the renderers to survive it. The board is written
+# by agents rather than by this code, so no amount of typing in Python protects
+# it: the check has to happen at the boundary. `prepared.findings` held
+# dictionaries once, where every reader expected strings, and the page died with a
+# TypeError halfway down a card.
+SHAPES: dict[str, type | tuple[type, ...]] = {
+    "title": str,
+    "why": str,
+    "state": str,
+    "urgency": str,
+    "steps": list,
+    "done_when": str,
+    "progress_note": str,
+    "state_note": str,
+    "waits_on": dict,
+    "hold": dict,
+    "draft": dict,
+    "prepared": dict,
+    "history": list,
+    "est_minutes": (int, float),
+    "after": (int, str),
+}
+LISTS_OF_TEXT = ("steps",)
+PREPARED_TEXT = ("findings", "unanswered", "sources", "files")
+
+
+def check(board: dict) -> list[str]:
+    """Everything wrong with the shape of this board, in the words of a fix.
+
+    Not the same job as `audit.py`, which asks whether the board is out of date.
+    This asks whether it is the shape the renderers expect, which is the class of
+    fault that takes the whole page down rather than making one card wrong.
+    """
+    bad: list[str] = []
+    ids: dict[str, str] = {}
+
+    for ticket, item in items(board):
+        where = f"item {item.get('id')} on {ticket.get('ref', '?')}"
+
+        ident = str(item.get("id", ""))
+        if not ident:
+            bad.append(f"{where}: no id, so nothing can refer to it")
+        elif ident in ids:
+            bad.append(f"item {ident}: used twice, on {ids[ident]} and {ticket.get('ref')}")
+        else:
+            ids[ident] = str(ticket.get("ref"))
+
+        for field, want in SHAPES.items():
+            value = item.get(field)
+            if value is not None and not isinstance(value, want):
+                names = getattr(want, "__name__", None) or " or ".join(
+                    t.__name__ for t in want
+                )
+                bad.append(
+                    f"{where}: {field} is a {type(value).__name__}, should be {names}"
+                )
+
+        for field in LISTS_OF_TEXT:
+            for n, entry in enumerate(item.get(field) or [], 1):
+                if not isinstance(entry, str):
+                    bad.append(
+                        f"{where}: {field}[{n}] is a {type(entry).__name__}, "
+                        f"should be a plain sentence"
+                    )
+
+        prepared = item.get("prepared")
+        if isinstance(prepared, dict):
+            for field in PREPARED_TEXT:
+                for n, entry in enumerate(prepared.get(field) or [], 1):
+                    if not isinstance(entry, (str, dict)):
+                        bad.append(
+                            f"{where}: prepared.{field}[{n}] is a "
+                            f"{type(entry).__name__}"
+                        )
+                    elif isinstance(entry, dict) and field == "findings":
+                        bad.append(
+                            f"{where}: prepared.findings[{n}] is a dict. Findings "
+                            f"are strings; every reader joins them as prose."
+                        )
+
+        state = item.get("state", "todo")
+        if state not in OPEN_STATES + CLOSED_STATES:
+            bad.append(
+                f"{where}: state is {state!r}, which no renderer knows. "
+                f"One of {', '.join(OPEN_STATES + CLOSED_STATES)}."
+            )
+
+    highest = max((int(n) for n in ids if n.isdigit()), default=0)
+    if board.get("next_id", 0) <= highest:
+        bad.append(
+            f"next_id is {board.get('next_id')} but item {highest} exists, so the "
+            f"next writer collides. Use board.next_id(b)."
+        )
+    return bad
 
 
 def by_id(board: dict, item_id: str | int) -> tuple[dict, dict] | tuple[None, None]:

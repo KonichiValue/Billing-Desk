@@ -333,11 +333,13 @@ one missed term is a line he reads without knowing what it says.
 ## 10. Check your own work, then rebuild
 
 ```
-./audit.py
+./check.py
 ```
 
-This is the same list the digest printed at the start, run against the board you
-have just written. It is mechanical: passed dates, records that disagree with
+This runs the audit, and around it the checks that catch a board no renderer can
+survive: a field holding the wrong type, a page that throws, a number used twice.
+The audit half is the same list the digest printed at the start, run against the
+board you have just written. It is mechanical: passed dates, records that disagree with
 each other, sequencing that points at something closed, prepared work older than
 the ticket under it. **Fix everything it prints and run it again.** A sweep is
 not finished while it prints anything, and "I found nothing new in Asana" is not
@@ -345,6 +347,9 @@ a reason to leave it printing, because none of what it catches comes from Asana.
 
 If a line is genuinely wrong, the check is wrong and belongs in `audit.py`. Do
 not leave it standing and mention it in the report.
+
+Anything printed as `FAIL` rather than `note` is not a stale board, it is a
+broken one, and it is yours: nothing else wrote the board this run.
 
 ```
 ./tick.py --rebuild

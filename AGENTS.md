@@ -201,12 +201,39 @@ question about one job. The shape in `board.py` is the
 contract the renderers expect, so if you add a field, update `render_desk.py`,
 `render_standup.py` and `render_desk_md.py` in the same change.
 
+**How the page looks and behaves lives in `static/`, not in the Python.**
+`base.css` and `desk.css` and `standup.css` are the styles, `base.js` runs the
+buttons and the live status, `desk.js` runs the ask boxes. The renderers read
+them at render time and inline them, so a change to a stylesheet shows up on the
+next page load with no restart, and `node --check` and any formatter can see the
+JavaScript the way they could not while it was a Python string.
+
 Do not hand-edit files in `output/`. They are regenerated from the board on
 every page load.
 
+## Before you say you are done
+
+```
+./check.py
+```
+
+Both languages parse, every `fetch` handles a failure, the board is a shape the
+renderers can survive, both pages render, and anything out of date is listed.
+It takes under a second, it never writes, and it fails loudly on the two faults
+that have actually taken this page down: a promise chain with no `.catch()`, and
+a board field holding the wrong type.
+
+`board.save()` refuses a board that would not render, so a shape error is an
+exception at the point of writing rather than a broken page an hour later. Fix
+the item and save again; the file on disk is untouched until the board is sound.
+
 ## House style for this repo
 
-Python is standard library only, no third-party packages. Shell is zsh. Commit
+Python is standard library only, no third-party packages, and the front end has
+no build step or framework for the same reason: the whole thing has to still run
+in two years with nothing installed. `node` is used by `./check.py` to parse the
+JavaScript if it happens to be there, and the check says so and carries on if it
+is not. Shell is zsh. Commit
 messages follow the "Prior to this change / This change" structure used in
 `git log`, and use an `Assistant-model:` trailer rather than `Co-authored-by:`
 for AI assistance.
