@@ -211,14 +211,28 @@ JavaScript the way they could not while it was a Python string.
 Do not hand-edit files in `output/`. They are regenerated from the board on
 every page load.
 
+**The open page reloads itself when the board moves.** `render.stamp()` is the
+size and modification time of `state/board.json`, `state/asks.json` and
+everything in `static/`, the page carries the one it was drawn from in
+`data-stamp`, and `/api/status` reports the current one every couple of seconds.
+So `./tick.py 26` in a terminal, a sweep on a schedule and an ask answered in
+another tab all reach the page on their own. If you add another file the page is
+drawn from, add it to `SOURCES` or the page will not notice it changing.
+
+It holds the reload back for one thing only: something half-written in a
+composer, where taking the words away would be worse than the staleness. Then it
+shows the amber Board changed button and waits. `tests/reload.js` is what keeps
+that true, and `./check.py` runs it.
+
 ## Before you say you are done
 
 ```
 ./check.py
 ```
 
-Both languages parse, every `fetch` handles a failure, the board is a shape the
-renderers can survive, both pages render, and anything out of date is listed.
+Both languages parse, every `fetch` handles a failure, the page still reloads
+itself without eating his typing, the board is a shape the renderers can
+survive, both pages render, and anything out of date is listed.
 It takes under a second, it never writes, and it fails loudly on the two faults
 that have actually taken this page down: a promise chain with no `.catch()`, and
 a board field holding the wrong type.

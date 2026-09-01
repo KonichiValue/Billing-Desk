@@ -23,6 +23,7 @@ from pathlib import Path
 
 import render_standup
 from render import (
+    stamp,
     asset,
     ASKED,
     SPARK,
@@ -973,7 +974,7 @@ def shell(
 <title>{esc(title)}</title>
 <style>{asset("base.css")}{asset("desk.css")}{asset("standup.css")}</style></head>
 <body data-view="{esc(view)}" data-meeting="{esc(meeting_iso)}"
-      data-meeting-label="{esc(meeting_label)}">
+      data-meeting-label="{esc(meeting_label)}" data-stamp="{stamp()}">
 {body}
 <script>{asset("base.js")}</script></body></html>"""
 
@@ -986,6 +987,7 @@ def controls(prep_label: str) -> str:
           data-busy="Refreshing">Refresh</button>
   <button id="prep" class="refresh" hidden data-run="/api/prep"
           data-busy="Writing">{prep_label}</button>
+  <button id="changed" class="refresh moved" hidden>Board changed &middot; Reload</button>
   <button id="login" class="refresh" hidden>Log in</button>
   <a id="login-link" class="refresh" hidden target="_blank" rel="noopener">Open sign-in page</a>
   <span id="refresh-note" class="refresh-note"></span>

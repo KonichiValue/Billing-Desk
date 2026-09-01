@@ -139,6 +139,30 @@ def promises_are_caught() -> list[str]:
     return bad
 
 
+def reload_guard_holds() -> list[str]:
+    """The page reloads itself when the board moves, and never over his typing.
+
+    `tests/reload.js` drives the real `static/desk.js` against a stub DOM. It is
+    here rather than left as something to remember, because the failure it guards
+    against is silent: a reload that eats a half-written question looks exactly
+    like a page that was working.
+    """
+    node = shutil.which("node")
+    if not node:
+        return []
+    done = subprocess.run(
+        [node, str(ROOT / "tests" / "reload.js")],
+        capture_output=True, text=True, check=False, cwd=ROOT,
+    )
+    if done.returncode == 0:
+        return []
+    return [
+        line.strip()
+        for line in (done.stdout + done.stderr).splitlines()
+        if "FAIL" in line
+    ] or ["tests/reload.js failed"]
+
+
 def pages_render() -> list[str]:
     """Both pages come out of the real board without throwing.
 
@@ -179,6 +203,7 @@ CHECKS = (
     ("Python parses", python_parses),
     ("JavaScript parses", javascript_parses),
     ("Every fetch handles a failure", promises_are_caught),
+    ("The page reloads itself, but never over his typing", reload_guard_holds),
     ("The board is the shape the renderers expect", board_shape),
     ("Both pages render", pages_render),
     ("The board is up to date", board_freshness),

@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import NamedTuple
 
 import keep
+import render
 
 ROOT = Path(__file__).resolve().parent
 KEY = secrets.token_urlsafe(16)
@@ -1170,6 +1171,10 @@ class Handler(BaseHTTPRequestHandler):
                     state["last"] = live["last"]
                     state["written"] = live["chars"]
             state["asks"] = pending_asks()
+            # What the board looks like now. The page holds the one it was drawn
+            # from, so a `./tick.py 26` in a terminal reloads the browser rather
+            # than sitting there being quietly wrong.
+            state["stamp"] = render.stamp()
             self.json_out(200, state)
             return
         if path == "/manifest.webmanifest":

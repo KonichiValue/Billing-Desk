@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import html
 import json
+import hashlib
 import re
 from datetime import date
 from pathlib import Path
@@ -627,7 +628,32 @@ def day_words(iso: str) -> str:
     return day.strftime("%a %-d %b")
 
 
-STATIC = Path(__file__).resolve().parent / "static"
+ROOT = Path(__file__).resolve().parent
+STATIC = ROOT / "static"
+
+# Everything the page is drawn from. Not the rendered files in `output/`, which
+# are written fresh on every load and would change the answer every time.
+SOURCES = ("state/board.json", "state/asks.json")
+
+
+def stamp() -> str:
+    """What this page was rendered from, in one short token.
+
+    The page carries it in `data-stamp` and asks the server for it every couple of
+    seconds, so `./tick.py 26` in a terminal reloads the browser without him
+    going to look for it. Size and modification time rather than a hash of the
+    contents, because it is checked often and never has to be right about *what*
+    changed, only that something did. `board.save()` renames the file into place,
+    so there is no moment where this reads half a write.
+    """
+    marks = []
+    for name in SOURCES + tuple(f"static/{p.name}" for p in sorted(STATIC.glob("*"))):
+        try:
+            info = (ROOT / name).stat()
+            marks.append(f"{info.st_mtime_ns}.{info.st_size}")
+        except OSError:
+            marks.append("-")
+    return hashlib.blake2s("-".join(marks).encode(), digest_size=6).hexdigest()
 
 
 def asset(name: str) -> str:

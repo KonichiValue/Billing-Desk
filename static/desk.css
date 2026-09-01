@@ -513,6 +513,16 @@ body[data-view="standup"] #prep{background:#b32a9c;border-color:#cf56b9}
 body[data-view="standup"] #prep:hover{background:#c33bab}
 .refresh:disabled{opacity:.5;cursor:default}
 a.refresh{text-decoration:none}
+/* The page normally reloads itself when the board moves under it. This is the
+   one case where it will not: he is part-way through typing a question, and
+   taking the words out from under him would be worse than the staleness. So it
+   waits, visibly, and he decides when. Amber rather than blue: nothing is
+   wrong, but the page is no longer what the board says. */
+.refresh.moved{background:#8a5a12;border-color:#d99b2b;color:#fff;
+animation:moved-in .25s ease-out}
+.refresh.moved:hover{background:#a76d18}
+@keyframes moved-in{from{opacity:0;transform:translateY(-2px)}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.refresh.moved{animation:none}}
 .refresh-note{font-size:11.5px;color:#93a4bd;max-width:280px}
 .refresh-note.bad{color:#f6b0ac}
 /* Buttons that only mean something on one view stay on that view. The work

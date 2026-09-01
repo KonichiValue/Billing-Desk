@@ -68,7 +68,56 @@
     if (tone) say(message, tone);
   }
 
+  // One timer, so there is only ever one loop. Several branches used to schedule
+  // the next poll themselves and the login path called poll() outright, which is
+  // two loops running, then four, each one polling the server on its own clock.
+  var timer = null;
+  function later(ms) {
+    if (timer) clearTimeout(timer);
+    // Nothing worth watching while the tab is in the background. The check
+    // happens the moment he comes back to it, which is exactly when he has just
+    // typed something into a terminal.
+    timer = document.hidden ? null : setTimeout(poll, ms);
+  }
+
+  // The stamp the page was drawn from. Everything that moves the board writes it
+  // and moves the stamp with it: `./tick.py 26` in a terminal, a sweep on a
+  // schedule, an ask answered in another tab. None of those come through this
+  // page, and a desk quietly a version behind is the one failure this repo
+  // exists to prevent.
+  var drawnFrom = document.body.dataset.stamp || "";
+  var changed = document.getElementById("changed");
+  if (changed) changed.addEventListener("click", function () { location.reload(); });
+
+  function safeToReload() {
+    // Everything else survives a reload: the open tab is in sessionStorage, the
+    // folds are in localStorage, the browser puts the scroll back. Half a
+    // sentence in a composer does not, so that is the one thing worth stopping
+    // for. Losing what he was typing to a helpful refresh would be worse than
+    // the staleness it fixes.
+    var half = [].slice.call(document.querySelectorAll(".ask textarea"))
+      .some(function (t) { return t.value.trim(); });
+    var open = document.querySelector(".ask-box:not([hidden]), .fu:not([hidden])");
+    var pal = document.getElementById("pal");
+    var help = document.getElementById("help");
+    var over = (pal && !pal.hidden) || (help && help.open);
+    return !half && !open && !over;
+  }
+
+  function boardMoved(s) {
+    if (!s.stamp || !drawnFrom || s.stamp === drawnFrom) return false;
+    if (safeToReload()) {
+      say("The board changed, reloading");
+      location.reload();
+      return true;
+    }
+    // Mid-sentence. Offer the reload rather than taking it.
+    if (changed) changed.hidden = false;
+    return false;
+  }
+
   function poll() {
+    timer = null;
     fetch("/api/status").then(function (r) { return r.json(); }).then(function (s) {
       // My own question first, found by its id. Watching the one global job state
       // is wrong as soon as two things are in flight: an ask that finished while
@@ -78,7 +127,7 @@
         var mine = (s.asks || {})[myAsk];
         if (mine) {
           thinking(s, mine === "queued");
-          setTimeout(poll, 900);
+          later(900);
           return;
         }
         myAsk = null;
@@ -101,13 +150,13 @@
         }
         say(note);
         thinking(s);
-        setTimeout(poll, waiting ? 900 : 2000);
+        later(waiting ? 900 : 2000);
         return;
       }
       if (s.state === "done") {
         // Only reload for something this page started. The job state survives the
         // job, so a plain page load finding an old "done" would reload forever.
-        if (!started) { ready(); say(s.message); return; }
+        if (!started) { ready(); if (!boardMoved(s)) { say(s.message); later(2500); } return; }
         started = false;
         say("Done, reloading");
         location.reload();
@@ -122,24 +171,31 @@
         login.hidden = false;
         if (s.url) { link.href = s.url; link.hidden = false; }
         say(s.message, "bad");
-        setTimeout(poll, 3000);
+        later(3000);
         return;
       }
       if (s.state === "failed") {
         started = false;
         myAsk = null;
-        ready(); stopWaiting(s.message); say(s.message, "bad"); return;
+        ready(); stopWaiting(s.message); say(s.message, "bad");
+        later(2500);
+        return;
       }
       login.hidden = true;
       link.hidden = true;
       ready();
+      // Idle, which is where the page spends nearly all of its life and where it
+      // used to stop looking. Keep a slow heartbeat so a change made anywhere
+      // else arrives on its own.
+      if (boardMoved(s)) return;
       say(s.message);
+      later(2500);
     }).catch(function () {
       // One dropped poll is not a finished job. This used to have no catch at
       // all, so a single blip killed the loop and the card span until reload.
-      if (myAsk || started) { setTimeout(poll, 3000); return; }
+      if (myAsk || started) { later(3000); return; }
       say("lost the desk server, retrying", "bad");
-      setTimeout(poll, 5000);
+      later(5000);
     });
   }
 
@@ -160,7 +216,7 @@
     login.disabled = true;
     say("Starting the sign-in\u2026");
     fetch("/api/login?k=" + encodeURIComponent(key), { method: "POST" })
-      .then(function () { setTimeout(function () { login.disabled = false; poll(); }, 1500); })
+      .then(function () { setTimeout(function () { login.disabled = false; later(0); }, 1500); })
       .catch(function () { login.disabled = false; say("could not reach the desk server", "bad"); });
   });
 
@@ -274,6 +330,15 @@
       hint.textContent = e.message;
     });
   });
+
+  // Coming back to the tab is the moment worth checking. The usual way the board
+  // moves is him running `./tick.py 26` in a terminal and then looking at the
+  // page, so the reload should be waiting for him rather than up to two seconds
+  // behind. It also picks the loop back up, since it stops while hidden.
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden) later(0);
+  });
+  window.addEventListener("focus", function () { if (!timer) later(0); });
 
   poll();
 })();
