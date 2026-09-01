@@ -85,8 +85,12 @@ what to start on, whether tomorrow is covered, and it arrives with every open jo
 attached. Answer those in item numbers, and read the board rather than the titles
 it hands you.
 
-An ask may change the item it was asked about. It may never change item state,
-which is `tick.py`'s alone, and it may never send anything.
+An ask may change the item it was asked about, and it may move where that job
+stands when Rei tells it to: "close this", "this is with Kevin now". It does that
+by running `./tick.py`, which is still the only thing that writes state, so the
+move is timestamped into the item's history like any other. What it may not do is
+infer the move. Concluding from a thread that something looks finished is not him
+saying it is, and an ask may never send anything.
 
 ## "refresh"
 

@@ -149,10 +149,44 @@ And if he asks for a change the prep cannot carry, a decision that has not been
 made or a date nobody has set, say so instead of writing words he would have to
 walk back in person.
 
-Two things are not yours to change. **Item state** belongs to `tick.py`, so
-never mark something done, sent or dropped, however clearly he says it is
-finished; tell him the command instead. And **item numbers** are permanent,
-because they are how he refers to his own work.
+## Changing where a job stands
+
+**When he tells you a job has moved, move it.** "Then close this ticket", "mark
+this done", "this is with Kevin now": that is an instruction, and answering it
+with the command he should type is a worse version of doing it. Run `./tick.py`,
+which is the only thing that may write state, because it records the move in the
+item's `history` with a timestamp and keeps the pages honest:
+
+```
+./tick.py 29                    finished, nothing comes back
+./tick.py 29 -w "Ryan Kam"      sent, the ball is with them
+./tick.py 29 --mine             they replied, it is his again
+./tick.py 29 --dropped -n "why" not happening, with the reason
+```
+
+Then say in one line what you moved and to what.
+
+Three things bound this, and they matter more than the convenience:
+
+- **Only on an instruction, never on an inference.** Reading a thread and
+  concluding the work looks finished is not him telling you it is. If he asked a
+  question and the answer happens to be "that looks done", say so and leave the
+  state alone.
+- **Sending is not finishing.** If a reply is expected, it is `-w <who>`, so the
+  page shows it sitting with them rather than pretending it is closed. Plain
+  `./tick.py <n>` is only for work where nothing comes back.
+- **Only the job he asked from.** He is looking at one card. Moving its
+  neighbours because they seem related is how he loses track of his own list.
+
+If the instruction and the evidence disagree, say so and ask, rather than
+quietly doing the smaller thing. "You asked me to close 29, but the description
+still says 144 in three places, so I have left it open" is the useful answer.
+
+`./tick.py` rebuilds both pages itself, which is the one case where a rebuild
+from an ask is not wasted, so do not add `--rebuild` on top of it.
+
+**Item numbers are still permanent**, because they are how he refers to his own
+work, and nothing here may send anything.
 
 ## Hard rules that do not bend for a quick question
 

@@ -1650,9 +1650,24 @@ def controls(prep_label: str) -> str:
   // is happening, so the panel keeps a live count and the last line the agent
   // printed rather than a button frozen on "Sending".
   var waiting = null;
+  // The id of the question this page asked, so it can watch that rather than
+  // whatever the server happens to be doing. Null when nothing of ours is out.
+  var myAsk = null;
+  // This page started a refresh or a prep, so a "done" belongs to us.
+  var started = false;
 
-  function thinking(s) {
+  function thinking(s, queued) {
     if (!waiting) return;
+    if (queued) {
+      // One at a time, because an answer that rewrites a draft rewrites the whole
+      // board. Say so, rather than counting seconds at a question nobody has
+      // started reading yet.
+      waiting.querySelector(".ask-wait-t").textContent = "Queued, behind the one in front";
+      var q = waiting.querySelector(".ask-wait-tail");
+      q.textContent = "It starts on its own. You can ask on other cards meanwhile.";
+      q.hidden = false;
+      return;
+    }
     var secs = s.seconds || 0;
     var mins = secs >= 60 ? Math.floor(secs %% 3600 / 60) + "m " + (secs %% 60) + "s" : secs + "s";
     waiting.querySelector(".ask-wait-t").textContent = "Thinking, " + mins;
@@ -1681,6 +1696,23 @@ def controls(prep_label: str) -> str:
 
   function poll() {
     fetch("/api/status").then(function (r) { return r.json(); }).then(function (s) {
+      // My own question first, found by its id. Watching the one global job state
+      // is wrong as soon as two things are in flight: an ask that finished while
+      // something else was starting left this card spinning on "Sending" with the
+      // answer already written to disk.
+      if (myAsk) {
+        var mine = (s.asks || {})[myAsk];
+        if (mine) {
+          thinking(s, mine === "queued");
+          setTimeout(poll, 900);
+          return;
+        }
+        myAsk = null;
+        if (waiting) waiting.querySelector(".ask-wait-t").textContent = "Answered, opening it";
+        say("Done, reloading");
+        location.reload();
+        return;
+      }
       if (s.state === "running") {
         // A sweep reads every ticket and every thread behind it, so minutes are
         // normal. Saying how long it has been and what it last said is the
@@ -1699,7 +1731,10 @@ def controls(prep_label: str) -> str:
         return;
       }
       if (s.state === "done") {
-        if (waiting) waiting.querySelector(".ask-wait-t").textContent = "Answered, opening it";
+        // Only reload for something this page started. The job state survives the
+        // job, so a plain page load finding an old "done" would reload forever.
+        if (!started) { ready(); say(s.message); return; }
+        started = false;
         say("Done, reloading");
         location.reload();
         return;
@@ -1716,11 +1751,21 @@ def controls(prep_label: str) -> str:
         setTimeout(poll, 3000);
         return;
       }
-      if (s.state === "failed") { ready(); stopWaiting(s.message); say(s.message, "bad"); return; }
+      if (s.state === "failed") {
+        started = false;
+        myAsk = null;
+        ready(); stopWaiting(s.message); say(s.message, "bad"); return;
+      }
       login.hidden = true;
       link.hidden = true;
       ready();
       say(s.message);
+    }).catch(function () {
+      // One dropped poll is not a finished job. This used to have no catch at
+      // all, so a single blip killed the loop and the card span until reload.
+      if (myAsk || started) { setTimeout(poll, 3000); return; }
+      say("lost the desk server, retrying", "bad");
+      setTimeout(poll, 5000);
     });
   }
 
@@ -1729,6 +1774,7 @@ def controls(prep_label: str) -> str:
     b.addEventListener("click", function () {
       runners.forEach(function (o) { o.disabled = true; });
       b.textContent = b.dataset.busy;
+      started = true;
       say("Starting\\u2026");
       fetch(b.dataset.run + "?k=" + encodeURIComponent(key), { method: "POST" })
         .then(poll)
@@ -1788,6 +1834,24 @@ def controls(prep_label: str) -> str:
     });
   });
 
+  // Cancel, when there is something of ours actually running. It used to only
+  // hide the box, which is the worst version: he thinks he has called it off,
+  // the agent carries on, and a minute later it rewrites the draft he changed
+  // his mind about. With nothing running it just shuts the box, as before.
+  document.addEventListener("click", function (e) {
+    var x = e.target.closest && e.target.closest(".ask-cancel, .fu-cancel");
+    if (!x || !myAsk) return;
+    var id = myAsk;
+    myAsk = null;
+    stopWaiting("Cancelled.");
+    say("Cancelled");
+    fetch("/api/cancel?k=" + encodeURIComponent(key), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: id })
+    }).catch(function () { say("could not reach the desk server", "bad"); });
+  });
+
   document.addEventListener("click", function (e) {
     var b = e.target.closest && e.target.closest(".ask-send");
     if (!b || b.hidden) return;
@@ -1824,8 +1888,11 @@ def controls(prep_label: str) -> str:
           throw new Error(j.error || j.message || "the desk server said no");
         });
       }
-      say("Working on your question\\u2026");
-      poll();
+      return r.json().then(function (j) {
+        myAsk = j.id || null;
+        say(j.ahead ? "Queued behind " + j.ahead : "Working on your question\\u2026");
+        poll();
+      });
     }).catch(function (e) {
       stopWaiting("");
       b.disabled = false;
@@ -2296,12 +2363,20 @@ def help_dialog() -> str:
       <li><span class="said">what do you mean by 稼働確認?</span><span class="does">Answers on the card, and the answer stays there.</span></li>
       <li><span class="said">rewrite this with the latest from the refinement thread, and tell Tanaka-san we are still checking</span><span class="does">Reads the thread, rewrites that draft in the ticket, says what it changed.</span></li>
       <li><span class="said">is that true about refinement?</span><span class="does">Checks it and tells you when it cannot find the source.</span></li>
+      <li><span class="said">this is done, close it</span><span class="does">Moves the job, the same as <code>tg 29</code>, and says what it moved.</span></li>
+      <li><span class="said">I have sent this, it is with Ryan now</span><span class="does">Parks it with him, so it stops reading as yours.</span></li>
     </ul>
     <p>You never say which draft or which ticket you mean, because the question
     goes off with the job attached: its draft, its prepared work, its threads and
     everything you have already asked about it. That is the whole point of asking
-    from the card. It never marks anything done, and it never sends a word to
-    anybody.</p>
+    from the card.</p>
+    <p><b>It moves a job only when you tell it to.</b> Deciding for itself that
+    something looks finished is the one thing it will not do, so a question that
+    happens to turn up "that looks done" gets told to you and left alone. And it
+    never sends a word to anybody, whatever you ask.</p>
+    <p>Several questions at once is fine. They queue and answer on their own
+    cards, one at a time, because an answer that rewrites a draft rewrites the
+    whole board. <b>Cancel</b> stops one that is running.</p>
     <p>From a terminal it is the same ask, and the answer lands on the same card:
     <code>tg ask 8 "is that true about refinement?"</code>, or a ticket tag
     instead of a number.</p>

@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import queue
 import re
 import secrets
 import socket
@@ -48,6 +49,75 @@ job_lock = threading.Lock()
 # been going, which is the difference between waiting and wondering.
 live = {"since": 0.0, "last": "", "chars": 0}
 live_lock = threading.Lock()
+
+# Questions wait in a line rather than being turned away. Asking about one job
+# and then noticing something on the next card is the normal way to read the
+# page, and "something is already running, ask again" makes him hold the second
+# question in his head until the first lands. They still run one at a time: an
+# answer that rewrites a draft is a read-modify-write of the whole board, so two
+# at once would have one of them silently overwrite the other.
+ask_queue: "queue.Queue[tuple[str, str, str, str]]" = queue.Queue()
+
+# What is running right now, so Cancel can stop it. A Cancel that only hid the
+# box was the worst version: he thinks he has called it off, the agent keeps
+# going, and a minute later it rewrites the draft he changed his mind about.
+running_now: dict[str, object] = {"proc": None, "ask_id": ""}
+cancelled: set[str] = set()
+cancel_lock = threading.Lock()
+
+
+def cancel_ask(ask_id: str) -> str:
+    """Stop a question, whether it is running or still in the line."""
+    with cancel_lock:
+        cancelled.add(ask_id)
+        proc = running_now["proc"] if running_now["ask_id"] == ask_id else None
+    if proc is not None:
+        try:
+            proc.terminate()
+        except OSError:
+            pass
+        return "stopped"
+    return "dropped from the queue"
+
+
+def ask_worker() -> None:
+    """Drain the queue, one question at a time, for the life of the server."""
+    while True:
+        args = ask_queue.get()
+        try:
+            with cancel_lock:
+                dead = args[0] in cancelled
+            if dead:
+                row = next((r for r in load_asks() if r.get("id") == args[0]), None)
+                if row:
+                    row.update(state="cancelled", answer="You called this one off.")
+                    save_ask(row)
+                continue
+            run_ask(*args)
+        except Exception as exc:  # a thread that dies takes the queue with it
+            row = next((r for r in load_asks() if r.get("id") == args[0]), None)
+            if row:
+                row.update(state="failed", answer=f"Could not run the question: {exc}")
+                save_ask(row)
+            set_job("failed", f"could not run the question: {exc}")
+        finally:
+            ask_queue.task_done()
+
+
+def pending_asks() -> dict[str, str]:
+    """Every question not yet answered, by id, so a card can find its own.
+
+    A card used to watch the one global job state, which is wrong the moment two
+    things are in flight: an ask that finished while a refresh was starting left
+    the card spinning on "Sending" with its answer already written to disk.
+    """
+    with cancel_lock:
+        gone = set(cancelled)
+    return {
+        str(r.get("id")): str(r.get("state"))
+        for r in load_asks()
+        if r.get("state") in ("queued", "running") and str(r.get("id")) not in gone
+    }
 
 
 def set_live(last: str = "", add: int = 0, start: bool = False) -> None:
@@ -181,6 +251,46 @@ VERBS = {
 HINTS = ("command", "path", "file_path", "target_file", "relative_workspace_path",
          "pattern", "glob_pattern", "query", "search_term", "url", "toolName", "name")
 
+# The same step, said in the words he would use. The log keeps the raw phrase,
+# because that is what a slow run is diagnosed from, but the line under the
+# spinner is read by someone waiting rather than someone debugging, and
+# "mcp asana: get_task_stories" tells him nothing he wanted to know. Tested
+# against the raw phrase in order, so the specific cases come before the general.
+PLAIN = (
+    ("tick.py", "Moving the job"),
+    ("audit.py", "Checking what is out of date"),
+    ("board.save", "Writing the change"),
+    ("digest.py", "Reading the board"),
+    ("import board", "Reading the board"),
+    ("board.json", "Reading the board"),
+    ("asana", "Reading the Asana ticket"),
+    ("slack", "Reading the Slack thread"),
+    ("notion", "Reading the Notion notes"),
+    ("miro", "Reading the Miro board"),
+    ("databricks", "Looking at the data"),
+    ("kraken-core", "Reading the Kraken code"),
+    ("prompt-", "Reading its own instructions"),
+    ("docs/", "Reading the working files"),
+)
+
+
+def plain_phrase(phrase: str) -> str:
+    """What that step means, for the person watching rather than the log."""
+    low = phrase.lower()
+    verb = phrase.split(" ", 1)[0].lower()
+    # The verb wins over the path, because "Editing docs/..." is a change he is
+    # about to see and reporting it as reading would be a lie about the direction.
+    if verb in ("editing", "writing", "deleting"):
+        return "Writing the change"
+    for probe, words in PLAIN:
+        if probe in low:
+            return words
+    if verb in ("reading", "searching", "looking", "listing"):
+        return "Reading around the ticket"
+    if verb == "running":
+        return "Working through it"
+    return phrase[:70]
+
 
 def tool_phrase(call: dict) -> str:
     """One line saying what the agent has just gone off to do.
@@ -249,7 +359,7 @@ def read_events(stream, said: list[str], noise: list[str], calls: list[str],
             elif kind == "tool_call" and event.get("subtype") == "started":
                 phrase = tool_phrase(event.get("tool_call") or {})
                 calls.append(phrase)
-                set_live(last=phrase)
+                set_live(last=plain_phrase(phrase))
                 if fh is not None:
                     fh.write(f"  [{mmss(time.time() - began)}] {phrase}\n")
                     fh.flush()
@@ -292,6 +402,8 @@ def run_stream(cmd: list[str], payload: str, timeout: int, fh=None) -> Ran:
         text=True,
         bufsize=1,
     )
+    with cancel_lock:
+        running_now["proc"] = proc
     said: list[str] = []
     noise: list[str] = []
     calls: list[str] = []
@@ -309,6 +421,8 @@ def run_stream(cmd: list[str], payload: str, timeout: int, fh=None) -> Ran:
             pass
         code = None
     reader.join(timeout=10)
+    with cancel_lock:
+        running_now["proc"] = None
     return Ran("".join(said).strip(), "\n".join(noise), code,
                round(time.time() - began), len(calls))
 
@@ -800,16 +914,21 @@ def ask_context(ref: str, question: str, parent: str = "") -> str:
 
 def run_ask(ask_id: str, ref: str, question: str, parent: str = "") -> None:
     """One question, answered against the board and pinned back onto the card."""
-    row = {
+    # The row already exists: the request handler wrote it as `queued` so the card
+    # could find itself immediately. Keep its asked_at, which is when he asked
+    # rather than when the queue got round to it.
+    row = next((r for r in load_asks() if r.get("id") == ask_id), None) or {
         "id": ask_id,
         "ref": ref,
         "question": question.strip(),
         "asked_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "state": "running",
     }
     if parent:
         row["parent"] = parent
+    row["state"] = "running"
     save_ask(row)
+    with cancel_lock:
+        running_now["ask_id"] = ask_id
     # An ask may rewrite the item it was asked about, so it gets a copy too.
     keep.keep("ask")
     prompt = ROOT / "prompt-ask.md"
@@ -852,6 +971,15 @@ def run_ask(ask_id: str, ref: str, question: str, parent: str = "") -> None:
             prompt.read_text(encoding="utf-8") + ask_context(ref, question, parent),
             ASK_TIMEOUT_SECS,
         )
+        with cancel_lock:
+            called_off = ask_id in cancelled
+        if called_off:
+            # Terminated on purpose, so the non-zero exit below is not a fault
+            # and must not be reported to him as one.
+            row.update(state="cancelled", answer="You called this one off.")
+            save_ask(row)
+            set_job("idle", "Cancelled")
+            return
         if ran.code is None:
             row.update(state="failed", answer="The question ran past seven minutes and was stopped.")
             save_ask(row)
@@ -1041,6 +1169,7 @@ class Handler(BaseHTTPRequestHandler):
                     state["seconds"] = int(time.time() - live["since"])
                     state["last"] = live["last"]
                     state["written"] = live["chars"]
+            state["asks"] = pending_asks()
             self.json_out(200, state)
             return
         if path == "/manifest.webmanifest":
@@ -1106,10 +1235,6 @@ class Handler(BaseHTTPRequestHandler):
             self.json_out(202, {"state": "running"})
             return
         if path == "/api/ask":
-            with job_lock:
-                if job["state"] == "running":
-                    self.json_out(409, dict(job))
-                    return
             try:
                 length = int(self.headers.get("Content-Length") or 0)
                 body = json.loads(self.rfile.read(length) or b"{}")
@@ -1127,11 +1252,36 @@ class Handler(BaseHTTPRequestHandler):
                 return
             parent = str(body.get("parent", "")).strip()
             ask_id = f"{int(time.time())}-{secrets.token_hex(3)}"
-            set_job("running", "Starting")
-            threading.Thread(
-                target=run_ask, args=(ask_id, ref, question, parent), daemon=True
-            ).start()
-            self.json_out(202, {"state": "running", "id": ask_id})
+            # Written before the reply goes back, so the card can find itself on
+            # the very next poll rather than racing the worker for it.
+            save_ask(
+                {
+                    "id": ask_id,
+                    "ref": ref,
+                    "question": question,
+                    "asked_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    "state": "queued",
+                }
+                | ({"parent": parent} if parent else {})
+            )
+            ahead = ask_queue.qsize()
+            ask_queue.put((ask_id, ref, question, parent))
+            if not ahead:
+                set_job("running", "Starting")
+            self.json_out(202, {"state": "queued", "id": ask_id, "ahead": ahead})
+            return
+        if path == "/api/cancel":
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+                body = json.loads(self.rfile.read(length) or b"{}")
+            except (ValueError, OSError):
+                self.json_out(400, {"error": "unreadable"})
+                return
+            ask_id = str(body.get("id", "")).strip()
+            if not ask_id:
+                self.json_out(400, {"error": "no question named"})
+                return
+            self.json_out(200, {"state": "cancelled", "how": cancel_ask(ask_id)})
             return
         if path == "/api/forget":
             try:
@@ -1187,6 +1337,22 @@ def main() -> int:
     args = parser.parse_args()
 
     (ROOT / "state").mkdir(exist_ok=True)
+    threading.Thread(target=ask_worker, daemon=True).start()
+
+    # Claim the port before announcing the key. `serve.json` is how `tg` and the
+    # browser find this server, so a second copy started by hand while launchd
+    # already holds 8787 used to write its key there and then die on the bind,
+    # leaving every URL in the file rejected by the server that is actually up.
+    # Failing here says the real thing: one is already running.
+    try:
+        server = ThreadingHTTPServer(
+            ("0.0.0.0" if args.lan > 0 else "127.0.0.1", args.port), Handler
+        )
+    except OSError as exc:
+        print(f"port {args.port} is taken, so this one stopped: {exc}", file=sys.stderr)
+        print("The desk is already being served. Open it with: tg open", file=sys.stderr)
+        return 1
+
     (ROOT / "state" / "serve.json").write_text(
         json.dumps({"port": args.port, "key": KEY, "started": time.time()}) + "\n",
         encoding="utf-8",
@@ -1205,7 +1371,6 @@ def main() -> int:
         # Off the wifi again on its own. A window left open all week is the
         # thing that turns a convenience into an exposure, and remembering to
         # close it is not a plan.
-        server = ThreadingHTTPServer(("0.0.0.0", args.port), Handler)
         threading.Timer(minutes * 60, server.shutdown).start()
         try:
             server.serve_forever()
@@ -1213,8 +1378,8 @@ def main() -> int:
             return 0
         server.server_close()
         print("wifi access closed, loopback only", flush=True)
+        server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
 
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

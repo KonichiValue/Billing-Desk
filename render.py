@@ -894,12 +894,15 @@ SPARK = (
     '<path d="M18.6 2.2l.7 1.9.9.3-.9.4-.7 1.9-.7-1.9-.9-.4.9-.3z"/></svg>'
 )
 
+# A starter earns its place by being a thing he actually types, finished enough
+# to send as it stands. "What do you mean by" was neither: a dangling fragment he
+# had to complete before it did anything, taking up the width of a real one.
 STARTERS = (
-    "Is this accurate?",
-    "What do you mean by",
-    "Who should I confirm this with?",
-    "Check this against the code",
-    "What am I missing?",
+    "Is this still right?",
+    "What is actually left here?",
+    "Catch this up with the thread",
+    "Who do I need for this?",
+    "This is done, close it",
 )
 
 # Asked from the speaking view. Same ticket, same thread, so the starters are not
@@ -917,8 +920,8 @@ DRAFT_STARTERS = (
     "Rewrite this with the latest from the thread",
     "Shorter",
     "Softer, we are still checking",
-    "Is this accurate?",
-    "What am I missing?",
+    "Is this still right?",
+    "I have sent this",
 )
 
 
@@ -1085,9 +1088,10 @@ def ask_block(
         "drafts, what moved, what you say at the next session and what you asked "
         "before, and it can read the threads. Same thread as the work view."
         if say
-        else "Ask it anything, or tell it what to change. It knows this ticket, "
-        "this job, the draft and what you asked before, and it can read the "
-        "threads."
+        else "Ask it anything, tell it what to change, or tell it where this now "
+        "stands and it will move it. It knows this ticket, this job, the draft "
+        "and what you asked before, and it can read the threads. It never sends "
+        "anything."
     )
     eg = (
         "Rewrite the second line in plainer Japanese, and say we are still "
