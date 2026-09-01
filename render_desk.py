@@ -33,6 +33,7 @@ from render import (
     blocked_on,
     code,
     day_words,
+    due_words,
     esc,
     furi,
     index_items,
@@ -1206,7 +1207,7 @@ def render_items(
             waits = r.get("waits_on") or {}
             owed = f" They owe: {esc(waits['what'])}." if waits.get("what") else ""
             chase_line = (
-                f" Chase on {esc(waits['chase_on'])}." if waits.get("chase_on") else ""
+                f" {esc(due_words(waits['chase_on']))}" if waits.get("chase_on") else ""
             )
             sent = f"Sent {esc(st.get('at', ''))}" if st.get("sent") else "Not yours"
             status_block = (
@@ -1233,7 +1234,7 @@ def render_items(
         active = st["state"] in {"todo", "hold"} and not behind
         tag, attrs = ("div", "") if active else ("details", "")
         head_tag = "div" if active else "summary"
-        sub = sub_line(st) or (f"chase {esc(chase)}" if chase else "")
+        sub = sub_line(st) or (esc(due).lower() if chase and due else "")
         if behind:
             lead = index.get(behind) or {}
             sub = f"after job {esc(behind)}"

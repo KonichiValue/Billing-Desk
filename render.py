@@ -585,6 +585,32 @@ def short_when(iso: str, at: str = "") -> str:
     return f"{words} {at}".strip()
 
 
+def due_words(iso: str) -> str:
+    """A chase or revisit date as a phrase, aged so one that has passed says so.
+
+    The chip at the top of a card is only three words, so the sentence underneath
+    is where "and you have not done it" fits. Both come from the stored date, and
+    neither rewrites it: the board records when he meant to chase, and the page is
+    responsible for saying how that went.
+    """
+    if not iso:
+        return ""
+    try:
+        day = date.fromisoformat(DATE_IN.search(iso).group(0))
+    except (AttributeError, ValueError):
+        # Half of these are a condition rather than a date, "only if he raises it
+        # again", and "Chase on Only if he raises it again" is not a sentence.
+        words = iso.strip().rstrip(".")
+        return f"Chase {words[:1].lower()}{words[1:]}."
+    late = (date.today() - day).days
+    when = day.strftime("%-d %b")
+    if late > 0:
+        return f"Chase was due {when}, {late} day{'s' if late > 1 else ''} ago."
+    if late == 0:
+        return "Chase today."
+    return f"Chase on {when}."
+
+
 def day_words(iso: str) -> str:
     """A date as he would say it: today, yesterday, or "Fri 21 Aug"."""
     if not iso:
@@ -623,17 +649,57 @@ def when_tag(item: dict, st: dict, sess: dict | None = None) -> tuple[str, str]:
                 return short_when(found.group(0))
         return ""
 
+    def days_late(*values: str) -> int | None:
+        """Days past the first date in these strings. 0 is today, negative is ahead.
+
+        None means no date was written, which is a different thing from a date
+        that has passed and has to read differently on the page.
+        """
+        for value in values:
+            found = DATE_IN.search(value or "")
+            if not found:
+                continue
+            try:
+                return (date.today() - date.fromisoformat(found.group(0))).days
+            except ValueError:
+                return None
+        return None
+
+    def owed(word: str, *values: str) -> tuple[str, str] | None:
+        """The chip for a date that was set so it would come back round.
+
+        A date in the past is the whole point of writing one down, so it has to
+        read as work. Left to `short_when` it comes out "28 Aug" in the same grey
+        as a date next week, sorts as though nothing is due, and four days overdue
+        looks like a plan he already has. The sweep cannot be relied on to roll
+        these forward either, and rolling them forward silently would hide that he
+        never chased, so the page ages them instead.
+        """
+        late = days_late(*values)
+        if late is None:
+            return None
+        if late > 0:
+            return f"{word}, {late}d late", "now"
+        if late == 0:
+            return f"{word} today", "now"
+        return f"{word} {day_in(*values)}", "next"
+
     if st["state"] == "todo":
         if item.get("at_standup") and sess:
             return f'Say it {short_when(sess.get("date", ""))}'.strip(), "next"
         return "Do now", "now"
     if st["state"] == "hold":
-        day = day_in(hold.get("revisit", ""), hold.get("until", ""))
+        # `until` is often prose rather than a date, so it only ever supplies the
+        # fallback wording, never the clock.
+        due = owed("Held to", hold.get("revisit", ""))
+        if due:
+            return due
+        day = day_in(hold.get("until", ""))
         return (f"Held to {day}" if day else "Held"), "next"
     if st["state"] == "waiting":
-        day = day_in(waits.get("chase_on", ""))
-        if day:
-            return f"Chase {day}", "next"
+        due = owed("Chase", waits.get("chase_on", ""))
+        if due:
+            return due
         if item.get("at_standup") and sess:
             return f'Ask {short_when(sess.get("date", ""))}'.strip(), "next"
         return "No chase date", "none"

@@ -49,13 +49,28 @@ or `waiting` and who each waiting item sits with.
 That is the only read of the board you need before the sweep. Do not open
 `state/board.json` with a one-line script to list the tickets, dump a fragment
 into `/tmp` and read it back, or work out the schema by printing `type()` and
-`keys()`. A refresh that did that spent five of its eight minutes talking to this
-repo instead of to Asana, and every one of those round trips costs Rei real time
-while he waits for the page. The schema is the docstring at the top of
-`board.py`, and it is the contract: read it once if you need it, and trust it.
+`keys()`, and do not run `help(board)`. One refresh ran `help(board)` four times
+and read the board twenty times around it; that was most of its thirteen minutes,
+and none of it was spent talking to Asana. The schema is the docstring at the top
+of `board.py`, and it is the contract: read it once if you need it, and trust it.
 
 To write, `import board`, mutate, `board.save(b)`. To redraw both pages,
 `./tick.py --rebuild`. Neither needs discovering.
+
+**The `OUT OF DATE` block at the top of the digest is a worklist, not a warning.**
+Every line in it is something a previous sweep should have done and did not: a
+chase date that has passed, prepared work older than the ticket it sits on, a
+thread whose watermark is older than the events taken out of it. Fix all of them
+in this sweep. They are cheap, they are why the page drifts, and nobody else is
+going to do them.
+
+The thread watermarks matter most, because they are self-inflicted. Each thread
+carries `last_at`, the point you read forward from. A sweep that reads a thread,
+writes an event dated later, and leaves `last_at` alone has quietly moved the
+next sweep's starting line backwards. Do that a few times and threads look quiet
+when they are not, which is exactly how the board ends up behind. **Every thread
+you open, set `last_at` and `last_from` to its newest message, even when nothing
+in it changed.**
 
 ## 2. Sweep every open ticket
 
@@ -161,6 +176,21 @@ changes what he does.
 - Nothing moved on an item: leave it exactly as it is.
 
 Set `checked_at` to now, in ISO 8601 with the offset.
+
+**When part of an item is done, rewrite the title to what is left.** Writing the
+fact into `progress_note` is not the job; `progress_note` is additive and safe,
+and adding to it is what a sweep does instead of committing to a change. An
+actual example, from a sweep that otherwise ran clean: it read the CE ticket,
+correctly noted that both files had been re-uploaded at 10:57, and left the item
+titled "Re-upload both sheets to the CE ticket and fix the 144s in the
+description". Only the second half was still true. Rei reads titles to decide
+what to open, so a title describing finished work sends him to do it again, and
+he cannot tell from the list which half is left.
+
+So on every item you touch: if the title names two things and one has happened,
+retitle it to the one that has not. Trim the `steps` that are done rather than
+annotating them. Cut `est_minutes` to what remains. If everything in the title
+has happened, the item is closed, not retitled.
 
 Whenever you touch an item, leave its `steps` fit to act on: two to four, in
 order, verb first, aimed at Rei, naming the place and the thing. Commentary is
@@ -300,7 +330,21 @@ the brackets in by hand is how a term ends up explained twice in one sentence.
 Check after the sweep with `python3 -c` over the board rather than by eye, since
 one missed term is a line he reads without knowing what it says.
 
-## 10. Rebuild
+## 10. Check your own work, then rebuild
+
+```
+./audit.py
+```
+
+This is the same list the digest printed at the start, run against the board you
+have just written. It is mechanical: passed dates, records that disagree with
+each other, sequencing that points at something closed, prepared work older than
+the ticket under it. **Fix everything it prints and run it again.** A sweep is
+not finished while it prints anything, and "I found nothing new in Asana" is not
+a reason to leave it printing, because none of what it catches comes from Asana.
+
+If a line is genuinely wrong, the check is wrong and belongs in `audit.py`. Do
+not leave it standing and mention it in the report.
 
 ```
 ./tick.py --rebuild

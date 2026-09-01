@@ -23,6 +23,7 @@ import sys
 from collections import Counter
 from datetime import datetime
 
+import audit
 import board as B
 
 WRAP = 160
@@ -189,6 +190,24 @@ def main() -> int:
     if dupes:
         _out(f"!! DUPLICATE ITEM NUMBERS: {sorted(dupes)} -- fix before writing")
     _out()
+
+    # What the last sweep left behind, printed before anything else it might read.
+    # A sweep is good at finding what moved and bad at noticing what it did not go
+    # back and change, and every line here is the second kind: a date that has
+    # passed, two records that disagree, a thread whose watermark is older than the
+    # events taken out of it. That last one is why a sweep can run clean and still
+    # miss things, because the next one reads forward from the stale mark.
+    rep = audit.Report()
+    for check in audit.CHECKS:
+        check(b, rep)
+    if rep.total:
+        _out(f"OUT OF DATE ({rep.total}) -- fix these in this sweep, they are not warnings")
+        for group, lines in rep.groups.items():
+            _out(f"  {group}:")
+            for line in lines:
+                _out("  " + line)
+        _out("  Run ./audit.py when you are done. It should print nothing.")
+        _out()
 
     if not args.items_only:
         sessions = b.get("sessions") or []

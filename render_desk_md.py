@@ -22,6 +22,7 @@ from render import item_state as state_of
 from render import (
     apply_glossary,
     blocked_on,
+    due_words,
     index_items,
     item_order,
     next_live,
@@ -246,8 +247,8 @@ def render_ticket(t: dict, index: dict[str, dict] | None = None) -> list[str]:
             actions += [f"> {st['label']} {st.get('at', '')}.{note}", ""]
         elif st["state"] == "waiting":
             waits = a.get("waits_on") or {}
-            owed = f" They owe: {waits['what']}" if waits.get("what") else ""
-            chase = f" Chase on {waits['chase_on']}." if waits.get("chase_on") else ""
+            owed = f" They owe: {waits['what']}." if waits.get("what") else ""
+            chase = f" {due_words(waits['chase_on'])}" if waits.get("chase_on") else ""
             tail = f" {st['note']}." if st.get("note") else ""
             when = f"Sent {st['at']}. " if st.get("sent") else ""
             actions += [
