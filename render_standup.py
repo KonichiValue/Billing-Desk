@@ -21,11 +21,15 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from render import (
+    ASKED,
+    SPARK,
+    ask_block,
     day_words,
     esc,
     furi,
     item_state as state_of,
     link_btn,
+    opening,
     pill,
     plain,
     render_consequences,
@@ -83,6 +87,20 @@ font-variant-numeric:tabular-nums}
 .mv-what b{font-weight:700}
 .mv-so{display:block;font-size:13px;color:var(--accent-ink);margin-top:3px;
 padding-left:10px;border-left:2px solid var(--accent-line)}
+/* The whole history, one fold per day, counting back from today. The line in the
+   middle is where he last spoke: above it is what has changed, below it is what
+   the room may still ask him to remember. */
+.mv-mark{margin:10px 0 4px;padding:6px 10px;background:var(--hair);
+border-radius:7px;font-size:11.5px;font-weight:650;color:var(--soft)}
+.mv-fold{border-bottom:1px dashed var(--line)}
+.mv-fold:last-child{border-bottom:0}
+.mv-fold>summary{display:flex;gap:10px;align-items:baseline;cursor:pointer;
+padding:7px 0;font-size:13px;color:var(--mut)}
+.mv-fold>summary::-webkit-details-marker{display:none}
+.mv-fold>summary:hover .mv-d{color:var(--accent-ink)}
+.mv-d{font-weight:700}
+.mv-c{font-size:11.5px;color:var(--soft)}
+.mv-fold .moves{padding:0 0 6px 4px}
 .q-side{font-size:12.5px;color:var(--soft);margin-top:3px}
 .st-stands{margin:0;font-size:15px}
 .st-raise{margin:13px 0 0;padding:0;list-style:none}
@@ -99,6 +117,9 @@ border-radius:10px;padding:12px 15px}
 letter-spacing:.08em;margin:0 0 6px;font-weight:700}
 .st-warn ul{margin:0;padding-left:18px;font-size:14px;color:var(--amber-ink)}
 .st-secret{margin:9px 0 0;font-size:12px;color:var(--amber)}
+.st-safe{margin:5px 0 0;font-size:13.5px;color:var(--ink)}
+.st-safe:before{content:"";display:inline-block;width:3px;height:12px;
+border-radius:2px;background:var(--green);margin-right:7px;vertical-align:-1px}
 .st-none{margin:0 0 12px;padding:9px 13px;background:var(--green-bg);
 border:1px solid var(--green-line);border-radius:8px;color:var(--green);
 font-size:14px;font-weight:550}
@@ -163,7 +184,7 @@ margin-right:6px}
 .st-push .they{font-size:13.5px;color:var(--mut);padding-left:11px;
 border-left:3px solid var(--line);font-style:italic}
 .st-push .mine{margin-top:7px;padding-left:11px;border-left:3px solid var(--accent-line)}
-.st-push .mine .jp{font-size:18px}
+.st-push .mine .jp{font-size:17px}
 """
 
 
@@ -258,29 +279,10 @@ def render_pushback(rows: list[dict]) -> str:
     )
 
 
-def since_last(t: dict, since: str) -> str:
-    """What moved on this ticket since the last meeting, oldest first.
-
-    Reading the ticket cold at 09:50 is the hard part of the morning, harder
-    than the Japanese. This is the paragraph that answers "what happened since
-    I last talked about this", which is also the first thing anyone in the room
-    asks, so it earns its place here rather than being a link to the work view:
-    that timeline is the whole history, this is only the gap since he last spoke
-    about it out loud. Open on arrival, and it folds once read.
-    """
-    rows = [e for e in t.get("events", []) if (e.get("on") or "") >= since]
-    if not rows:
-        return ""
-    rows.sort(key=lambda e: (e.get("on", ""), e.get("at", "")))
-    shown = rows[-6:]
-    out, day = [], ""
-    for e in shown:
-        if e.get("on") != day:
-            day = e.get("on", "")
-            out.append(f'<li class="mv-day">{esc(day_words(day)).capitalize()}</li>')
-        src = e.get("source_url", "")
-        out.append(
-            f"""
+def move_li(e: dict) -> str:
+    """One move: when, who, what it was, and what it meant."""
+    src = e.get("source_url", "")
+    return f"""
         <li>
           <span class="mv-when">{esc(e.get("at", ""))}</span>
           <span class="mv-what"><b>{esc(e.get("who", ""))}</b> {esc(e.get("what"))}
@@ -288,20 +290,69 @@ def since_last(t: dict, since: str) -> str:
           </span>
           {link_btn(src, "Source") if src else ""}
         </li>"""
+
+
+def since_last(t: dict, since: str) -> str:
+    """What moved on this ticket since the last meeting, and the days before it.
+
+    Reading the ticket cold at 09:50 is the hard part of the morning, harder
+    than the Japanese. This is the paragraph that answers "what happened since
+    I last talked about this", which is also the first thing anyone in the room
+    asks.
+
+    It used to stop there, at six moves since the last session, and the room does
+    not. "When did you first tell us about this" and "what did we agree in
+    August" are asked of the same card, and the answer was a tab away on the work
+    view. The whole history is here now, one fold per earlier day, so nothing
+    asked in the room needs the other tab.
+    """
+    rows = sorted(t.get("events", []), key=lambda e: (e.get("on", ""), e.get("at", "")))
+    if not rows:
+        return ""
+    new = [e for e in rows if (e.get("on") or "") >= since]
+    old = [e for e in rows if (e.get("on") or "") < since]
+
+    # One fold per day, counting back, because the question in the room is "when
+    # did that happen". The newest day is open, since that is the day being asked
+    # about, and a line says where he last spoke so the days above it are the
+    # answer to "what has changed since".
+    days: dict[str, list[dict]] = {}
+    for e in rows:
+        days.setdefault(e.get("on", ""), []).append(e)
+    order = sorted(days, reverse=True)
+    parts, marked = [], False
+    for d in order:
+        if old and not marked and d < since:
+            parts.append(
+                f'<p class="mv-mark">You last spoke about this '
+                f"{esc(day_words(since))}. Everything below is older.</p>"
+            )
+            marked = True
+        moves = days[d]
+        n = len(moves)
+        parts.append(
+            f"""
+        <details class="mv-fold" {"open" if d == order[0] else ""}>
+          <summary><span class="mv-d">{opening(esc(day_words(d)))}</span>
+          <span class="mv-c">{n} {"move" if n == 1 else "moves"}</span>
+          <span class="fold-hint"></span></summary>
+          <ul class="moves">{"".join(move_li(e) for e in moves)}</ul>
+        </details>"""
         )
-    count = (
-        f"{len(shown)} moves"
-        if len(shown) == len(rows)
-        else f"latest {len(shown)} of {len(rows)}"
-    )
+    body = f'<div class="mv-days">{"".join(parts)}</div>'
+    if new and old:
+        tally = f"{len(new)} since {day_words(since)}, {len(old)} before"
+    elif new:
+        tally = f"{len(new)} since {day_words(since)}"
+    else:
+        tally = f"{len(old)} {'move' if len(old) == 1 else 'moves'}, none since you spoke"
     return section(
-        "What moved since last time",
-        f'<ul class="moves">{"".join(out)}</ul>',
+        "What moved on this ticket",
+        body,
         role="log",
-        count=count,
+        count=tally,
         hint="the question they always ask",
         fold=True,
-        open_=True,
         remember=f"moved-{t.get('ref', '')}",
     )
 
@@ -402,6 +453,11 @@ def render_ticket(t: dict, ident: str, desk_id: str, since: str) -> str:
         if internal.get("name")
         else ""
     )
+    # The one line about the build that may be said out loud. It sits with the
+    # warning because that is the moment he needs it: asked when, in the room.
+    safe = (internal.get("build") or {}).get("safe_to_say")
+    if safe:
+        secret += f'<p class="st-safe">If they ask when: {furi(safe)}</p>'
 
     open_items = [i for i in t.get("items", []) if not state_of(i)["closed"]]
     desk_link = (
@@ -418,7 +474,7 @@ def render_ticket(t: dict, ident: str, desk_id: str, since: str) -> str:
       <header class="st-head">
         <div class="tk-id">
           <span class="tag">{esc(t.get("ref"))}</span>
-          <span class="tk-kind">Asana ticket</span>
+          <span class="tk-kind">{"Work in hand" if t.get("no_ticket_yet") else "Asana ticket"}</span>
           {pill("Nothing to ask", "green") if no_ask else pill("You need an answer", "amber")}
         </div>
         <h2>{esc(t.get("title_en"))}</h2>
@@ -448,16 +504,30 @@ def render_ticket(t: dict, ident: str, desk_id: str, since: str) -> str:
       {since_last(t, since)}
 
       <section class="sub say script">
-        <h3>Say this<span class="hint">out loud, as written</span></h3>
+        <h3>Say this<span class="hint">out loud, as written</span>
+          <button class="ask-here" type="button"
+                  data-ask-seed="Rewrite what I say here: ">{SPARK}Rewrite or ask</button></h3>
         {'<p class="st-none">Status only. Nothing needed from TG.</p>' if no_ask else ""}
         {render_script(prep.get("script", []))}
       </section>
 
       {render_pushback(prep.get("pushback", []))}
       {needs(t, spoken)}
-      <section class="st-cons">{render_consequences(prep.get("consequences", {}))}</section>
+      <div class="st-cons">{render_consequences(prep.get("consequences", {}), t.get("ref", ""))}</div>
       {warn}
       {secret}
+      {section("Ask or change on this ticket",
+               ask_block(
+                   f'ticket:{t.get("ref")}',
+                   f'what I say on {t.get("ref", "this ticket")}',
+                   ASKED.get(f'ticket:{t.get("ref")}', []),
+                   "Read prompt-ask.md, then answer this about the "
+                   f'{t.get("ref", "")} ticket. He is asking from the speaking '
+                   "view, in front of what he says at the next session:",
+                   kind="say",
+               ),
+               role="ask",
+               hint="the same thread as the work view")}
     </article>"""
 
 

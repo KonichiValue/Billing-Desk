@@ -1,0 +1,31 @@
+欄の種別,項目,JSON項目名,諸元（テーブル・項目）,加工内容,判定
+ガス料金,右欄_料金内訳名称1,,,「基本料金」は帳票上の固定見出しで、JSON側に名称を持つ項目はなし。金額のみ gas_consumption_contexts[].standing_charge_amount で連携。電気料金欄の同項目はKRA007上「-」（固定）と記載されており、ガス欄も同様の扱いと考えられる,JSONに該当なし
+ガス料金,右欄_料金内訳名称2,,,「従量料金」は帳票上の固定見出しで、JSON側に名称を持つ項目はなし。金額のみ gas_consumption_contexts[].consumption_charge_amount で連携。電気料金欄の同項目はKRA007上「-」（固定）と記載,JSONに該当なし
+ガス料金,右欄_料金内訳名称3,gas_consumption_contexts[].discounts[].name,billing_accountcharge の割引明細行の supply_type から取得した割引コード,対となる料金内訳金額3が discounts[].gross_amount のため、名称も discounts[].name が該当する見込み。ただし出力値は割引コードに対応する名称（例：ずっともパック割引額、特別割引額）で、sampleの「ガス料金割引額」はコード内の対応表に存在しないため要確認,候補
+ガス料金,右欄_料金内訳名称4,gas_consumption_contexts[].discounts[].name,billing_accountcharge の割引明細行の supply_type から取得した割引コード,KRA007上、対となる料金内訳金額3に discounts[].gross_amount が指定されているため、料金内訳の3〜5は割引明細の繰り返し枠と推定。名称4は2件目の割引の名称,候補
+ガス料金,右欄_料金内訳金額4,gas_consumption_contexts[].discounts[].gross_amount,billing_accountcharge の割引明細行（gross_amount）,KRA007上、対となる料金内訳金額3に discounts[].gross_amount が指定されているため、料金内訳の3〜5は割引明細の繰り返し枠と推定。金額4は2件目の割引の金額,候補
+ガス料金,右欄_料金内訳名称5,gas_consumption_contexts[].discounts[].name,billing_accountcharge の割引明細行の supply_type から取得した割引コード,KRA007上、対となる料金内訳金額3に discounts[].gross_amount が指定されているため、料金内訳の3〜5は割引明細の繰り返し枠と推定。名称5は3件目の割引の名称,候補
+ガス料金,右欄_料金内訳金額5,gas_consumption_contexts[].discounts[].gross_amount,billing_accountcharge の割引明細行（gross_amount）,KRA007上、対となる料金内訳金額3に discounts[].gross_amount が指定されているため、料金内訳の3〜5は割引明細の繰り返し枠と推定。金額5は3件目の割引の金額,候補
+ガス料金取消額,左欄_料金テキスト,,,「ガス料金取消額」は帳票上の固定見出しで、JSON側に名称を持つ項目はなし。gas_reversing_credit_contexts[] に1件以上ある場合に欄を出力する運用となる,JSONに該当なし
+ガス料金取消額,左欄_月分,gas_reversing_credit_contexts[].reading_date,取消対象となった billing_accountcharge の明細期間の終了日,現地時間の0時に揃えたうえでUTC・ミリ秒付きISO8601形式（末尾Z）で連携。YYYY年M月への編集はHUB側で必要,特定
+ガス料金取消額,右欄_請求金額,gas_reversing_credit_contexts[].gross_amount,billing_accountcredit.gross_amount（ガス料金の取消対象クレジット）,円未満切り捨てで整数に変換。マイナス記号（▲）とカンマの編集はHUB側で必要,特定
+デマンド,左欄_デマンド検針日,,,現行のBILLINGSTATEMENT JSONにデマンド関連の項目は一切なし。大口向けのデマンド検針日を連携する項目は未実装,JSONに該当なし
+デマンド,左欄_デマンド検針時間,,,現行のBILLINGSTATEMENT JSONにデマンド関連の項目は一切なし。検針時刻を持つ項目は未実装,JSONに該当なし
+デマンド,中欄_全日使用量,,,現行のBILLINGSTATEMENT JSONにデマンド関連の項目は一切なし。gas_consumption_contexts[].consumption_amount は検針票本体の使用量であり全日使用量ではない,JSONに該当なし
+デマンド,中欄_最大時間流量,,,現行のBILLINGSTATEMENT JSONにデマンド関連の項目は一切なし。最大時間流量を持つ項目は未実装,JSONに該当なし
+デマンド,中欄_デマンドメーター社番,,,現行のBILLINGSTATEMENT JSONにデマンド関連の項目は一切なし。gas_consumption_contexts[].meter_number_str は通常メーターの社番でデマンドメーターとは別,JSONに該当なし
+メーター内訳,左欄_供給地点特定番号,gas_consumption_contexts[].spin_str,market_jpn_gas_gassupplypoint.spin,メーター内訳欄は総合契約のメーター別ページ向け。KRA007 封書検針票IF No.41／43／44 に総合契約の機能は未実装と記載があり、本欄専用のJSON項目はなし。左記は同じ値を持つ既存項目。ハイフンなしで連携されるためハイフン編集はHUB側で必要,候補
+メーター内訳,中欄_検針日,gas_consumption_contexts[].reading_date,market_jpn_gas_gasreading.reading_date,メーター内訳欄は総合契約のメーター別ページ向け。KRA007 封書検針票IF No.41／43／44 に総合契約の機能は未実装と記載があり、本欄専用のJSON項目はなし。左記は同じ値を持つ既存項目。M月D日への編集はHUB側で必要,候補
+メーター内訳,中欄_使用量期間,gas_consumption_contexts[].reading_start ／ gas_consumption_contexts[].reading_end,market_jpn_gas_gasreading.start_at ／ market_jpn_gas_gasreading.end_at,メーター内訳欄は総合契約のメーター別ページ向け。KRA007 封書検針票IF No.41／43／44 に総合契約の機能は未実装と記載があり、本欄専用のJSON項目はなし。左記は同じ値を持つ既存項目。日数の算出と表記の編集はHUB側で必要,候補
+メーター内訳,中欄_今回指示数,gas_consumption_contexts[].reading_value,market_jpn_gas_gasreading.current_meter_value（未設定時は0）,メーター内訳欄は総合契約のメーター別ページ向け。KRA007 封書検針票IF No.41／43／44 に総合契約の機能は未実装と記載があり、本欄専用のJSON項目はなし。左記は同じ値を持つ既存項目,候補
+メーター内訳,中欄_前回指示数,gas_consumption_contexts[].previous_reading_value,market_jpn_gas_gasreading.previous_meter_value（未設定時は0）,メーター内訳欄は総合契約のメーター別ページ向け。KRA007 封書検針票IF No.41／43／44 に総合契約の機能は未実装と記載があり、本欄専用のJSON項目はなし。左記は同じ値を持つ既存項目,候補
+メーター内訳,中欄_ご使用量,gas_consumption_contexts[].consumption_amount,market_jpn_gas_gasreading.usage（メーター交換・閉栓を挟む場合は対象期間の検針を合算）,メーター内訳欄は総合契約のメーター別ページ向け。KRA007 封書検針票IF No.41／43／44 に総合契約の機能は未実装と記載があり、本欄専用のJSON項目はなし。左記は同じ値を持つ既存項目。単位（㎥）とカンマの編集はHUB側で必要,候補
+メーター内訳,中欄_メーター社番,gas_consumption_contexts[].meter_number_str,market_jpn_gas_gassupplypoint.physical_meter_number,メーター内訳欄は総合契約のメーター別ページ向け。KRA007 封書検針票IF No.41／43／44 に総合契約の機能は未実装と記載があり、本欄専用のJSON項目はなし。左記は同じ値を持つ既存項目。ハイフンなしで連携されるためハイフン編集はHUB側で必要,候補
+メーター内訳,中欄_前月使用量,gas_consumption_contexts[].last_month_consumption_amount,market_jpn_gas_gasreading.consumption_cubic_meters（前月の通常検針）,メーター内訳欄は総合契約のメーター別ページ向け。KRA007 封書検針票IF No.41／43／44 に総合契約の機能は未実装と記載があり、本欄専用のJSON項目はなし。左記は同じ値を持つ既存項目。該当検針がない場合と再請求の場合はnull,候補
+メーター内訳,中欄_前年同月使用量,gas_consumption_contexts[].last_year_consumption_amount,market_jpn_gas_gasreading.consumption_cubic_meters（前年同月の通常検針）,メーター内訳欄は総合契約のメーター別ページ向け。KRA007 封書検針票IF No.41／43／44 に総合契約の機能は未実装と記載があり、本欄専用のJSON項目はなし。左記は同じ値を持つ既存項目。該当検針がない場合と再請求の場合はnull,候補
+メーター内訳,右欄_使用者住所１,supply_point_context.supply_usage_address_context.postal_address_line_1,addresses_address（供給地点の物件住所 rich_address）,supply_point_context は明細全体で1件のみで、メーター単位では持たない。総合契約でメーターごとに使用者を出し分ける場合は現行JSONでは不足。JSON側は6行構成のため4行への割付はHUB側で必要,候補
+メーター内訳,右欄_使用者住所２,supply_point_context.supply_usage_address_context.postal_address_line_2,addresses_address（供給地点の物件住所 rich_address）,supply_point_context は明細全体で1件のみで、メーター単位では持たない。総合契約でメーターごとに使用者を出し分ける場合は現行JSONでは不足。JSON側は6行構成のため4行への割付はHUB側で必要,候補
+メーター内訳,右欄_使用者住所３,supply_point_context.supply_usage_address_context.postal_address_line_3,addresses_address（供給地点の物件住所 rich_address）,supply_point_context は明細全体で1件のみで、メーター単位では持たない。総合契約でメーターごとに使用者を出し分ける場合は現行JSONでは不足。JSON側は6行構成のため4行への割付はHUB側で必要,候補
+メーター内訳,右欄_使用者住所４,supply_point_context.supply_usage_address_context.postal_address_line_4,addresses_address（供給地点の物件住所 rich_address）,supply_point_context は明細全体で1件のみで、メーター単位では持たない。総合契約でメーターごとに使用者を出し分ける場合は現行JSONでは不足。line_5 と line_6 の割付先が未定のため要確認,候補
+メーター内訳,右欄_使用者名１,supply_point_context.supply_usage_address_context.postal_customer_name,法人は accounts_account.billing_name（未設定時は AccountUserDetails.kanji_name／kana_name）／個人は主契約者の AccountUserDetails.kanji_name（未設定時は kana_name）,supply_point_context は明細全体で1件のみで、メーター単位では持たない。総合契約でメーターごとに使用者を出し分ける場合は現行JSONでは不足。使用者名はJSON側で1項目のみのため、1行目に割り付ける前提,候補
+メーター内訳,右欄_使用者名２,,,使用者名はJSON側で postal_customer_name の1項目のみで、2行目に相当する項目はなし。sampleの「○○○　様」の敬称もKraken側では付与しない実装のため、2行目と敬称の編集はHUB側で必要,JSONに該当なし

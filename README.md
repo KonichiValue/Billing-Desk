@@ -29,9 +29,29 @@ function:
 
 | | When | What it does |
 |---|---|---|
-| **Refresh** | any time you press it | Sweeps every open ticket and thread, moves what changed. |
-| **Write prep** | when you sit down before a meeting | Refresh, then writes what you say in the next session. It reads **Update prep** once one exists. |
-| **Standup fold-in** | from 11:00, Mon/Wed/Thu | Reads the meeting note and moves the board. Scheduled, because the note appears while you are still in meetings. |
+| **Refresh** | any time you press it, and it is the only button on the work view | Sweeps every open ticket and thread, moves what changed, and rewrites or deletes the drafts the threads have overtaken. Never rewrites a word of what you say. |
+| **Write prep** | on the speaking view, when you sit down before a meeting | The same sweep, then the words for the next session on top of it. It reads **Update prep** once one exists. |
+| **Standup fold-in** | from 11:00, Mon/Wed | Reads the meeting note and moves the board. Scheduled, because the note appears while you are still in meetings. |
+
+The words are the reason those are two buttons rather than one, and the split
+runs along the tabs: everything on the work view belongs to Refresh, including
+the drafts, and prep only ever adds the speaking half. A script is written for
+one room on one day, and some of it you have already cut or rehearsed, so a sweep
+at 17:00 that rewrote it would throw away the version you fixed at 16:00 and
+would redo tomorrow's Japanese because a ticket moved in a way the room does not
+care about. A refresh therefore moves the work and leaves the script where it is,
+and both views then say so: amber at the top of the speaking view, and **Prep is
+older than the board** beside the next room on the work view. Either one means
+press **Update prep**, which is on the speaking view where the words are.
+
+**A sweep takes five to eight minutes**, because it reads every open ticket, the
+threads behind every open item and the internal build tickets those depend on,
+and no model makes that shorter. What it does say while it runs is which of those
+it is on, with the minutes counting, and `logs/refresh-<date>.log` keeps a timed
+line per step and the total at the end, so a slow sweep can be read rather than
+guessed at. The one outcome that is never reported is a false one: a run whose
+connection dropped can still exit clean, and a sweep that read nothing is
+reported as a failure and retried rather than as **Refreshed**.
 
 Before a standup you have 20 minutes and you spend them reading, so the speaking
 view is for preparing. Replies, investigation and ticket updates wait for the
@@ -173,6 +193,93 @@ one browser, and a control that looks authoritative while the chat and the state
 file know nothing about it is worse than no control. Close things by saying so in
 chat, or with `tick.py`.
 
+## Asking about one job, and changing it
+
+Every job carries **Ask or change** at the foot of its card, every ticket one
+under its threads, and every draft a **Rewrite or ask** in its header. It is a
+chat box: type, press enter, and the answer lands on the card in a minute or
+two. The words travel with what he was looking at, so both halves of the same
+conversation work with nothing else said:
+
+> what do you mean by 稼働確認?
+
+> rewrite this with the latest from the refinement thread, and tell Tanaka-san
+> we are still checking
+
+The second one reads the thread, rewrites that draft in the ticket, and says what
+it changed. When the thread does not settle the question, the draft says that
+politely rather than inventing a date, because a wrong guess to TG cannot be
+walked back. The thing that used to stop either question being asked, explaining
+which draft you mean to a chat that has never seen it, is gone.
+
+Answers land back on the card and stay there, in `state/asks.json`. A chat window
+is gone by tomorrow; why a draft says what it says is worth having next to the
+draft, and `output/desk.md` carries the same questions so a later chat does not
+contradict an answer he is reading.
+
+**An answer takes about a minute, and most of that is not the model.**
+`cursor-agent` spends 15 to 40 seconds starting a session, signing in and
+bringing up the MCP servers before it reads a word, so no ask is ever instant.
+Asks run on Auto like every other run here, because half of what comes out of
+this box is read by Tokyo Gas and the answer is worth the wait. `config.json`
+under `ask` pins a faster model if that trade ever stops being worth it, and
+`TG_ASK_MODEL` does it for one question. Either way `logs/ask-<date>.log` records
+which model answered, how many seconds it took and how many steps it needed, so
+the question is settled with numbers.
+
+While it is thinking, the card says what it is actually doing: the CLI is asked
+for its event stream rather than its prose, so every file it opens and every
+thread it reads reaches the page as it happens. A wait with a step in it reads
+as work, and a wait with nothing in it reads as a hang.
+
+A change edits that item in `state/board.json` and nothing else, and the answer
+says in one line what changed. Two things it will not do: mark anything done,
+which is `tick.py`'s job alone, and send anything to anybody. `prompt-ask.md` is
+the whole contract, and it inherits every hard rule the refresh has, including
+holds and what may never reach TG.
+
+The speaking view has the same box at the foot of every card, and a **Rewrite or
+ask** in the *Say this* header. There what is on the card is the words, so the
+question goes off with the `prep` block and the session it was written for, and
+"rewrite this in plainer Japanese" or "what do I say if they push on the date"
+comes back as the line to read out, furigana and all. It is the same thread as
+the work view: a question asked in front of the script is on the ticket's card on
+both tabs.
+
+One box is not on a card. Above the tickets sits the ask for the questions that
+belong to no job: what to start on, whether tomorrow is covered, what he has
+forgotten. That one goes off with every open job attached and answers in job
+numbers, because "start with 8, it is the only thing Murakami is waiting on" is
+an answer he can act on and "you have a few things pending" is not.
+
+### Pulling on one answer
+
+An answer takes another question. **Ask about this answer** at the foot of one
+opens a box inside it, and what he asked and what came back travel with the
+follow-up, so `why?` is a whole question there and the same word typed into the
+box at the foot of the card is not. Follow-ups nest under the answer they came
+off, however deep the digging goes.
+
+Nothing on a card grows without bound. Every exchange shuts to one line, the
+question and when he asked it, with only the newest thread open; past two, the
+older ones go behind a single **3 earlier questions on this card**. The
+**&times;** in a bubble's corner forgets that exchange, and anything asked off
+the back of it, out of `state/asks.json` for good. It is the only thing on these
+pages that deletes anything, and it is his own record, not the board.
+
+The same ask works from a terminal, and lands on the same card:
+
+```sh
+tg ask 8 "is that true about refinement?"
+tg ask 託送HOLD "who owns the resolver change on their side?"
+tg ask desk "what should I start on this evening?"
+```
+
+Without the server, on a page opened from disk, **Copy for a chat** puts the
+same question with its job named on the clipboard. `tg chat` is still the right
+place for the long ones: work spanning three jobs, or anything where you will be
+reading code together.
+
 State lives on the item in `state/board.json`, so rebuilding a page never loses
 it and nothing has to be reconciled across days. That file is also how a chat in
 this repo knows where you are without you explaining: `AGENTS.md` tells the agent
@@ -238,30 +345,76 @@ nothing and flags it, since a missing warning beats a wrong one.
   own row underneath. A draft always sits inside the item that needs it.
 - **TG news**, inside Need to know, is things that are not your tickets but
   move them, each with the route by which it reaches you and a link to where it
-  was said.
+  was said. A row shows its first sentence and that route; the detail behind it
+  is one press away.
 - Inside a card the sections are colour-keyed by what they are for. Red is the
   work, blue is the short answer and the timeline, amber is undecided, and grey
   reference sections (shorthand, threads, a day where nothing moved) start folded.
+- **Two things stay open on a card, and everything else folds.** Where it stands,
+  and the jobs. The gates still to fall, the timeline, the shorthand and the
+  threads all sit behind a summary line that carries the part worth knowing
+  daily: *Timeline, 10 moves today*, or *2 of 6 done, next, TG confirm the
+  bills, with Komiyama*. Answering the question on the fold means most of them
+  never need pressing, and a fold you do press stays open on that card until you
+  shut it. Why a job exists, what already happened on it and the message it came
+  out of fold the same way, under the job, since they are read once and the work
+  is read every day.
+- **Where it stands** answers for both sides. Under the short answer sits the
+  Kraken build TG are waiting on: which of the six stops it has reached, why it
+  is not moving, who is on it, and the one line about timing that may be
+  repeated to TG. A ticket with no build says that instead, since an empty queue
+  is a fact about the ticket too.
+- **What is left before this closes** is every gate still to fall, in order,
+  including the ones that are nobody's job: an engineer being assigned, a
+  release, a feature flag switched on, TG checking the bills that came out
+  after it. It is why a ticket marked Clear can still show four things
+  outstanding. Folded, with the next gate and whose it is on the fold.
+- Cards come in the order they should be worked: the ones with something on you
+  first, and among those, what you promised a person before what you promised a
+  room.
 - The speaking view is the same card in a plum key, in the order the meeting
   walks: the issue in 20 seconds, where it stands, **what moved since last
   time**, then **Say this**, then **What I need back**: one list holding the
   decisions to land, the questions to get answered and anything already owed to
-  you, each row saying which it is. Scope and pushback fold away.
-- Timelines group by day, most recent open and everything older folded behind
-  the days it covers.
+  you, each row saying which it is. What moved, scope and pushback all fold
+  away, because none of them is what you say when the room turns to you.
+- **What moved on this ticket**, on the speaking view, is now the whole history
+  rather than the gap since you last spoke: one fold per day counting back, with
+  a line marking where you last talked about it. "When did you first tell us
+  about this" is asked of the same card as "what changed this week", and the
+  answer used to be a tab away.
+- Timelines group by day, most recent first inside the fold and everything older
+  behind the days it covers.
 - Tickets where you have done your part but Asana has not closed them, and
   tickets closed on both sides, sit in their own folds under the live ones.
 - **TG what I say** is meant to be read aloud verbatim. Furigana sits above the
   kanji, English underneath, and each block copies the Japanese without the
   markup.
+- Any Japanese term left standing in an English line gets its meaning in brackets
+  after it: `閉栓翌日開栓 (open the day after close)`. Once per card, and once more
+  in the script, since the script is all that is left in Japanese-only mode. The
+  words come from `glossary` on the board, so a term is explained the same way
+  everywhere and nobody writes the brackets by hand.
 - The amber **Check before you speak** box holds unknowns and hard cautions,
   including anything you must not say to TG.
 - Every job carries the steps to do it, in order, before anything else on the
   card. The reason it exists is at the bottom in one line, because it is the one
   question you never ask of your own list.
 - Where a job had a part that did not need you, that part is already done and
-  sits above the steps in a green **Done for you** block, with the sources it was
-  read from. What is left underneath is sending, deciding or speaking.
+  sits above the steps in a green **Prepared for you** block. It leads with the
+  answer, keeps like-for-like evidence in its table with the row that matters
+  marked, and labels requirements or constraints separately. An amber **Still
+  unanswered** strip says what the work could not settle, so nothing reads as
+  finished when it is not. When the product is a document rather than a message,
+  the block hands you the file itself. If it is for a meeting, it links to the
+  spoken version under **TG what I say**. What is left underneath is sending,
+  deciding or speaking.
+- Work agreed in a thread that Asana has never heard of still gets a card, marked
+  **no Asana ticket yet** with what would raise one, because a handover nobody
+  wrote down is exactly the thing that waits a month.
+- A day in the room shows its running order under **Next room**, with the hours
+  that concern you picked out. An onsite that swallows the standup usually still
+  holds it, an hour later and in person.
 - It reads on a phone: `tg phone` opens the page to your wifi for an hour, then
   closes it again on its own. `tg phone 15` for less, `tg stop` to end it now.
   Nothing is hosted, so no TG thread or draft leaves the machine.
@@ -275,6 +428,7 @@ nothing and flags it, since a missing warning beats a wrong one.
 | `prompt-refresh.md` | What "refresh" means, for the button, `tg refresh` and a chat alike. |
 | `prompt-prep.md` | The script: the sweep, then what goes in `prep`, standup or onsite. |
 | `prompt-post.md` | How the standup gets folded into the board. |
+| `prompt-ask.md` | One question about one job: what it may answer, what it may change, what it must never do. |
 | `AGENTS.md` | How a Cursor chat in this repo picks up the list and acts on it. |
 | `config.json` | Project GIDs, user GIDs, meeting time, Slack channel hints. |
 | `render.py` | Shared styling, furigana, item lifecycle and the common blocks. No network, no LLM. |
@@ -282,15 +436,18 @@ nothing and flags it, since a missing warning beats a wrong one.
 | `render_standup.py` | The speaking view inside that file, standups and onsites. |
 | `render_desk_md.py` | The board into `output/desk.md`, for handing work back in chat. |
 | `tick.py` | Move items along and rebuild. The only way state gets recorded. |
+| `make_doc.py` | Turns a document in `docs/` into the PDF that goes to TG. Chrome prints it, because a Japanese PDF needs an embedded font. |
 | `serve.py` | The local page server: renders on every load, runs an agent when a button asks, and walks the sign-in when something is not authorised. Loopback only, keyed. |
-| `bin/tg` | The one command. Opens the window, moves items along, starts a run. |
+| `bin/tg` | The one command. Opens the window, moves items along, asks about a job, starts a run. |
 | `install.sh` | Links `tg`, builds the Dock app, keeps the server running. Safe to rerun. |
 | `app/` | The icon generator: the Kraken mark over a ticked list, read from `~/Projects/kraken-core` at build time. No client mark, so the app fits whoever the work is for. |
 | `run_post.sh` | The fold-in entry point. Polls for the Notion note, then folds it in. |
 | `launchd/` | The fold-in schedule and the page server. |
+| `docs/` | Documents that leave the desk: the HTML that is edited and the PDF that is sent. The page serves them at `/doc/`, so an item can hand you the file. |
 | `output/` | `desk.html` and `desk.md`, both rendered from the board. |
-| `state/` | `board.json`, the one durable file. |
-| `logs/` | `refresh-<date>.log`, `prep-<date>.log` and the fold-in logs. |
+| `state/` | `board.json`, the one durable file, `asks.json`, every question asked from a card, and `history/`, a copy of the board taken before each agent run. |
+| `keep.py` | Takes that copy. Every entry point calls it, because `state/` is not in git and an agent that decides a ticket no longer belongs to you can otherwise take a week of numbered work with it. |
+| `logs/` | `refresh-<date>.log`, `prep-<date>.log`, `ask-<date>.log` and the fold-in logs. |
 
 ## Furigana markup
 
@@ -300,8 +457,9 @@ annotations. The reading goes on the whole word, not per character:
 
 ## Schedule
 
-Only two things run on their own. The fold-in fires from 11:00 on Mon, Wed and
-Thu and retries until the Notion note appears, because that note lands while you
+Only two things run on their own. The fold-in fires from 11:00 on Mon and Wed,
+the two days the billing standup runs, and retries until the Notion note
+appears, because that note lands while you
 are still in meetings. The page server starts at login and stays up, so the Dock
 app always finds it. Everything else is a button.
 
@@ -318,18 +476,76 @@ in `~/Library/LaunchAgents/`, then `launchctl bootout` and `bootstrap` it.
 ## Requirements
 
 - `cursor-agent` on the PATH and logged in (`cursor-agent login`).
-- Asana, Slack and Notion MCP servers configured in `~/.cursor/mcp.json`.
+- The Slack, Asana and Notion plugins installed under Tools &amp; MCP and signed in.
 - `python3`. No third-party packages.
+
+## What an agent opened on this folder can reach
+
+The work needs five things it cannot get from the filesystem: the Slack threads,
+the two Asana projects, the Notion meeting notes, the Miro billing diagrams and
+TG's production data.
+
+Four of those five come from marketplace plugins, installed once per person
+under Tools & MCP: **Slack, Asana, Notion, Miro.** They carry their own sign-in,
+their own client identifiers and their own skills, so they are the supported way
+in and this repo does not restate them.
+
+`.cursor/mcp.json` here declares only what no plugin covers:
+
+| Server | For | Sign-in |
+| --- | --- | --- |
+| `databricks-tg` | **The database.** Kraken's managed SQL endpoint on TG's production workspace, `tokyogas-prod`. Same tables TG's own patrol queries, so a hold list or an account's charges can be checked rather than asked about. | OAuth, and the workspace has to have managed MCP servers enabled |
+| `databricks-tg-genie` | The same data in questions rather than SQL, through Genie. | OAuth, same as above |
+
+**Never name a server here that a plugin already provides.** A project entry of
+the same name shadows the plugin and inherits none of its setup, so signing in
+under Tools & MCP can fix a server the chat is not the one using. This file
+briefly carried `notion` and `miro`, copied without the plugin's own headers,
+which is why a sign-in on 27 August did not change what the panel showed. Both
+are gone from it. Databricks is safe because nothing else claims those names.
+
+Three things follow from how Cursor loads all this.
+
+**A sign-in only reaches windows opened after it.** MCP state is read when a chat
+starts, so an existing chat keeps whatever it had. After approving OAuth, reload
+the window, or just start a new chat, and check with a real call rather than the
+dot in the panel.
+
+**A terminal agent cannot sign itself in.** `tg refresh`, `tg prep`, the fold-in
+and the Ask box all run through `cursor-agent`, which reads the same files but
+cannot open an OAuth window. When a token lapses, that server simply is not
+there, and the run says so in `gaps` rather than failing. Sign in once in the
+desktop app under Tools & MCP and the terminal runs pick it up again.
+
+**Cloud agents and the phone read none of this.** They never see a local
+`mcp.json` and they do not have the plugins. Add the servers under the MCP
+dropdown at [cursor.com/agents](https://cursor.com/agents), then choose them per
+run on mobile. They are all HTTP, which is the transport cloud agents accept,
+with one catch: anything on the Kraken network, the Slack hub and the Databricks
+workspace both, is only reachable from a cloud VM if it is exposed publicly.
 
 ## Any model, any assistant
 
-Nothing here is tied to one model. Nothing names one, so every run uses whatever
-`cursor-agent` defaults to, and `TG_MODEL` or `POST_MODEL` override per run:
+Nothing here is tied to one model. `config.json` names a default per job, so it
+is one file rather than an environment variable somebody has to remember to set:
+`refresh` and `prep` both run on Claude Sonnet, one tier down from the
+account's heaviest, because a sweep and a script are still text a CE or Tokyo
+Gas will read or hear and neither one gets a second draft once he has said it in
+the room. Prep thinks harder than the sweep does: reading a thread and deciding
+where an item stands is mechanical, while the words for the room are not. The
+fold-in has no entry, so it stays on Auto until one is added.
+`TG_MODEL` or `POST_MODEL` override any of it for a single run:
 
 ```sh
 TG_MODEL=gpt-5.6-sol-high tg prep
 POST_MODEL=gpt-5.6-sol-high ./run_post.sh --force
 ```
+
+Asks work the same way, under `config.json`'s `ask`, on Auto for now because half
+of what comes out of that box is read by Tokyo Gas; `TG_ASK_MODEL` pins one for
+a single question. Every refresh, prep and ask logs which model ran, how long it
+took and how many steps it needed, in `logs/<kind>-<date>.log`.
+`cursor-agent --list-models` says what this account can use.
 
 The prompts name the Asana, Slack and Notion tools as those MCP servers expose
 them today, and both say to use the equivalent if a toolset names them

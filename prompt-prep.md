@@ -200,6 +200,12 @@ the room. Set `at_standup: true` on those items, with a short `at_standup_note`
 saying what he needs out of it. They then show on both views, and the standup
 view lists them under the ticket. Leave every other item alone.
 
+When an item has `prepared.meeting_use`, its evidence stays on the desk and its
+meeting-ready conclusion, ask and response to pushback go in this ticket's
+`prep`. The item links to that version. Never leave Rei to translate an analysis
+table into spoken words in the room, and never mix a stakeholder's desired
+outcome into a table of query conditions.
+
 ### Hard constraint: nothing internal reaches TG
 
 Internal Kraken build tickets, story points, t-shirt sizes, refinement status,
@@ -276,6 +282,13 @@ And once at board level:
 
 Do not write `where_it_stands` inside `prep`. The speaking view reads it from the
 ticket, so there is one status and the script can never contradict the desk.
+
+Every `en` line under a Japanese one is what tells him what he is about to say, so
+a Japanese term left sitting in it has not been translated. **Any term you leave
+in an English line must be in the board's `glossary`**, two or three words, and
+the page puts the meaning in brackets after its first mention in the script. Add
+what is missing rather than writing the brackets yourself, and never gloss inside
+`ja_ruby` or `say_ja`: he reads those out to Tokyo Gas.
 
 ## Then rebuild and report
 

@@ -13,12 +13,60 @@ Usage:
 from __future__ import annotations
 
 import json
+import os
 import sys
 from datetime import date, datetime
 from pathlib import Path
 
 from render import item_state as state_of
-from render import next_live, plain, sessions, tracked, when_words
+from render import (
+    apply_glossary,
+    blocked_on,
+    index_items,
+    item_order,
+    next_live,
+    plain,
+    sessions,
+    tracked,
+    when_words,
+)
+
+
+# Questions asked from the page, by what they were asked about. Here so that a
+# chat picking this file up knows what has already been asked and answered on a
+# job, and does not contradict an answer he is looking at.
+ASKED: dict[str, list[dict]] = {}
+
+
+def load_asks(path: Path) -> None:
+    ASKED.clear()
+    try:
+        rows = json.loads(path.read_text(encoding="utf-8")).get("asks", [])
+    except (OSError, ValueError):
+        return
+    for row in rows:
+        if row.get("ref"):
+            ASKED.setdefault(row["ref"], []).append(row)
+
+
+def render_asks(ref: str) -> list[str]:
+    """What he asked from the page, so a chat does not answer it differently.
+
+    A follow-up says so, because "why" as a standalone question in this file
+    would read as a question about the job.
+    """
+    out = []
+    for a in ASKED.get(ref, []):
+        if not a.get("answer"):
+            continue
+        lead = "Followed up" if a.get("parent") else "Asked"
+        out += [
+            f"**{lead} {a.get('asked_at', '')}:** {a.get('question', '')}",
+            "",
+            f"> {a['answer'].replace(chr(10), chr(10) + '> ')}",
+            "",
+        ]
+    return out
 
 
 def link(label: str, url: str) -> str:
@@ -58,17 +106,90 @@ def render_draft(d: dict, st: dict | None = None) -> list[str]:
     return out
 
 
-def render_ticket(t: dict) -> list[str]:
+STAGES = ("refining", "queued", "building", "review", "released", "verified")
+STAGE_WORDS = {
+    "refining": "Refining",
+    "queued": "Queued",
+    "building": "Building",
+    "review": "In review",
+    "released": "Released",
+    "verified": "Verified",
+}
+
+
+def build_lines(internal: dict) -> list[str]:
+    """The Kraken build under the status, in the same order as the page.
+
+    A chat asked "where is 保安閉栓" has to be able to answer "queued, nobody on
+    it" without opening Asana, and has to see the line it may repeat to TG
+    without inventing one.
+    """
+    b = internal.get("build") or {}
+    if not b:
+        if internal.get("none_yet"):
+            return [f"**Kraken build.** {internal['none_yet']}", ""]
+        return []
+    at = STAGES.index(b["stage"]) if b.get("stage") in STAGES else -1
+    rail = " > ".join(
+        f"**{STAGE_WORDS[s]}**" if n == at else STAGE_WORDS[s]
+        for n, s in enumerate(STAGES)
+    )
+    facts = [f"Engineer {b.get('engineer') or 'nobody yet'}"]
+    if b.get("size"):
+        facts.append(f"size {b['size']}")
+    if b.get("refined_by"):
+        facts.append(f"refined by {b['refined_by']}")
+    if b.get("feature_flag") == "Yes":
+        facts.append("behind a feature flag")
+    if b.get("moved_on"):
+        facts.append(f"last moved {b['moved_on']}")
+    out = [
+        f"**Kraken build {b.get('kt', '')}, {b.get('asana_status', '')}.** "
+        f"{b.get('waiting_on', '')}",
+        "",
+        f"- Stage: {rail}",
+        f"- {', '.join(facts)}",
+    ]
+    if b.get("safe_to_say"):
+        out.append(f"- What TG can be told: {b['safe_to_say']}")
+    return out + [""]
+
+
+def closes_lines(rows: list[dict]) -> list[str]:
+    """What still has to fall before the ticket closes, gates nobody owns included."""
+    if not rows:
+        return []
+    mark = {"done": "x", "now": " ", "blocked": " ", "next": " "}
+    lines = []
+    for r in rows:
+        st = r.get("state", "next")
+        who = f" ({r.get('who')})" if r.get("who") else ""
+        tail = f" {r['note']}" if r.get("note") else ""
+        flag = "" if st in {"done", "next"} else f" **{st}**"
+        lines.append(f"- [{mark.get(st, ' ')}] {r.get('what', '')}{who}{flag}{tail}")
+    done = sum(1 for r in rows if r.get("state") == "done")
+    return block(f"What is left before this closes ({done} of {len(rows)} done)", lines)
+
+
+def render_ticket(t: dict, index: dict[str, dict] | None = None) -> list[str]:
+    index = index if index is not None else {
+        str(i.get("id")): i for i in t.get("items", [])
+    }
     out: list[str] = [
         f"## {t.get('ref', '')}: {t.get('title_en', '')}",
         "",
         f"**{t.get('title_ja', '')}**",
         "",
-        f"- Asana: {link(t.get('title_ja', 'ticket'), t.get('asana_url', ''))}",
-        f"- Asana status: {(t.get('asana') or {}).get('status', 'unknown')}, "
-        f"{(t.get('asana') or {}).get('section', 'no section')}, "
-        f"priority {(t.get('asana') or {}).get('priority', 'unset')}",
     ]
+    if t.get("no_ticket_yet"):
+        out.append(f"- No Asana ticket yet: {t['no_ticket_yet']}")
+    else:
+        out += [
+            f"- Asana: {link(t.get('title_ja', 'ticket'), t.get('asana_url', ''))}",
+            f"- Asana status: {(t.get('asana') or {}).get('status', 'unknown')}, "
+            f"{(t.get('asana') or {}).get('section', 'no section')}, "
+            f"priority {(t.get('asana') or {}).get('priority', 'unset')}",
+        ]
 
     internal = t.get("internal_ticket") or {}
     if internal.get("name"):
@@ -77,6 +198,8 @@ def render_ticket(t: dict) -> list[str]:
             f"{link(internal['name'], internal.get('url', ''))}"
         )
     out += ["", t.get("where_it_stands", ""), ""]
+    out += build_lines(internal)
+    out += closes_lines(t.get("closes_when", []))
 
     terms = [
         f"- **{tm.get('term', '')}**"
@@ -99,19 +222,26 @@ def render_ticket(t: dict) -> list[str]:
     out += block("Timeline", changed)
 
     actions: list[str] = []
-    for a in sorted(
-        t.get("items", []), key=lambda x: (state_of(x)["order"], x.get("id", 99))
-    ):
+    for a in sorted(t.get("items", []), key=lambda x: item_order(x, index)):
         mins = f", {a['est_minutes']} min" if a.get("est_minutes") else ""
         hold = a.get("hold") or {}
         st = state_of(a)
-        active = st["state"] in {"todo", "hold"}
-        head = f"{a.get('id', '-')}. {a.get('title', '')} [{st['label'].upper()}{mins}]"
+        behind = blocked_on(a, index) if st["state"] in {"todo", "hold"} else ""
+        active = st["state"] in {"todo", "hold"} and not behind
+        label = f"AFTER {behind}" if behind else st["label"].upper()
+        head = f"{a.get('id', '-')}. {a.get('title', '')} [{label}{mins}]"
         if active:
             actions += [f"#### {head}", ""]
         else:
             actions += [f"<details><summary>{head}</summary>", ""]
         note = f" {st['note']}" if st.get("note") else ""
+        if behind:
+            lead = index.get(behind) or {}
+            actions += [
+                f"> **Queued behind job {behind}.** Nothing to do here until "
+                f"\u201c{lead.get('title', 'that one')}\u201d closes.",
+                "",
+            ]
         if st["closed"]:
             actions += [f"> {st['label']} {st.get('at', '')}.{note}", ""]
         elif st["state"] == "waiting":
@@ -135,26 +265,61 @@ def render_ticket(t: dict) -> list[str]:
         prep = a.get("prepared") or {}
         if prep:
             built = f" ({prep['built_at']})" if prep.get("built_at") else ""
-            actions += [f"**Done for you**{built}", ""]
+            actions += [f"**Prepared for you**{built}", ""]
             if prep.get("what"):
                 actions += [prep["what"], ""]
+            if prep.get("conclusion"):
+                actions += [f"> **Bottom line:** {prep['conclusion']}", ""]
             tbl = prep.get("table") or {}
             if tbl.get("rows"):
                 cols = tbl.get("columns", [])
                 actions.append("| " + " | ".join(cols) + " |")
                 actions.append("|" + "---|" * len(cols))
                 for row in tbl["rows"]:
-                    cells = [str(c).replace("|", "\\|").replace("\n", " ") for c in row]
+                    cells = [
+                        str(c.get("text", "") if isinstance(c, dict) else c)
+                        .replace("|", "\\|")
+                        .replace("\n", " ")
+                        for c in row
+                    ]
                     actions.append("| " + " | ".join(cells) + " |")
                 actions.append("")
             for f in prep.get("findings", []):
                 actions.append(f"- {f}")
             if prep.get("findings"):
                 actions.append("")
+            for note in prep.get("notes", []):
+                if note.get("heading") and note.get("body"):
+                    actions += [f"**{note['heading']}:** {note['body']}", ""]
+            if prep.get("unanswered"):
+                actions.append("**Still unanswered**")
+                actions.append("")
+                for q in prep["unanswered"]:
+                    actions.append(f"- {q}")
+                actions.append("")
+            files = [f for f in prep.get("files", []) if f.get("path") or f.get("url")]
+            if files:
+                actions += [
+                    "Files it made: "
+                    + ", ".join(
+                        link(
+                            f.get("label") or f.get("path") or f["url"],
+                            f.get("path") or f["url"],
+                        )
+                        for f in files
+                    ),
+                    "",
+                ]
+            meeting = prep.get("meeting_use") or {}
+            if meeting:
+                actions += [
+                    f"**Meeting version:** {meeting.get('summary', 'Use the What I say in the room section below.')}",
+                    "",
+                ]
             srcs = [s for s in prep.get("sources", []) if s.get("url")]
             if srcs:
                 actions += [
-                    "Read from: "
+                    "Built from: "
                     + ", ".join(link(s.get("label", "source"), s["url"]) for s in srcs),
                     "",
                 ]
@@ -187,6 +352,7 @@ def render_ticket(t: dict) -> list[str]:
             ]
         actions.append("")
         actions += render_draft(a.get("draft") or {}, st)
+        actions += render_asks(f"item:{a.get('id')}")
         if not active:
             actions += ["</details>", ""]
     out += block("To do on this ticket", actions)
@@ -208,6 +374,7 @@ def render_ticket(t: dict) -> list[str]:
         for th in t.get("threads", [])
     ]
     out += block("Every conversation this lives in", threads)
+    out += block("Asked about this ticket", render_asks(f"ticket:{t.get('ref')}"))
     out += render_prep(t.get("prep") or {})
 
     return out
@@ -277,11 +444,12 @@ def render_prep(prep: dict) -> list[str]:
 def render(data: dict) -> str:
     pretty = date.today().strftime("%A %-d %B %Y")
     tickets = data.get("tickets", [])
+    _index = index_items(tickets)
     total = sum(
         i.get("est_minutes") or 0
         for t in tickets
         for i in t.get("items", [])
-        if state_of(i)["state"] == "todo"
+        if state_of(i)["state"] == "todo" and not blocked_on(i, _index)
     )
 
     out = [
@@ -307,9 +475,17 @@ def render(data: dict) -> str:
     if live.get("date"):
         when = when_words(live.get("date", ""), live.get("at", ""))
         line = f"> **Next up: {live.get('title') or live.get('name')}, {when}.**"
+        if live.get("place"):
+            line += f" {live['place']}."
         if live.get("focus"):
             line += f" {live['focus']}"
         out += [line, ""]
+        for row in live.get("timetable", []):
+            if row.get("what"):
+                mark = " **<-**" if row.get("mine") else ""
+                out.append(f"> - {row.get('at', '')} {row['what']}{mark}")
+        if live.get("timetable"):
+            out.append("")
     for sess in sessions(data):
         if sess.get("skipped"):
             out += [
@@ -318,17 +494,38 @@ def render(data: dict) -> str:
                 "Anything that was waiting for it has to move into Asana.",
                 "",
             ]
+            continue
+        if sess.get("date") == live.get("date") and sess.get("at") == live.get("at"):
+            continue
+        when = when_words(sess.get("date", ""), sess.get("at", ""))
+        line = f"> **After that: {sess.get('title') or sess.get('name')}, {when}.**"
+        if sess.get("place"):
+            line += f" {sess['place']}."
+        if sess.get("focus"):
+            line += f" {sess['focus']}"
+        out += [line, ""]
+        for thing in sess.get("bring", []):
+            out.append(f"> - Bring: {thing}")
+        if sess.get("bring"):
+            out.append("")
 
+    index = index_items(tickets)
     rows = tracked(tickets)
     if rows:
         counts: dict[str, int] = {}
-        for _, _, st in rows:
+        for _, a, st in rows:
+            # Only work that would otherwise read "with you" diverts. An item
+            # waiting on someone is already described by who holds it.
+            if st["state"] == "todo" and blocked_on(a, index):
+                counts["queued"] = counts.get("queued", 0) + 1
+                continue
             key = "finished" if st["closed"] else st["state"]
             counts[key] = counts.get(key, 0) + 1
         summary = ", ".join(
             f"{counts[k]} {word}"
             for k, word in (
                 ("todo", "with you"),
+                ("queued", "queued behind another job"),
                 ("hold", "not yet"),
                 ("waiting", "with someone else"),
                 ("finished", "finished"),
@@ -356,7 +553,8 @@ def render(data: dict) -> str:
             elif st["state"] == "hold":
                 bits.append(f"not yet, until {(a.get('hold') or {}).get('until', '')}")
             else:
-                bits.append("with you")
+                behind = blocked_on(a, index)
+                bits.append(f"queued behind {behind}" if behind else "with you")
                 if a.get("est_minutes"):
                     bits.append(f"{a['est_minutes']} min")
             if st.get("note"):
@@ -366,7 +564,11 @@ def render(data: dict) -> str:
                 f"- **{a.get('id', '')}. {ref}: {a.get('title', '')}** ({tail})"
             )
         out.append("")
-        mine = [(r, a) for r, a, s in rows if s["state"] == "todo"]
+        mine = [
+            (r, a)
+            for r, a, s in rows
+            if s["state"] == "todo" and not blocked_on(a, index)
+        ]
         if not mine:
             out += ["Nothing is with you right now.", ""]
         else:
@@ -378,8 +580,14 @@ def render(data: dict) -> str:
                 )
             out.append("")
 
+    asked = render_asks("board")
+    if asked:
+        out += ["## Asked about the desk", "",
+                "Questions about the day rather than one job, and what came back.",
+                ""] + asked + [""]
+
     for t in tickets:
-        out += render_ticket(t)
+        out += render_ticket(t, index)
 
     news = data.get("news") or data.get("watch") or []
     if news:
@@ -416,7 +624,11 @@ def main() -> int:
     except json.JSONDecodeError as exc:
         print(f"invalid JSON in {src}: {exc}", file=sys.stderr)
         return 1
-    dest.write_text(render(data), encoding="utf-8")
+    load_asks(src.parent / "asks.json")
+    # Write then rename, so a reader never catches the file half written.
+    tmp = dest.with_name(dest.name + ".tmp")
+    tmp.write_text(render(apply_glossary(data)), encoding="utf-8")
+    os.replace(tmp, dest)
     print(f"wrote {dest}")
     return 0
 

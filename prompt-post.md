@@ -12,8 +12,9 @@ Your deliverable is `state/board.json`, which already exists and is described in
 - An item keeps its number for life. Numbers are never reused and never
   renumbered, because Rei types them. New work takes `next_id` and increments it.
 - Never delete history. A finished item stays on the board with its `closed_at`.
-- A ticket that is no longer open in Asana comes off, and its open items close
-  as `dropped` with a note.
+- A ticket completed in Asana comes off, and its open items close as `dropped`
+  with a note. Completed means the task is closed, not that somebody else is now
+  the assignee.
 
 Write the file with the file-write tool. Do not print JSON to stdout, and do not
 create any other file.
@@ -199,10 +200,18 @@ If the file is missing, carry on and note it in `gaps`.
 
 ## Step 3: decide what belongs here
 
-A ticket belongs on this page if it is one of Rei's, meaning it appeared in this
-morning's prep or is assigned to him in Asana. Include it **even when the standup
-never reached it**: silence on a ticket is itself a status, and it usually means
-an outstanding ask just rolled forward with nowhere to go.
+A ticket belongs on this page if it is one of Rei's, meaning it is already on the
+board with an open item, appeared in this morning's prep, or is assigned to him
+in Asana. Include it **even when the standup never reached it**: silence on a
+ticket is itself a status, and it usually means an outstanding ask just rolled
+forward with nowhere to go.
+
+**An Asana reassignment is not a reason to remove anything.** When the assignee
+moves to someone on TG's side, write the new name into `asana.assignee`, add the
+reassignment as an event, and address later drafts to that person. The card stays
+and every item keeps its number. Rei's work on a ticket does not transfer because
+TG changed who owns their end of it, and the items are how he refers to that
+work.
 
 Within a ticket, include work owned by other people whenever it gates Rei. When
 a TG person takes something away for internal clarification and Rei's ticket
@@ -312,22 +321,91 @@ code actually does, obeying its `AGENTS.md`; compare two things and mark the
 difference; count how many accounts, days or cases; find the source for a claim
 somebody made from memory. Write it as a small table when it is a comparison or
 a list of cases, `findings` when it is a conclusion, and always with `sources` so
-he can check you.
+he can check you. Lead with `conclusion`, the answer the evidence supports.
+Keep the table like-for-like: query conditions compare with check conditions.
+A stakeholder's desired outcome, an implementation constraint and a query
+condition are different kinds of information, so put the first two in labelled
+`notes` rather than mixing them into rows. If Rei will present the result, put
+the meeting-ready words in `prep` and add `meeting_use`; do not make him turn
+the analysis table into a script while the room waits.
 
 What you cannot do, and must leave to him: anything sent to a person, any choice
 between two positions, anything spoken in a room, and any judgement that needs
 what he knows and you do not. Those are the steps.
 
-    "prepared": {"what", "built_at", "table": {"columns": [], "rows": [[]]},
-                 "findings": [], "sources": [{"label", "url"}]}
+    "prepared": {
+      "what", "conclusion", "built_at",
+      "table": {"columns": [], "rows": [[]]},
+      "findings": [],
+      "notes": [{"heading", "body"}],
+      "unanswered": [],
+      "files": [{"label", "path"}],
+      "meeting_use": {"label", "summary"},
+      "sources": [{"label", "url"}]
+    }
 
 An item with a `prepared` block has steps that begin after it. "Read this and
 disagree where you know better", "take this line into the room", "send this".
 Never a step that redoes the work.
 
+Keep it the length of the answer and no longer. A table cell is a phrase, not a
+sentence, and the cell that says which row matters is written as `{"text": "The
+one gap", "tone": "good|gap|warn"}` so it prints as a verdict. One verdict
+column per table; the reasoning goes in `findings`, four at most, each one
+leading with what it changes. When a finding needs a whole paragraph it is a
+`note` with a heading saying what kind of information it is.
+
+`unanswered` is the field that keeps the rest honest. Anything the work could not
+settle goes there, with why it is open: nobody has been asked yet, or the answer
+that came back was not usable. Never leave a gap out because the block reads
+better without it, and never write a confident `conclusion` over the top of one.
+An empty `unanswered` on work that clearly has holes is worse than no prepared
+block, because he takes it into a room believing it.
+
+When the product is a document somebody else reads rather than words Rei says,
+write it into `docs/` as HTML, build the PDF with `python3 make_doc.py`, and
+point `files` at both. Documents carry no furigana and no internal detail: the
+reader is TG, not Rei.
+
 If the work needs a tool you do not have, or a codebase read that came back
 empty, say so in a step and name what is missing. Never leave the impression
 that something was checked when it was not.
+
+### Write it so he reads it once
+
+The evidence being true is half the job. The other half is that Rei takes it in
+between two meetings without reading it twice. Everything in a `prepared` block
+is written to be read fast, and when plainness and cleverness pull apart,
+plainness wins. The old failure here was not wrong facts, it was right facts
+buried in long sentences, so a card took ten minutes to understand instead of
+ten seconds.
+
+- **`conclusion` is one plain sentence he could act on without reading further:**
+  what is true, then what it means for him. A second sentence only if it says
+  what to do about it. Never a paragraph. A `conclusion` past two sentences is a
+  first sentence with findings that wandered up into it, so push them back down.
+- **One idea to a sentence.** Short and declarative. No sentence carrying three
+  commas, no clause folded inside a clause, no "not X but Y". If it wants a
+  semicolon it is two sentences.
+- **The plain word over the exact-but-dense one.** "A day early on every slip
+  with an energy charge" says it. "A day early on every slip carrying an energy
+  charge, not an edge case" is the same fact wearing a coat. Keep the team's
+  fixed vocabulary (課金GAPホールド, 稼働確認); cut the ornament around it.
+- **A `finding` is one fact, the so-what first, then where it is.** "The header
+  date is never converted back to Japan time, at _tg_stamp_context.py:175" beats
+  a sentence that makes him hold two clauses before he reaches the file. A finding
+  he reads twice is two findings, or it is a `note`. Four findings, then stop;
+  the fifth is a `note` with a heading.
+- **Numbers and names carry the weight, not adjectives.** "5 accounts, all still
+  failing since 15–18 Aug" beats "a real and non-trivial defect". Give the count,
+  the date, the account, the file and line, and let them make the case.
+- **Cut every word that does not change what he does.** Length is a cost he pays,
+  so make him pay it only for facts. The test: could he read the bottom line
+  alone and do the right thing? If not, the bottom line is wrong, not too short.
+
+This changes how it reads, never what is in it. `unanswered` stays whole, every
+source stays cited, and nothing true is dropped to make a block shorter. Plain
+is not short-of-the-facts; it is the facts with nothing in front of them.
 
 ### `steps` and `done_when`, the part he actually reads
 
@@ -406,6 +484,36 @@ Read the internal ticket for what TG have not been told, too. A build ticket
 often carries a consequence nobody has passed on, such as existing holds not
 being cleared by the change, which decides whether their verification plan even
 works.
+
+Write that state into `internal_ticket.build` rather than leaving it in prose.
+`stage` and `waiting_on` are the two fields that carry it: the stage says how
+far the build has run, and `waiting_on` is the single sentence saying why it is
+not moving. Put the reply-safe version in `safe_to_say` and nowhere else.
+
+### Work that has no ticket
+
+Some of what Rei owns was agreed in a Slack thread and never written down where
+TG or Asana can see it. It is still his work, it still needs a room and a first
+step, and leaving it off the board because it has no gid is how it goes another
+month without moving. Give it a ticket with a slug for an `id`, fill
+`no_ticket_yet` with why no task exists and what would raise one, and write its
+items exactly as you would for a real ticket. Raising the Asana task is usually
+the last step of the item, after the conversation that gives it a name.
+
+## Step 6b: say what closing this ticket would take
+
+A TG ticket is not finished when Rei has nothing left to do on it. It is
+finished when the build has landed and TG have checked the bills that came out
+after it. `closes_when` is that list, in the order the gates fall, and it is the
+only place the gates nobody owns get written down: an engineer being assigned, a
+release, a feature flag switched on, TG's own verification.
+
+Write it for every ticket, including the ones with no open items, because those
+are exactly the ones that read as done and are not. Mark `state` from what you
+found in this sweep, not from what you hope. Where an item already tracks a
+gate, cite its number in `note` instead of writing the item out twice. Where a
+gate has never been discussed with anybody, say so in the note: an unagreed
+verification step is a real gap and Rei is the only person who can close it.
 
 ## Step 7: say clearly when he should not act yet
 
@@ -565,9 +673,9 @@ out loud rather than written anywhere durable. Search the summary and transcript
 for anything about a session not happening, or a different kind of session
 happening instead.
 
-Keep `sessions` on the board true, soonest first. Standups run Monday, Wednesday
-and Thursday at 10:30 JST, so "the next one" means the next of those days after
-today. Drop entries whose date has passed.
+Keep `sessions` on the board true, soonest first. Standups run Monday and
+Wednesday at 10:30 JST and never on a Thursday, so "the next one" means the next
+of those days after today. Drop entries whose date has passed.
 
 An onsite or a workshop is a session in its own right, not a hole where a standup
 was, so write both: the replacement with its own `kind`, and the standup it
@@ -577,10 +685,19 @@ list of anything Rei committed to having ready. He prepares differently for a da
 in the room than for fifteen minutes, and this is what tells him which he is
 facing.
 
+When the day has a running order, put it in `timetable`, and mark the rows that
+concern him with `mine`. Read it before writing anything else about that day,
+because an onsite that swallows the standup usually still holds it, an hour later
+and in person. A standup that has moved into the room is not skipped, and an
+entry saying it is not running sends him to the wrong place at the wrong time.
+Drop the skipped entry when the timetable contradicts it.
+
 ```json
 "sessions": [
-  {"kind": "onsite", "date": "YYYY-MM-DD", "at": "", "title": "Billing onsite",
+  {"kind": "onsite", "date": "YYYY-MM-DD", "at": "09:45", "title": "Billing onsite",
+   "place": "Where to be, and where the day moves to",
    "focus": "What the day is for.", "quote": "The verbatim line that told you",
+   "timetable": [{"at": "11:00", "what": "The slot", "mine": true}],
    "agenda": [{"topic": "", "why": "", "owner": ""}], "bring": [""]},
   {"kind": "standup", "date": "YYYY-MM-DD", "at": "10:30", "skipped": true,
    "reason": "Short plain-English reason"}
@@ -655,9 +772,24 @@ everything you are not changing.
         "category": "Category field",
         "assignee": "Assignee name"
       },
+      "no_ticket_yet": "Only for work with no Asana task at all: why there is none, and what would raise one. The id becomes a slug, asana and asana_url stay empty, and this field replaces them. Delete it the moment a ticket exists.",
       "internal_ticket": {
         "name": "Internal Kraken build ticket title, or empty string",
-        "url": "URL, or empty string"
+        "url": "URL, or empty string",
+        "none_yet": "Only when no build has been raised: why not, and what would raise one. Leave out when build is present.",
+        "build": {
+          "kt": "KT-92085",
+          "stage": "refining, queued, building, review, released or verified. Verified means TG have checked bills issued after the release, not that Asana says Done.",
+          "asana_status": "Status (Kraken Cust) in Asana's own words, plus the queue position if it has one",
+          "engineer": "Engineer name, or empty string when nobody has picked it up",
+          "size": "2 SP",
+          "refined_by": "Rie Nakayama",
+          "refinement": "🟢",
+          "feature_flag": "Yes or No. Yes means the release and the switch-on are two separate events.",
+          "moved_on": "YYYY-MM-DD from modified_at",
+          "waiting_on": "One sentence saying why it is not moving. This is the line Rei reads first.",
+          "safe_to_say": "The Japanese line he may give TG about timing, carrying none of the above. The only field here TG may hear."
+        }
       },
       "terms": [
         {
@@ -667,6 +799,14 @@ everything you are not changing.
         }
       ],
       "where_it_stands": "2 to 4 sentences. Where the ticket actually is and who owns the next move. This is for Rei only, so internal detail is fine here.",
+      "closes_when": [
+        {
+          "what": "One gate between here and a closed ticket. Include the ones that are nobody's item: an engineer assigned, a release, a feature flag switched on, TG's own verification.",
+          "who": "Who it sits with: You, TG, a named person, or Kraken CE",
+          "state": "done, now (his), blocked, or next (somebody else's)",
+          "note": "Optional. Cite the item number when an item already tracks this gate rather than restating it."
+        }
+      ],
       "events": [
         {
           "on": "YYYY-MM-DD of the message",
@@ -694,9 +834,14 @@ everything you are not changing.
           "title": "Imperative, under 12 words.",
           "prepared": {
             "what": "One line naming the thing you built for him. Omit the whole object when there was nothing you could do yourself.",
+            "conclusion": "The answer or recommendation, before the evidence.",
             "built_at": "YYYY-MM-DD HH:MM",
-            "table": {"columns": ["..."], "rows": [["..."]]},
-            "findings": ["What the work turned up, the so-what first."],
+            "table": {"columns": ["..."], "rows": [["A phrase, not a sentence", {"text": "The one gap", "tone": "gap"}]]},
+            "findings": ["What the work turned up, the so-what first. Four at most."],
+            "notes": [{"heading": "Label for information that is not a comparison row", "body": "The separate requirement or constraint."}],
+            "unanswered": ["What this work could not settle, and why it is still open."],
+            "files": [{"label": "What the document is, in the words he would call it", "path": "docs/name.pdf"}],
+            "meeting_use": {"label": "Open onsite version", "summary": "What is ready to say there."},
             "sources": [{"label": "", "url": ""}]
           },
           "steps": [

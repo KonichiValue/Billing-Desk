@@ -19,7 +19,16 @@
     "name": "Billing standup (TG)",
     "time_local": "10:30",
     "timezone": "Asia/Tokyo",
-    "days": ["Mon", "Wed", "Thu"]
+    "days": ["Mon", "Wed"]
+  },
+  "ask": {
+    "model": "auto"
+  },
+  "refresh": {
+    "model": "claude-sonnet-5-thinking-medium"
+  },
+  "prep": {
+    "model": "claude-sonnet-5-thinking-high"
   },
   "slack": {
     "search_scope": "all",

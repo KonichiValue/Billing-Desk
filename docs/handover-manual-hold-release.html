@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<title>手動ホールドの一括解除について</title>
+<style>
+@page{size:A4;margin:16mm 15mm}
+*{box-sizing:border-box}
+body{margin:0;font:11pt/1.75 "Hiragino Sans","Hiragino Kaku Gothic ProN",
+"Yu Gothic","Noto Sans JP",sans-serif;color:#14181f;
+-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.wrap{max-width:170mm;margin:0 auto;padding:10mm 8mm}
+h1{margin:0 0 2mm;font-size:16pt;line-height:1.4}
+.sub{margin:0 0 7mm;font-size:9.5pt;color:#5b6472}
+h2{margin:7mm 0 2mm;font-size:11.5pt;padding-bottom:1.5mm;
+border-bottom:1.2pt solid #1b3b6f;color:#1b3b6f}
+p{margin:0 0 2.5mm}
+ol,ul{margin:0 0 2.5mm;padding-left:6mm}
+li{margin-bottom:1.5mm}
+.ask{padding:3.5mm 4.5mm;background:#f2f6fd;border:0.8pt solid #c6d8f5;
+border-radius:2mm;margin:0 0 3mm}
+.ask b{color:#1b3b6f}
+.warn{padding:3.5mm 4.5mm;background:#fdf5f2;border:0.8pt solid #f0cfc2;
+border-radius:2mm;margin:0 0 3mm}
+.warn b{color:#8a3b1b}
+.url{font-family:ui-monospace,Menlo,monospace;font-size:9.5pt;
+word-break:break-all;background:#f4f6fa;padding:0.5mm 1.5mm;border-radius:1mm}
+table{width:100%;border-collapse:collapse;margin:0 0 3mm;font-size:10pt}
+th,td{border:0.8pt solid #ccd4e0;padding:2mm 3mm;text-align:left;
+vertical-align:top}
+th{background:#f4f6fa;width:34mm;font-weight:600}
+.qa{margin:0 0 3mm}
+.qa dt{font-weight:600;margin-bottom:0.8mm}
+.qa dd{margin:0 0 3mm;padding-left:5mm}
+.foot{margin-top:8mm;padding-top:3mm;border-top:0.8pt solid #ccd4e0;
+font-size:9pt;color:#5b6472}
+</style></head>
+<body><div class="wrap">
+
+<h1>手動ホールドの一括解除について</h1>
+<p class="sub">東京ガス株式会社 ご担当者様｜Kraken Technologies Japan</p>
+
+<h2>1. ご相談の内容</h2>
+<p>手動で付与されたホールドの一括解除は、現在Krakenで実施しております。この作業を
+東京ガス様ご自身で実施いただけるよう、権限をお渡ししたいと考えております。</p>
+<p>現在は、対象アカウントのCSVとホールド理由をSlackでいただき、Krakenがジョブを実行して
+完了をご報告する流れです。対象の一覧はすでに東京ガス様側でご用意いただいておりますので、
+権限をお渡しできれば、実行のタイミングまで東京ガス様側で決められるようになります。</p>
+
+<div class="ask">
+<p><b>先にお伝えしたいこと</b></p>
+<p>この作業は、別途ご相談しております「請求の強制発行」「請求書の強制印刷」と同じ
+権限で実施できます。ご担当者と権限範囲のご判断は、3件をまとめてご検討いただけます。</p>
+</div>
+
+<h2>2. 対象になるホールド</h2>
+<table>
+<tr><th>本資料の対象</th><td>手動で付与されたホールドの一括解除です。ホールド理由を
+指定して、まとめて解除します。</td></tr>
+<tr><th>対象外</th><td>システムが自動で付与したホールドの解除は、「請求の強制発行」の
+作業に含まれます。別チケットでご相談しております。</td></tr>
+</table>
+
+<h2>3. 作業の流れ</h2>
+<ol>
+<li>対象アカウントのCSVをご用意ください。1列のみで、1行目に
+<span class="url">account_number</span> というヘッダーが必要です。ホールド一覧から
+CSVで出力することもできます。<br>
+Billing → Billing Dashboard → New Issuance → 該当のホールド理由</li>
+<li>手動ホールドの管理画面を開きます。<br>
+<span class="url">https://support.tokyogas-kraken.energy/billing/manage-manual-holds/</span></li>
+<li>Tasks の <b>Invalidate manual holds in bulk</b> を開きます。</li>
+<li>CSVファイルをアップロードし、解除するホールド理由を選択して
+<b>Invalidate Holds</b> を実行します。</li>
+<li>Billing Dashboard の New Issuance で、解除したホールドが一覧から消えていることを
+ご確認ください。実行画面には成功の表示のみが出て、アカウント単位の結果は表示されません
+ので、確認はこの画面で行っていただく形になります。</li>
+</ol>
+
+<div class="warn">
+<p><b>解除しただけでは、請求書のホールドはその場では外れません</b></p>
+<p>解除の反映は、日次の請求処理の中で行われます。実行した時点では、すでにホールドが
+付いている請求書のホールドは残っておりますので、翌日の処理をお待ちいただく形になります。
+それより早く外す必要が生じた場合は、Krakenまでお知らせください。</p>
+</div>
+
+<h2>4. 権限と役割分担</h2>
+<table>
+<tr><th>必要な権限</th><td>現在の設定では BILLING_EXPERT 権限で実施できます。
+強制発行・強制印刷と同じ権限ですので、1回の付与で3件とも可能になります。</td></tr>
+<tr><th>東京ガス様</th><td>対象アカウントとホールド理由のご判断、作業の実施、
+ホールド一覧での結果確認。</td></tr>
+<tr><th>Kraken</th><td>権限の付与と管理、エラーが出た場合の原因調査。</td></tr>
+</table>
+<p>この権限では、手動ホールドの解除だけでなく、付与も可能になります。システム上、解除のみに
+絞ることはできません。範囲を絞る場合はシステム側での対応が必要となりますので、実現の可否と
+時期は、あらためてご連絡いたします。</p>
+
+<h2>5. よくあるご質問</h2>
+<dl class="qa">
+<dt>Q. すでに解除済みのアカウントが含まれていても問題ありませんか。</dt>
+<dd>問題ございません。指定した理由のホールドが付いていないアカウントは、エラーにならず
+そのままスキップされます。前回の依頼分と重複していても、そのままご実行いただけます。</dd>
+
+<dt>Q. 同じ請求書に複数のホールドが付いている場合はどうなりますか。</dt>
+<dd>指定したホールド理由のホールドのみが解除されます。別の理由のホールドは残りますので、
+その請求書は引き続き発行されません。</dd>
+
+<dt>Q. どのアカウントが解除されたかは分かりますか。</dt>
+<dd>実行画面ではアカウント単位の結果は表示されず、成功の表示のみとなります。結果は
+ホールド一覧の画面でご確認ください。</dd>
+
+<dt>Q. エラーになる場合、何を確認すればよいですか。</dt>
+<dd>CSVファイルに余分な文字や書式が含まれていると、エラーになることがございます。
+過去のご依頼でも数回発生しておりますので、まずファイルの中身をご確認ください。解決しない
+場合はKrakenまでお知らせください。</dd>
+
+<dt>Q. 解除すると請求書は発行されますか。</dt>
+<dd>解除だけでは発行されません。ホールドが外れたあと、通常の請求処理の中で発行されます。
+すぐに発行が必要な場合は、強制発行の作業をご検討ください。</dd>
+
+<dt>Q. 権限は誰に付与されますか。</dt>
+<dd>ご指名いただいた方のみに付与いたします。人数や交代の運用は、東京ガス様側で
+決めていただいて構いません。</dd>
+</dl>
+
+<h2>6. 今後の進め方</h2>
+<ol>
+<li>ご担当者を決めていただく。</li>
+<li>権限の範囲について、BILLING_EXPERT で問題ないかをご判断いただく。強制発行・
+強制印刷のご判断と合わせてご検討いただけます。</li>
+<li>Krakenで権限を付与し、付与状況をご報告する。</li>
+<li>操作説明の場を設ける。他の2件と同じ場でまとめて実施することも可能です。</li>
+</ol>
+
+<p class="foot">ご不明な点は、Billingスタンドアップまたは該当チケットにてお知らせください。</p>
+
+</div></body></html>

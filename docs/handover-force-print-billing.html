@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<title>請求書の強制印刷について</title>
+<style>
+@page{size:A4;margin:16mm 15mm}
+*{box-sizing:border-box}
+body{margin:0;font:11pt/1.75 "Hiragino Sans","Hiragino Kaku Gothic ProN",
+"Yu Gothic","Noto Sans JP",sans-serif;color:#14181f;
+-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.wrap{max-width:170mm;margin:0 auto;padding:10mm 8mm}
+h1{margin:0 0 2mm;font-size:16pt;line-height:1.4}
+.sub{margin:0 0 7mm;font-size:9.5pt;color:#5b6472}
+h2{margin:7mm 0 2mm;font-size:11.5pt;padding-bottom:1.5mm;
+border-bottom:1.2pt solid #1b3b6f;color:#1b3b6f}
+p{margin:0 0 2.5mm}
+ol,ul{margin:0 0 2.5mm;padding-left:6mm}
+li{margin-bottom:1.5mm}
+.ask{padding:3.5mm 4.5mm;background:#f2f6fd;border:0.8pt solid #c6d8f5;
+border-radius:2mm;margin:0 0 3mm}
+.ask b{color:#1b3b6f}
+.warn{padding:3.5mm 4.5mm;background:#fdf5f2;border:0.8pt solid #f0cfc2;
+border-radius:2mm;margin:0 0 3mm}
+.warn b{color:#8a3b1b}
+.step{margin:0 0 3mm;padding-left:6mm}
+.url{font-family:ui-monospace,Menlo,monospace;font-size:9.5pt;
+word-break:break-all;background:#f4f6fa;padding:0.5mm 1.5mm;border-radius:1mm}
+table{width:100%;border-collapse:collapse;margin:0 0 3mm;font-size:10pt}
+th,td{border:0.8pt solid #ccd4e0;padding:2mm 3mm;text-align:left;
+vertical-align:top}
+th{background:#f4f6fa;width:34mm;font-weight:600}
+.qa{margin:0 0 3mm}
+.qa dt{font-weight:600;margin-bottom:0.8mm}
+.qa dd{margin:0 0 3mm;padding-left:5mm}
+.foot{margin-top:8mm;padding-top:3mm;border-top:0.8pt solid #ccd4e0;
+font-size:9pt;color:#5b6472}
+</style></head>
+<body><div class="wrap">
+
+<h1>請求書の強制印刷について</h1>
+<p class="sub">印刷バッチへの追加作業｜東京ガス株式会社 ご担当者様｜Kraken Technologies Japan</p>
+
+<h2>1. ご相談の内容</h2>
+<p>発行済みの請求書を印刷バッチに追加する作業、いわゆる強制印刷は、現在Krakenで
+実施しております。この作業を東京ガス様ご自身で実施いただけるよう、権限をお渡し
+したいと考えております。</p>
+<p>現在は、対象のbilling document IDのCSVと理由をSlackでいただき、Krakenが操作して
+結果をご報告する流れです。権限をお渡しできれば、実施のタイミングを東京ガス様側で
+決められるようになります。</p>
+
+<div class="ask">
+<p><b>先にお伝えしたいこと</b></p>
+<p>この作業は、別途ご相談しております「請求の強制発行」と同じ権限で実施できます。
+ご担当者と権限範囲のご判断は、両方の作業をまとめてご検討いただけます。</p>
+</div>
+
+<h2>2. 強制発行との違い</h2>
+<table>
+<tr><th>請求の強制発行</th><td>まだ発行されていない請求を発行する作業です。ホールドの
+解除もこの作業で行います。</td></tr>
+<tr><th>請求書の強制印刷</th><td>すでに発行済みの請求書について、印刷物をあらためて
+作成し、印刷バッチに追加する作業です。本資料はこちらです。</td></tr>
+</table>
+<p>Slackでのご依頼では、いずれも「強制発行」という表記でいただくことがございます。
+権限も操作画面も別ですので、本資料では強制印刷と記載しております。</p>
+
+<h2>3. 作業の流れ</h2>
+<ol>
+<li>サポートサイトの「Jobs」から、<b>Force print billing documents</b> を開きます。<br>
+<span class="url">https://support.tokyogas-kraken.energy/jobs/force_print_billing_documents/</span></li>
+<li>対象の請求（billing document）のIDを指定します。件数が少ない場合は
+<b>ids</b> にカンマ区切りで直接入力し、まとまった件数の場合は <b>file</b> に
+CSVファイルをアップロードしてください。</li>
+<li>CSVファイルは1列のみで、1行目に <span class="url">billing_document_id</span> という
+ヘッダーが必要です。2行目以降にIDを1件ずつ記載してください。</li>
+<li>実行後、ジョブの実行結果画面で各件の結果をご確認ください。最後の行に
+「Successfully sent ○ documents out of ○」と成功件数が表示されます。</li>
+</ol>
+<p>ヘッダー行の有無が強制発行の作業と異なりますので、ご注意ください。強制発行では
+ヘッダー行は不要ですが、強制印刷では必要です。</p>
+
+<div class="warn">
+<p><b>同じIDでの再実行はお控えください</b></p>
+<p>同じbilling document IDでもう一度実行すると、印刷物がもう1通作成されます。実行前に
+結果画面をご確認いただき、重複がないかのご確認をお願いいたします。</p>
+</div>
+
+<h2>4. 対象になる帳票</h2>
+<p>対象は、封書の請求書と、ガス・電気セットのはがきです。それ以外の帳票を指定された
+場合は、その件はスキップされ、結果画面に「not an envelope or postcard」と表示されます。</p>
+<p>また、発行が確定していない請求は対象外です。まだ発行されていない請求については、
+強制発行の作業が先に必要になります。</p>
+
+<h2>5. 権限と役割分担</h2>
+<table>
+<tr><th>必要な権限</th><td>現在の設定では BILLING_EXPERT 権限で実施できます。
+強制発行と同じ権限ですので、1回の付与で両方の作業が可能になります。</td></tr>
+<tr><th>東京ガス様</th><td>対象の請求のご判断、作業の実施、実行結果画面での確認。</td></tr>
+<tr><th>Kraken</th><td>権限の付与と管理、エラーが出た場合の原因調査。</td></tr>
+</table>
+<p>BILLING_EXPERT 権限では、強制印刷のほかに以下の操作も可能です。</p>
+<ul>
+<li>請求関連のシステムジョブの実行。強制発行と強制印刷はどちらもここに含まれます。</li>
+<li>請求パスウェイの実行。</li>
+<li>手動ホールドの追加と解除、発行済みステートメントのホールド解除。</li>
+<li>ステートメントの発行済みへの変更、ホールド中の請求書とステートメントの
+リマインダー管理。</li>
+<li>アカウントの請求オプションの変更。</li>
+<li>貸倒計算ツールの利用、請求書へのレビュー追加。</li>
+</ul>
+<p>範囲が広いとご判断される場合、強制印刷のみを実行できる権限は現時点ではご用意が
+ございません。範囲を絞る場合はシステム側での対応が必要となりますので、実現の可否と
+時期は、あらためてご連絡いたします。強制発行については、その作業のみを実行できる
+権限がすでにございます。</p>
+
+<h2>6. よくあるご質問</h2>
+<dl class="qa">
+<dt>Q. 一度に何件まで実行できますか。</dt>
+<dd>CSVファイルで複数件をまとめて指定できます。件数の上限はございませんが、結果を
+確認しやすい単位に分けて実行いただくことをおすすめします。</dd>
+
+<dt>Q. 実行してから印刷物が出るまで、どのくらいかかりますか。</dt>
+<dd>実行すると印刷用のデータが作成され、その後は通常の印刷の流れに乗ります。実行
+結果画面に成功件数が出た時点で、印刷バッチへの追加は完了しております。</dd>
+
+<dt>Q. 誤って実行した場合、取り消せますか。</dt>
+<dd>作成された印刷物の取り消しはKraken側での対応が必要になります。実行前に対象IDの
+ご確認をお願いいたします。</dd>
+
+<dt>Q. 指定したIDが結果画面に出てこない場合は。</dt>
+<dd>「not found」と表示された場合はIDに誤りがある可能性がございます。「not an
+envelope or postcard」の場合は、対象外の帳票です。ご不明な場合はKrakenへご連絡ください。</dd>
+
+<dt>Q. 権限は誰に付与されますか。</dt>
+<dd>ご指名いただいた方のみに付与いたします。人数や交代の運用は、東京ガス様側で
+決めていただいて構いません。</dd>
+</dl>
+
+<h2>7. 今後の進め方</h2>
+<ol>
+<li>ご担当者を決めていただく。現在ご依頼をいただいている方をそのまま想定されるか、
+別に置かれるかも含めてご検討ください。</li>
+<li>権限の範囲について、BILLING_EXPERT で問題ないかをご判断いただく。強制発行の
+ご判断と合わせてご検討いただけます。</li>
+<li>Krakenで権限を付与し、付与状況をご報告する。</li>
+<li>操作説明の場を設ける。実際のファイルをご用意いただき、その場で操作していただく
+形を想定しています。</li>
+</ol>
+
+<p class="foot">ご不明な点は、Billingスタンドアップまたは該当チケットにてお知らせください。</p>
+
+</div></body></html>

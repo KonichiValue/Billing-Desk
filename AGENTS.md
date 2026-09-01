@@ -46,11 +46,47 @@ because the context is in the file:
   steps that need judgement, a person or a room. An item is not written until
   everything that could be done for him has been.
 - **"Check the codebase for X"** &mdash; the Kraken Core checkout is at
-  `~/Projects/kraken-core`, not here. Read `~/Projects/kraken-core/AGENTS.md`
-  before touching it, and never run `./src/manage.py` directly.
+ `~/Projects/kraken-core`, not here. Read `~/Projects/kraken-core/AGENTS.md`
+ before touching it, and never run `./src/manage.py` directly.
+- **"What does the data say"** &mdash; TG's production data is in Databricks, and
+ `.cursor/mcp.json` declares it as `databricks-tg`. Read only: a `SELECT` to see
+ how many accounts a hold covers or what a charge actually did is the point, and
+ nothing here ever writes to it. A single account is usually faster to read on
+ `support.tokyogas-kraken.energy/accounts/<A-...>`. Say which query or page an
+ answer came from, and if the server is not there, say that instead of guessing.
 - **"What's the status of X"** &mdash; answer from the ticket's block, and follow
   the `threads` links if the answer is not there. Say plainly when the file is
   stale rather than guessing.
+
+## A question asked from the page
+
+Every job and every ticket on the desk carries an **Ask or change** box, and
+`prompt-ask.md` is what runs behind it. The question arrives with the ticket, the
+item, its draft and everything already asked about it attached, and the answer
+goes back onto that card, in `state/asks.json`. Asked from inside an answer it is
+a follow-up, and that exchange arrives above it, so "why" means the last thing
+said and not the job. Half of what arrives there is an
+instruction rather than a question, "rewrite this with the latest from the
+thread" most often, so it edits the item and reports what it changed.
+
+Two things follow for a chat working in this repo. `output/desk.md` carries those
+questions and answers under the jobs they were asked about, so **read them before
+contradicting one**: he is looking at that answer on the card. And when he asks
+the same kind of thing in a chat, answer it the same way `prompt-ask.md` says to,
+because the answer should not depend on where he asked.
+
+The same box sits on the speaking view, where the card is the words rather than
+the work. An ask from there arrives with the ticket's `prep` block and the session
+it was written for, and a change means rewriting `prep.script` or `prep.pushback`
+in full, in the house style, since he reads it out to TG.
+
+One ask is not about a job. The box above the tickets asks about the day itself,
+what to start on, whether tomorrow is covered, and it arrives with every open job
+attached. Answer those in item numbers, and read the board rather than the titles
+it hands you.
+
+An ask may change the item it was asked about. It may never change item state,
+which is `tick.py`'s alone, and it may never send anything.
 
 ## "refresh"
 
@@ -64,7 +100,23 @@ affect, rebuild both files, and report only what changed. Closed items stay
 closed and numbers never change.
 
 `./tick.py` on its own prints the same status without spending a single token,
-so use that when he only wants to know where he is.
+so use that when he only wants to know where he is. `./digest.py` prints the
+whole readable board in one call, which is how a sweep should read it rather than
+opening `state/board.json` a dozen times. `./tick.py --rebuild` redraws both
+pages without moving anything.
+
+**Learning something in a chat is not a reason to leave the board stale.**
+Whenever work in a chat turns up something that belongs on the page, a ticket
+that moved, a draft that is now wrong, work you did on his behalf, put it on the
+board and run `./tick.py --rebuild` in the same turn, without being asked. He
+reads the page, not the chat, and a chat that knows more than the page is the one
+failure this repo exists to prevent. That does not mean a full sweep every time:
+write the thing you learned, rebuild, and say in one line what changed.
+
+The rebuild half of that is for a chat and a terminal only. `serve.py` renders
+both pages on every load, so an answer to the **Ask or change** box that spends a
+step on `--rebuild` is a step Rei watches a spinner through for a page that was
+going to be redrawn anyway. `prompt-ask.md` says so where it matters.
 
 ## "prep" or "build the script"
 
@@ -126,16 +178,22 @@ but cannot change it; the board is the only truth about what is closed.
    ステートメント, インテグリティチェック, リゾルバ). Furigana as `{漢字|かんじ}`
    with the reading on the whole word, never per character.
 6. **Never invent a source.** If you cannot quote the message something came
-   from, say you could not find it.
-7. **Respect a hold.** When an item says "do not send this yet", do not draft
+ from, say you could not find it.
+7. **A Japanese term in an English line carries its meaning.** The page adds it
+ from the board's `glossary`, once per card and once again in the script, so
+ write the English plainly and add any missing term to `glossary` rather than
+ writing the brackets by hand. An answer in a chat or on a card is not glossed
+ for you, so gloss it yourself there: 閉栓翌日開栓 (open the day after close).
+8. **Respect a hold.** When an item says "do not send this yet", do not draft
    around it or send it because Rei asked casually. Say what it is waiting on and
    confirm he wants to override.
 
 ## Changing what lands on the pages
 
 Edit the prompts, not the output. `prompt-refresh.md` is the sweep behind
-"refresh", `prompt-prep.md` writes the script on top of that sweep, and
-`prompt-post.md` folds the meeting note in. The shape in `board.py` is the
+"refresh", `prompt-prep.md` writes the script on top of that sweep,
+`prompt-post.md` folds the meeting note in, and `prompt-ask.md` answers one
+question about one job. The shape in `board.py` is the
 contract the renderers expect, so if you add a field, update `render_desk.py`,
 `render_standup.py` and `render_desk_md.py` in the same change.
 

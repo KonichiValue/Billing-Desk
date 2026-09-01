@@ -85,6 +85,9 @@ while true; do
   attempt=$((attempt + 1))
   log "attempt $attempt, looking for today's meeting note"
 
+  # A copy of the board before the agent touches it. state/ is not in git.
+  python3 keep.py post >>"$LOG" 2>&1 || true
+
   cursor-agent \
     --print \
     --force \

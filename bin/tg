@@ -7,6 +7,9 @@
 #   tg 2 -w Kevin       sent, now sitting with Kevin
 #   tg 2 --mine         he replied, it is yours again
 #   tg 5 --dropped -n "TG answered it themselves"
+#   tg ask 8 "..."      ask about job 8, or tell it what to change on job 8
+#   tg ask 託送HOLD "..." same thing about a whole ticket
+#   tg ask desk "..."   about the day rather than one job, answered in numbers
 #   tg refresh          sweep every open ticket and thread, rebuild, open
 #   tg prep             sweep, then write today's standup script
 #   tg chat             open the folder in Cursor to hand work over
@@ -94,6 +97,82 @@ stop_server() {
     || print -r -- "no desk server running"
 }
 
+ask() {
+  # The same ask the page makes, from a terminal. It goes through the server so
+  # both places share one lock and one record: whatever is asked here is on the
+  # card next time the page is opened, and the other way round.
+  local what="${1:-}" question="${2:-}" ref url key
+  [[ -n "$what" && -n "$question" ]] || {
+    print -u2 'usage: tg ask <job number, ticket, or desk> "your question"'
+    return 1
+  }
+  # A number is a job, a tag is a ticket, and "desk" is the day: what to start
+  # on, whether tomorrow is covered, anything that belongs to no one card.
+  case "$what" in
+    (<->) ref="item:$what" ;;
+    (desk|board|all) ref="board" ;;
+    (*) ref="ticket:$what" ;;
+  esac
+  url="$(serve_url)" || { print -u2 "desk server would not start"; return 1 }
+  key="${url##*k=}"
+
+  local out
+  out="$(REF="$ref" Q="$question" PORT="$PORT" KEY="$key" ASKS="state/asks.json" \
+    python3 - <<'PY'
+import json, os, sys, time, urllib.error, urllib.request
+
+base = "http://127.0.0.1:%s" % os.environ["PORT"]
+key = os.environ["KEY"]
+body = json.dumps({"ref": os.environ["REF"], "question": os.environ["Q"]}).encode()
+req = urllib.request.Request(
+    f"{base}/api/ask?k={key}", data=body,
+    headers={"Content-Type": "application/json"})
+try:
+    started = json.load(urllib.request.urlopen(req, timeout=10))
+except urllib.error.HTTPError as exc:
+    print(json.load(exc).get("error", exc.reason), file=sys.stderr)
+    raise SystemExit(1)
+
+# The agent takes a minute or two, and a terminal that says nothing for two
+# minutes looks broken. One line, rewritten only when it has something new to
+# say, so a log of this run is not thirty copies of the same sentence.
+said = ""
+while True:
+    time.sleep(3)
+    state = json.load(urllib.request.urlopen(f"{base}/api/status?k={key}", timeout=10))
+    if state["state"] != "running":
+        break
+    if state["message"] != said:
+        said = state["message"]
+        print(f"{said}...", file=sys.stderr, flush=True)
+
+rows = json.loads(open(os.environ["ASKS"], encoding="utf-8").read())["asks"]
+mine = [r for r in rows if r.get("id") == started.get("id")]
+if not mine:
+    print("the answer did not land in state/asks.json", file=sys.stderr)
+    raise SystemExit(1)
+print(mine[0].get("answer") or "no answer came back")
+raise SystemExit(0 if mine[0].get("state") == "answered" else 1)
+PY
+)" || { [[ -n "$out" ]] && print -r -- "$out"; return 1 }
+  print -r -- "$out"
+}
+
+agent_model() {
+  # $1 is refresh or prep, matching the key in config.json. A sweep is not
+  # words read out to Tokyo Gas, so it does not need the account's heaviest
+  # model; TG_MODEL still overrides for one run.
+  [[ -n "${TG_MODEL:-}" ]] && { print -r -- "$TG_MODEL"; return; }
+  python3 -c "
+import json, sys
+try:
+    m = json.load(open('config.json', encoding='utf-8')).get(sys.argv[1], {}).get('model')
+except Exception:
+    m = None
+print(m or 'auto')
+" "$1"
+}
+
 run_agent() {
   # $1 is the prompt file, $2 is what to print while it works.
   if ! command -v cursor-agent >/dev/null 2>&1; then
@@ -109,9 +188,16 @@ run_agent() {
   mkdir -p state
   print -r -- "$$ terminal $(date +%H:%M)" >"$LOCK"
   trap 'rm -f "$LOCK"' EXIT INT TERM
+  # A copy of the board before the agent touches it. state/ is not in git.
+  python3 keep.py "${1:t:r}" >/dev/null 2>&1 || true
   print -r -- "$2"
+  local kind="${1:t:r}"  # prompt-refresh.md -> refresh, matching config.json
+  kind="${kind#prompt-}"
+  local model="$(agent_model "$kind")"
+  local -a model_arg=()
+  [[ "$model" != "auto" ]] && model_arg=(--model "$model")
   cursor-agent --print --force --approve-mcps --trust \
-    --workspace "$REPO" ${TG_MODEL:+--model "$TG_MODEL"} \
+    --workspace "$REPO" "${model_arg[@]}" \
     "$(cat "$1")"
 }
 
@@ -124,6 +210,7 @@ case "${1:-}" in
   prep|p)
     run_agent prompt-prep.md "Sweeping everything, then writing today's script..." || exit 1
     page ;;
+  ask|a)         shift; ask "$@" ;;
   chat)          open -a Cursor "$REPO" ;;
   phone)         phone_url "$@" ;;
   stop)          stop_server ;;
@@ -132,6 +219,6 @@ case "${1:-}" in
     python3 render_desk_md.py "$BOARD" output/desk.md ;;
   post)          ./run_post.sh --force ;;
   open)          page ;;
-  -h|--help|help) sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//' ;;
+  -h|--help|help) sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//' ;;
   *)             python3 tick.py "$@" ;;
 esac

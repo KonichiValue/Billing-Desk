@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<title>請求の強制発行について</title>
+<style>
+@page{size:A4;margin:16mm 15mm}
+*{box-sizing:border-box}
+body{margin:0;font:11pt/1.75 "Hiragino Sans","Hiragino Kaku Gothic ProN",
+"Yu Gothic","Noto Sans JP",sans-serif;color:#14181f;
+-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.wrap{max-width:170mm;margin:0 auto;padding:10mm 8mm}
+h1{margin:0 0 2mm;font-size:16pt;line-height:1.4}
+.sub{margin:0 0 7mm;font-size:9.5pt;color:#5b6472}
+h2{margin:7mm 0 2mm;font-size:11.5pt;padding-bottom:1.5mm;
+border-bottom:1.2pt solid #1b3b6f;color:#1b3b6f}
+p{margin:0 0 2.5mm}
+ol,ul{margin:0 0 2.5mm;padding-left:6mm}
+li{margin-bottom:1.5mm}
+.ask{padding:3.5mm 4.5mm;background:#f2f6fd;border:0.8pt solid #c6d8f5;
+border-radius:2mm;margin:0 0 3mm}
+.ask b{color:#1b3b6f}
+.step{margin:0 0 3mm;padding-left:6mm}
+.url{font-family:ui-monospace,Menlo,monospace;font-size:9.5pt;
+word-break:break-all;background:#f4f6fa;padding:0.5mm 1.5mm;border-radius:1mm}
+table{width:100%;border-collapse:collapse;margin:0 0 3mm;font-size:10pt}
+th,td{border:0.8pt solid #ccd4e0;padding:2mm 3mm;text-align:left;
+vertical-align:top}
+th{background:#f4f6fa;width:34mm;font-weight:600}
+.qa{margin:0 0 3mm}
+.qa dt{font-weight:600;margin-bottom:0.8mm}
+.qa dd{margin:0 0 3mm;padding-left:5mm}
+.foot{margin-top:8mm;padding-top:3mm;border-top:0.8pt solid #ccd4e0;
+font-size:9pt;color:#5b6472}
+</style></head>
+<body><div class="wrap">
+
+<h1>請求の強制発行について</h1>
+<p class="sub">東京ガス株式会社 ご担当者様｜Kraken Technologies Japan</p>
+
+<h2>1. ご相談の内容</h2>
+<p>請求の強制発行は、現在Krakenで実施しております。この作業を東京ガス様ご自身で
+実施いただけるよう、権限をお渡ししたいと考えております。</p>
+<p>発行の判断とタイミングを東京ガス様側で決められるようになりますので、Krakenへの
+ご依頼をお待ちいただく必要がなくなります。</p>
+
+<div class="ask">
+<p><b>本日お願いしたいこと</b></p>
+<p>この作業を担当される方を、1名から数名ご検討ください。本日この場でお決めいただく
+必要はございません。実際の操作説明は、後日あらためて場を設けさせていただきます。</p>
+</div>
+
+<h2>2. 作業の流れ</h2>
+<ol>
+<li>サポートサイトの「Jobs」から、<b>Issue billing documents</b> を開きます。<br>
+<span class="url">https://support.tokyogas-kraken.energy/jobs/issue_billing_documents/</span></li>
+<li>対象の請求（billing document）のIDを入力します。カンマ区切りで直接入力するか、
+1列のみのCSVファイルをアップロードしてください。ヘッダー行は不要です。</li>
+<li>ホールドを解除して発行する場合は、<b>Release holds</b> にチェックを入れます。</li>
+<li>実行すると、バッチ画面へのリンクが表示されます。各件の結果はこの画面で
+ご確認ください。</li>
+</ol>
+
+<h2>3. 権限と役割分担</h2>
+<table>
+<tr><th>必要な権限</th><td>現在の設定では BILLING_EXPERT 権限で実施できます。
+強制発行のみを実行できる権限を、新しくご用意することも可能です。</td></tr>
+<tr><th>東京ガス様</th><td>対象の請求のご判断、作業の実施、バッチ画面での結果確認。</td></tr>
+<tr><th>Kraken</th><td>権限の付与と管理、エラーが出た場合の原因調査。</td></tr>
+</table>
+<p>BILLING_EXPERT 権限では、強制発行のほかに以下の操作も可能です。範囲が広いと
+ご判断される場合は、強制発行のみを実行できる権限をご用意いたします。</p>
+<ul>
+<li>請求関連のシステムジョブの実行。強制発行以外の請求ジョブも含みます。</li>
+<li>請求パスウェイの実行。</li>
+<li>手動ホールドの追加と解除、発行済みステートメントのホールド解除。</li>
+<li>ステートメントの発行済みへの変更、ホールド中の請求書とステートメントの
+リマインダー管理。</li>
+<li>アカウントの請求オプションの変更。</li>
+<li>貸倒計算ツールの利用、請求書へのレビュー追加。</li>
+</ul>
+
+<h2>4. よくあるご質問</h2>
+<dl class="qa">
+<dt>Q. ホールドされている請求も発行されますか。</dt>
+<dd>Release holds にチェックを入れた場合、解除可能なホールドのみを解除して発行します。
+それ以外のホールドが付いている請求は発行されず、結果画面にその旨が表示されます。</dd>
+
+<dt>Q. 一度に何件まで実行できますか。</dt>
+<dd>CSVファイルで複数件をまとめて指定できます。件数が多い場合は、確認しやすい単位に
+分けて実行いただくことをおすすめします。</dd>
+
+<dt>Q. 実行が失敗した場合はどうすればよいですか。</dt>
+<dd>バッチ画面で失敗した件名をご確認のうえ、Krakenへご連絡ください。ログの確認と
+原因調査はKrakenで行います。</dd>
+
+<dt>Q. 誤って実行した場合、取り消せますか。</dt>
+<dd>発行後の取り消しはKraken側での対応が必要になります。実行前に対象IDのご確認を
+お願いいたします。</dd>
+
+<dt>Q. 権限は誰に付与されますか。</dt>
+<dd>ご指名いただいた方のみに付与いたします。人数や交代の運用は、東京ガス様側で
+決めていただいて構いません。</dd>
+</dl>
+
+<h2>5. 今後の進め方</h2>
+<ol>
+<li>ご担当者を決めていただく。1名から数名を想定しています。</li>
+<li>上記の権限の範囲で問題ないか、強制発行のみの権限が必要かをご判断いただく。</li>
+<li>Krakenで権限を付与し、付与状況を確認する。</li>
+<li>操作説明の場を設ける。実際のファイルをご用意いただき、その場で操作していただく
+形を想定しています。</li>
+</ol>
+
+<p class="foot">ご不明な点は、Billingスタンドアップまたは該当チケットにてお知らせください。</p>
+
+</div></body></html>

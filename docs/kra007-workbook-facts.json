@@ -1,0 +1,2658 @@
+{
+ "source_file": "インターフェース項目定義書(KRA007(E2135_封書検針票)_ver0.11.xlsx",
+ "read_on": "2026-08-28",
+ "sheets": [
+  "表紙",
+  "更新履歴",
+  "封書検針票IF",
+  "左欄_中欄_右欄_編集内容",
+  "マスタ"
+ ],
+ "interface": {
+  "name": "封書検針票",
+  "length": "可変長",
+  "encoding": "UTF-8",
+  "separator": "タブ",
+  "note": "ヘッダー・データ・フッター構成。データが0件でもヘッダー・フッターは作成する。"
+ },
+ "if_columns": {
+  "B": "No",
+  "C": "項目名",
+  "E": "データ種別",
+  "F": "全角文字数",
+  "G": "データ長(byte)",
+  "H": "開始位置(固定長)",
+  "I": "桁埋め",
+  "J": "トリム",
+  "K": "全角半角",
+  "L": "備考",
+  "M": "sample",
+  "O": "HUB編集仕様",
+  "P": "Kraken JSON"
+ },
+ "band_columns": {
+  "B": "欄の種別",
+  "C": "項目",
+  "D": "同一種別内の相対行位置",
+  "E": "欄内の横位置",
+  "F": "固定／パラメタ",
+  "G": "インデントなど",
+  "H": "sample",
+  "I": "Kraken JSON",
+  "K": "sample（PDFの場合）",
+  "L": "備考"
+ },
+ "if_rows": [
+  {
+   "no": "1.0",
+   "name": "共通部_帳票タイトル",
+   "kind": "文字列",
+   "bytes": "18.0",
+   "note": "",
+   "sample": "例）ご使用量のお知らせ",
+   "hub": "固定",
+   "json": ""
+  },
+  {
+   "no": "2.0",
+   "name": "共通部_帳票発行年",
+   "kind": "文字列",
+   "bytes": "4.0",
+   "note": "",
+   "sample": "例）2024",
+   "hub": "HUBで発行日を設定",
+   "json": ""
+  },
+  {
+   "no": "3.0",
+   "name": "共通部_帳票発行月",
+   "kind": "文字列",
+   "bytes": "2.0",
+   "note": "",
+   "sample": "例）11",
+   "hub": "HUBで発行日を設定",
+   "json": ""
+  },
+  {
+   "no": "4.0",
+   "name": "共通部_帳票発行日",
+   "kind": "文字列",
+   "bytes": "2.0",
+   "note": "",
+   "sample": "例）12",
+   "hub": "HUBで発行日を設定",
+   "json": ""
+  },
+  {
+   "no": "5.0",
+   "name": "共通部_郵送先_郵便番号",
+   "kind": "文字列",
+   "bytes": "8.0",
+   "note": "",
+   "sample": "例）104-0045",
+   "hub": "Krakenパラメタ",
+   "json": "customer_context.billing_address_context.billing_address_post_code"
+  },
+  {
+   "no": "6.0",
+   "name": "共通部_郵送先_住所1",
+   "kind": "文字列",
+   "bytes": "40.0",
+   "note": "",
+   "sample": "例）東京都世田谷区上北沢",
+   "hub": "Krakenパラメタ",
+   "json": "customer_context.billing_address_context.billing_address_line_1"
+  },
+  {
+   "no": "7.0",
+   "name": "共通部_郵送先_住所2",
+   "kind": "文字列",
+   "bytes": "40.0",
+   "note": "",
+   "sample": "例）4-12-25",
+   "hub": "Krakenパラメタ",
+   "json": "customer_context.billing_address_context.billing_address_line_2"
+  },
+  {
+   "no": "8.0",
+   "name": "共通部_郵送先_住所3",
+   "kind": "文字列",
+   "bytes": "40.0",
+   "note": "",
+   "sample": "例）",
+   "hub": "Krakenパラメタ",
+   "json": "customer_context.billing_address_context.billing_address_line_3"
+  },
+  {
+   "no": "9.0",
+   "name": "共通部_郵送先_住所4",
+   "kind": "文字列",
+   "bytes": "40.0",
+   "note": "",
+   "sample": "例）上北沢ビル A-205",
+   "hub": "Krakenパラメタ",
+   "json": "customer_context.billing_address_context.billing_address_line_4"
+  },
+  {
+   "no": "10.0",
+   "name": "共通部_郵送先_住所5",
+   "kind": "文字列",
+   "bytes": "40.0",
+   "note": "",
+   "sample": "例）",
+   "hub": "Krakenパラメタ",
+   "json": "customer_context.billing_address_context.billing_address_line_5"
+  },
+  {
+   "no": "11.0",
+   "name": "共通部_郵送先_店名屋号等",
+   "kind": "文字列",
+   "bytes": "40.0",
+   "note": "",
+   "sample": "例）（株）上北沢コーポ",
+   "hub": "Krakenパラメタ",
+   "json": "customer_context.billing_address_context.billing_address_line_6"
+  },
+  {
+   "no": "12.0",
+   "name": "共通部_郵送先_お客さま名",
+   "kind": "文字列",
+   "bytes": "40.0",
+   "note": "",
+   "sample": "例）上北沢　太郎　様",
+   "hub": "Krakenパラメタ",
+   "json": "customer_context.billing_address_context.billing_customer_name"
+  },
+  {
+   "no": "15.0",
+   "name": "共通部_社用コード",
+   "kind": "文字列",
+   "bytes": "30.0",
+   "note": "名寄キー項目",
+   "sample": "例）999B0-A-12345678-kraken1002",
+   "hub": "Krakenパラメタ",
+   "json": "customer_context.company_code"
+  },
+  {
+   "no": "16-1",
+   "name": "共通部_帳票表示用問い合わせ先課所名１",
+   "kind": "文字列",
+   "bytes": "30.0",
+   "note": "",
+   "sample": "例）ガス漏れ時連絡先（２４時間）",
+   "hub": "固定",
+   "json": ""
+  },
+  {
+   "no": "16-2",
+   "name": "共通部_帳票表示用問い合わせ先課所名２",
+   "kind": "文字列",
+   "bytes": "30.0",
+   "note": "",
+   "sample": "例）東京ガスお客さまセンター",
+   "hub": "固定",
+   "json": ""
+  },
+  {
+   "no": "16-3",
+   "name": "共通部_帳票表示用問い合わせ先課所名３",
+   "kind": "文字列",
+   "bytes": "30.0",
+   "note": "",
+   "sample": "例）（携帯・ＩＰ電話等からの場合）",
+   "hub": "固定",
+   "json": ""
+  },
+  {
+   "no": "16-4",
+   "name": "共通部_帳票表示用問い合わせ先課所名４",
+   "kind": "文字列",
+   "bytes": "30.0",
+   "note": "",
+   "sample": "例）ガス機器修理等のご連絡先",
+   "hub": "固定",
+   "json": ""
+  },
+  {
+   "no": "16-5",
+   "name": "共通部_帳票表示用問い合わせ先課所名５",
+   "kind": "文字列",
+   "bytes": "30.0",
+   "note": "",
+   "sample": "例）",
+   "hub": "固定\n⇒固定でブランクとする",
+   "json": ""
+  },
+  {
+   "no": "17-1",
+   "name": "共通部_帳票表示用問合せ先電話番号１",
+   "kind": "文字列",
+   "bytes": "14.0",
+   "note": "",
+   "sample": "例）0570-002299",
+   "hub": "固定",
+   "json": ""
+  },
+  {
+   "no": "17-2",
+   "name": "共通部_帳票表示用問合せ先電話番号２",
+   "kind": "文字列",
+   "bytes": "14.0",
+   "note": "",
+   "sample": "例）0570-002211",
+   "hub": "固定",
+   "json": ""
+  },
+  {
+   "no": "17-3",
+   "name": "共通部_帳票表示用問合せ先電話番号３",
+   "kind": "文字列",
+   "bytes": "14.0",
+   "note": "",
+   "sample": "例）03-3344-9100",
+   "hub": "固定",
+   "json": ""
+  },
+  {
+   "no": "17-4",
+   "name": "共通部_帳票表示用問合せ先電話番号４",
+   "kind": "文字列",
+   "bytes": "14.0",
+   "note": "",
+   "sample": "例）0570-002211",
+   "hub": "固定",
+   "json": ""
+  },
+  {
+   "no": "17-5",
+   "name": "共通部_帳票表示用問合せ先電話番号５",
+   "kind": "文字列",
+   "bytes": "14.0",
+   "note": "",
+   "sample": "例）",
+   "hub": "固定\n⇒固定でブランクとする",
+   "json": ""
+  },
+  {
+   "no": "18-1",
+   "name": "共通部_問合せ先情報受付時間１",
+   "kind": "文字列",
+   "bytes": "40.0",
+   "note": "",
+   "sample": "例）",
+   "hub": "固定",
+   "json": ""
+  },
+  {
+   "no": "18-2",
+   "name": "共通部_問合せ先情報受付時間２",
+   "kind": "文字列",
+   "bytes": "40.0",
+   "note": "",
+   "sample": "例）受付時間：月～土　９：００～１９：００",
+   "hub": "固定",
+   "json": ""
+  },
+  {
+   "no": "18-3",
+   "name": "共通部_問合せ先情報受付時間３",
+   "kind": "文字列",
+   "bytes": "40.0",
+   "note": "",
+   "sample": "例）　　　　　日祝　　９：００～１７：００",
+   "hub": "固定",
+   "json": ""
+  },
+  {
+   "no": "18-4",
+   "name": "共通部_問合せ先情報受付時間４",
+   "kind": "文字列",
+   "bytes": "40.0",
+   "note": "",
+   "sample": "例）受付時間：月～土　９：００～１９：００",
+   "hub": "固定",
+   "json": ""
+  },
+  {
+   "no": "18-5",
+   "name": "共通部_問合せ先情報受付時間５",
+   "kind": "文字列",
+   "bytes": "40.0",
+   "note": "",
+   "sample": "例）",
+   "hub": "固定",
+   "json": ""
+  },
+  {
+   "no": "22.0",
+   "name": "共通部_差出人会社名",
+   "kind": "文字列",
+   "bytes": "28.0",
+   "note": "",
+   "sample": "例）（差出人）東京ガス株式会社",
+   "hub": "固定",
+   "json": ""
+  },
+  {
+   "no": "23.0",
+   "name": "共通部_差出人郵便番号",
+   "kind": "文字列",
+   "bytes": "10.0",
+   "note": "",
+   "sample": "例）〒163-1080",
+   "hub": "固定",
+   "json": ""
+  },
+  {
+   "no": "24.0",
+   "name": "共通部_差出人住所",
+   "kind": "文字列",
+   "bytes": "80.0",
+   "note": "",
+   "sample": "例）東京都新宿区西新宿3-7-1 　　　　　　　　新宿パークタワー私書箱第8112号",
+   "hub": "固定",
+   "json": ""
+  },
+  {
+   "no": "25.0",
+   "name": "共通部_検針年",
+   "kind": "文字列",
+   "bytes": "4.0",
+   "note": "",
+   "sample": "例）2024",
+   "hub": "Krakenパラメタ",
+   "json": "billing_document_context.billed_at"
+  },
+  {
+   "no": "26.0",
+   "name": "共通部_検針月",
+   "kind": "文字列",
+   "bytes": "2.0",
+   "note": "",
+   "sample": "例） 1",
+   "hub": "Krakenパラメタ",
+   "json": "billing_document_context.billed_at"
+  },
+  {
+   "no": "27.0",
+   "name": "共通部_お客さま通知番号",
+   "kind": "文字列",
+   "bytes": "14.0",
+   "note": "",
+   "sample": "例）1012-345-6789、4012-345-6789",
+   "hub": "Krakenパラメタ",
+   "json": "supply_point_context.customer_number"
+  },
+  {
+   "no": "28.0",
+   "name": "共通部_ご請求金額テキスト",
+   "kind": "文字列",
+   "bytes": "22.0",
+   "note": "",
+   "sample": "例）ご請求金額（円）",
+   "hub": "固定",
+   "json": ""
+  },
+  {
+   "no": "29.0",
+   "name": "共通部_請求金額",
+   "kind": "文字列",
+   "bytes": "18.0",
+   "note": "",
+   "sample": "例）*7,314円",
+   "hub": "Krakenパラメタ",
+   "json": "payment_context.payment_amount"
+  },
+  {
+   "no": "30.0",
+   "name": "共通部_支払方法別文言１",
+   "kind": "文字列",
+   "bytes": "14.0",
+   "note": "",
+   "sample": "例）お支払い方法\n口座振替予定日",
+   "hub": "Krakenパラメタ",
+   "json": "payment_context.payment_method"
+  },
+  {
+   "no": "31.0",
+   "name": "共通部_支払方法別文言２",
+   "kind": "文字列",
+   "bytes": "20.0",
+   "note": "",
+   "sample": "例）・標準払込書の場合→払込み\n・請求書の場合→請求書払い\n・口座振替の場合→2024年11月12日\n・カード払いの場合→クレジットカード払い\n・電子請求の場合→電子請求",
+   "hub": "Krakenパラメタ",
+   "json": "payment_context.payment_method"
+  },
+  {
+   "no": "32.0",
+   "name": "共通部_請求日テキスト",
+   "kind": "文字列",
+   "bytes": "14.0",
+   "note": "次回検針予定日",
+   "sample": "例）次回検針予定日",
+   "hub": "固定\n（ガス契約ありの場合のみ出力、ただし、閉栓またはSWで契約終了の場合は出力しない）",
+   "json": ""
+  },
+  {
+   "no": "33.0",
+   "name": "共通部_請求日",
+   "kind": "文字列",
+   "bytes": "14.0",
+   "note": "次回検針予定日",
+   "sample": "例）2024年12月11日",
+   "hub": "Krakenパラメタ\n（ガス契約ありの場合のみ出力、ただし、閉栓またはSWで契約終了の場合は出力しない）",
+   "json": "supply_point_context.next_reading_date"
+  },
+  {
+   "no": "34.0",
+   "name": "共通部_使用者_店名屋号等",
+   "kind": "文字列",
+   "bytes": "40.0",
+   "note": "",
+   "sample": "例）",
+   "hub": "Krakenパラメタ",
+   "json": "supply_point_context.supply_usage_address_context.postal_address_line_4\n→supply_point_context.supply_usage_address_context.postal_address_line_6"
+  },
+  {
+   "no": "35.0",
+   "name": "共通部_使用者_お客さま名",
+   "kind": "文字列",
+   "bytes": "40.0",
+   "note": "",
+   "sample": "例）有）○○　様",
+   "hub": "Krakenパラメタ",
+   "json": "supply_point_context.supply_usage_address_context.postal_customer_name"
+  },
+  {
+   "no": "36.0",
+   "name": "共通部_使用者_住所1",
+   "kind": "文字列",
+   "bytes": "76.0",
+   "note": "",
+   "sample": "例）千葉県いすみ市下○谷 555-2",
+   "hub": "Krakenパラメタ",
+   "json": "supply_point_context.supply_usage_address_context.postal_address_line_1 supply_point_context.supply_usage_address_context.postal_address_line_2"
+  },
+  {
+   "no": "37.0",
+   "name": "共通部_使用者_住所2",
+   "kind": "文字列",
+   "bytes": "76.0",
+   "note": "",
+   "sample": "例）○和ハイム 602",
+   "hub": "Krakenパラメタ",
+   "json": "supply_point_context.supply_usage_address_context.postal_address_line_3 supply_point_context.supply_usage_address_context.postal_address_line_4"
+  },
+  {
+   "no": "38.0",
+   "name": "帳票ＩＤ",
+   "kind": "文字列",
+   "bytes": "8.0",
+   "note": "",
+   "sample": "例）*",
+   "hub": "固定\n⇒半角アスタリスク「*」とする\nKrakenパラメタ",
+   "json": "billing_document_context.template_id"
+  },
+  {
+   "no": "39.0",
+   "name": "帳票表示用総ページ数",
+   "kind": "文字列",
+   "bytes": "4.0",
+   "note": "",
+   "sample": "例）2",
+   "hub": "同一郵送先の総ページ数",
+   "json": ""
+  },
+  {
+   "no": "40.0",
+   "name": "帳票表示用ページ数",
+   "kind": "文字列",
+   "bytes": "4.0",
+   "note": "",
+   "sample": "例）1",
+   "hub": "同一郵送先で連番",
+   "json": ""
+  },
+  {
+   "no": "41.0",
+   "name": "左欄_タイトル",
+   "kind": "文字列",
+   "bytes": "32.0",
+   "note": "",
+   "sample": "例）料金内訳、メーター別",
+   "hub": "料金内訳ページの場合、「料金内訳」\n総合のメーター内訳ページの場合、「メーター別」\n⇒固定\n11月時点では総合契約の機能を実装しないため、固定で「料金内訳」と出力する",
+   "json": ""
+  },
+  {
+   "no": "42.0",
+   "name": "中欄_タイトル",
+   "kind": "文字列",
+   "bytes": "34.0",
+   "note": "",
+   "sample": "例）お知らせ",
+   "hub": "固定",
+   "json": ""
+  },
+  {
+   "no": "43.0",
+   "name": "右欄_タイトル１",
+   "kind": "文字列",
+   "bytes": "52.0",
+   "note": "",
+   "sample": "例）ご請求金額、ご利用場所",
+   "hub": "料金内訳ページの場合、「ご請求金額」\n総合のメーター内訳ページの場合、「ご利用場所」\n⇒固定\n11月時点では総合契約の機能を実装しないため、固定で「ご請求金額」と出力する",
+   "json": ""
+  },
+  {
+   "no": "44.0",
+   "name": "右欄_タイトル２",
+   "kind": "文字列",
+   "bytes": "52.0",
+   "note": "",
+   "sample": "例）　　内訳明細、ご利用者",
+   "hub": "料金内訳ページの場合、「内訳明細」\n総合のメーター内訳ページの場合、「ご利用者」\nどちらも2バイトのインデントを設定\n⇒固定\n11月時点では総合契約の機能を実装しないため、固定で「内訳明細」と出力する",
+   "json": ""
+  },
+  {
+   "no": "45.0",
+   "name": "左欄_内容",
+   "kind": "文字列",
+   "bytes": "1120.0",
+   "note": "",
+   "sample": "例）",
+   "hub": "左欄_中欄_右欄_編集内容シート参照",
+   "json": ""
+  },
+  {
+   "no": "46.0",
+   "name": "中欄_内容",
+   "kind": "文字列",
+   "bytes": "1190.0",
+   "note": "",
+   "sample": "例）",
+   "hub": "左欄_中欄_右欄_編集内容シート参照",
+   "json": ""
+  },
+  {
+   "no": "47.0",
+   "name": "右欄_内容",
+   "kind": "文字列",
+   "bytes": "1820.0",
+   "note": "",
+   "sample": "例）",
+   "hub": "左欄_中欄_右欄_編集内容シート参照",
+   "json": ""
+  },
+  {
+   "no": "180-1",
+   "name": "ガス当月適用テキスト",
+   "kind": "文字列",
+   "bytes": "12.0",
+   "note": "",
+   "sample": "例）ガス当月適用",
+   "hub": "固定\n（180-1～6はガス契約ありの場合のみ出力）",
+   "json": ""
+  },
+  {
+   "no": "180-2",
+   "name": "ガス当月適用料金表種別名",
+   "kind": "文字列",
+   "bytes": "4.0",
+   "note": "",
+   "sample": "例）Ｂ表",
+   "hub": "Krakenパラメタ",
+   "json": "gas_rate_context.gas_supply_type"
+  },
+  {
+   "no": "180-3",
+   "name": "ガス当月適用基本料金テキスト",
+   "kind": "文字列",
+   "bytes": "8.0",
+   "note": "",
+   "sample": "例）基本料金",
+   "hub": "固定",
+   "json": ""
+  },
+  {
+   "no": "180-4",
+   "name": "ガス当月適用基本料金",
+   "kind": "文字列",
+   "bytes": "16.0",
+   "note": "",
+   "sample": "例）123,456,789.00円",
+   "hub": "Krakenパラメタ",
+   "json": "gas_rate_context.gas_standing_charge"
+  },
+  {
+   "no": "180-5",
+   "name": "ガス当月適用単位料金テキスト",
+   "kind": "文字列",
+   "bytes": "8.0",
+   "note": "",
+   "sample": "例）単位料金",
+   "hub": "固定",
+   "json": ""
+  },
+  {
+   "no": "180-6",
+   "name": "ガス当月適用単位料金",
+   "kind": "文字列",
+   "bytes": "12.0",
+   "note": "",
+   "sample": "例）123.45円/㎥",
+   "hub": "Krakenパラメタ",
+   "json": "gas_rate_context.gas_consumption_charge_rate / gas_rate_context.gas_consumption_charge_unit"
+  },
+  {
+   "no": "181-1",
+   "name": "ガス翌月適用テキスト",
+   "kind": "文字列",
+   "bytes": "32.0",
+   "note": "",
+   "sample": "例）ガス翌月適用単位料金（円/㎥）",
+   "hub": "固定\n（181-1～13はガス契約ありの場合のみ出力、ただし、閉栓またはSWで契約終了の場合は出力しない）",
+   "json": ""
+  },
+  {
+   "no": "181-2",
+   "name": "ガス翌月適用使用量区画１",
+   "kind": "文字列",
+   "bytes": "16.0",
+   "note": "",
+   "sample": "例）A(  0㎥～ 20㎥)",
+   "hub": "Krakenパラメタ",
+   "json": "next_month_gas_rate_context.gas_rate_a.tier_name / next_month_gas_rate_context.gas_rate_a.tier_start / next_month_gas_rate_context.gas_rate_a.tier_end"
+  },
+  {
+   "no": "181-3",
+   "name": "ガス翌月適用単位料金１",
+   "kind": "文字列",
+   "bytes": "16.0",
+   "note": "",
+   "sample": "例）132.94",
+   "hub": "Krakenパラメタ",
+   "json": "next_month_gas_rate_context.gas_rate_a.gross_price"
+  },
+  {
+   "no": "181-4",
+   "name": "ガス翌月適用使用量区画２",
+   "kind": "文字列",
+   "bytes": "16.0",
+   "note": "",
+   "sample": "例）B( 21㎥～ 80㎥)",
+   "hub": "Krakenパラメタ",
+   "json": "next_month_gas_rate_context.gas_rate_b.tier_name / next_month_gas_rate_context.gas_rate_b.tier_start / next_month_gas_rate_context.gas_rate_b.tier_end"
+  },
+  {
+   "no": "181-5",
+   "name": "ガス翌月適用単位料金２",
+   "kind": "文字列",
+   "bytes": "16.0",
+   "note": "",
+   "sample": "例）118.36",
+   "hub": "Krakenパラメタ",
+   "json": "next_month_gas_rate_context.gas_rate_b.gross_price"
+  },
+  {
+   "no": "181-6",
+   "name": "ガス翌月適用使用量区画３",
+   "kind": "文字列",
+   "bytes": "16.0",
+   "note": "",
+   "sample": "例）C( 81㎥～200㎥)",
+   "hub": "Krakenパラメタ",
+   "json": "next_month_gas_rate_context.gas_rate_c.tier_name / next_month_gas_rate_context.gas_rate_c.tier_start / next_month_gas_rate_context.gas_rate_c.tier_end"
+  },
+  {
+   "no": "181-7",
+   "name": "ガス翌月適用単位料金３",
+   "kind": "文字列",
+   "bytes": "16.0",
+   "note": "",
+   "sample": "例）116.20",
+   "hub": "Krakenパラメタ",
+   "json": "next_month_gas_rate_context.gas_rate_c.gross_price"
+  },
+  {
+   "no": "181-8",
+   "name": "ガス翌月適用使用量区画４",
+   "kind": "文字列",
+   "bytes": "16.0",
+   "note": "",
+   "sample": "例）D(201㎥～500㎥)",
+   "hub": "Krakenパラメタ",
+   "json": "next_month_gas_rate_context.gas_rate_d.tier_name / next_month_gas_rate_context.gas_rate_d.tier_start / next_month_gas_rate_context.gas_rate_d.tier_end"
+  },
+  {
+   "no": "181-9",
+   "name": "ガス翌月適用単位料金４",
+   "kind": "文字列",
+   "bytes": "16.0",
+   "note": "",
+   "sample": "例）112.96",
+   "hub": "Krakenパラメタ",
+   "json": "next_month_gas_rate_context.gas_rate_d.gross_price"
+  },
+  {
+   "no": "181-10",
+   "name": "ガス翌月適用使用量区画５",
+   "kind": "文字列",
+   "bytes": "16.0",
+   "note": "",
+   "sample": "例）E(501㎥～800㎥)",
+   "hub": "Krakenパラメタ",
+   "json": "next_month_gas_rate_context.gas_rate_e.tier_name / next_month_gas_rate_context.gas_rate_e.tier_start / next_month_gas_rate_context.gas_rate_e.tier_end"
+  },
+  {
+   "no": "181-11",
+   "name": "ガス翌月適用単位料金５",
+   "kind": "文字列",
+   "bytes": "16.0",
+   "note": "",
+   "sample": "例）104.32",
+   "hub": "Krakenパラメタ",
+   "json": "next_month_gas_rate_context.gas_rate_e.gross_price"
+  },
+  {
+   "no": "181-12",
+   "name": "ガス翌月適用使用量区画６",
+   "kind": "文字列",
+   "bytes": "16.0",
+   "note": "",
+   "sample": "例）F(801㎥～)",
+   "hub": "Krakenパラメタ",
+   "json": "next_month_gas_rate_context.gas_rate_f.tier_name / next_month_gas_rate_context.gas_rate_f.tier_start / next_month_gas_rate_context.gas_rate_f.tier_end"
+  },
+  {
+   "no": "181-13",
+   "name": "ガス翌月適用単位料金６",
+   "kind": "文字列",
+   "bytes": "16.0",
+   "note": "",
+   "sample": "例）96.76",
+   "hub": "Krakenパラメタ",
+   "json": "next_month_gas_rate_context.gas_rate_f.gross_price"
+  },
+  {
+   "no": "182.0",
+   "name": "メッセージ",
+   "kind": "文字列",
+   "bytes": "490.0",
+   "note": "",
+   "sample": "例）",
+   "hub": "Krakenパラメタ",
+   "json": "notice_contexts"
+  },
+  {
+   "no": "■フッター",
+   "name": "",
+   "kind": "",
+   "bytes": "",
+   "note": "",
+   "sample": "",
+   "hub": "",
+   "json": ""
+  },
+  {
+   "no": "項目定義",
+   "name": "",
+   "kind": "",
+   "bytes": "",
+   "note": "",
+   "sample": "",
+   "hub": "",
+   "json": ""
+  },
+  {
+   "no": "No",
+   "name": "項目名",
+   "kind": "データ種別",
+   "bytes": "データ長\n(byte)",
+   "note": "備考",
+   "sample": "sample",
+   "hub": "",
+   "json": ""
+  },
+  {
+   "no": "1.0",
+   "name": "フラグ",
+   "kind": "文字列",
+   "bytes": "1.0",
+   "note": "固定値\"E\"（フッター）",
+   "sample": "E",
+   "hub": "",
+   "json": ""
+  },
+  {
+   "no": "2.0",
+   "name": "データ作成日",
+   "kind": "文字列",
+   "bytes": "8.0",
+   "note": "\"YYYYMMDD\"",
+   "sample": "20241112",
+   "hub": "",
+   "json": ""
+  },
+  {
+   "no": "3.0",
+   "name": "データ件数",
+   "kind": "文字列",
+   "bytes": "8.0",
+   "note": "ヘッダー・フッターを除くデータ件数",
+   "sample": "123",
+   "hub": "",
+   "json": ""
+  },
+  {
+   "no": "e",
+   "name": "e",
+   "kind": "e",
+   "bytes": "e",
+   "note": "e",
+   "sample": "e",
+   "hub": "",
+   "json": ""
+  }
+ ],
+ "band_rows": [
+  {
+   "band": "ガス料金",
+   "item": "左欄_料金テキスト",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）ガス料金",
+   "json": "gas_consumption_contexts\nに対象があれば出力する",
+   "note": ""
+  },
+  {
+   "band": "ガス料金",
+   "item": "左欄_月分",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）2024年11月",
+   "json": "reading_date",
+   "note": ""
+  },
+  {
+   "band": "ガス料金",
+   "item": "左欄_税率",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）（10％）",
+   "json": "charge_taxed_rate",
+   "note": ""
+  },
+  {
+   "band": "ガス料金",
+   "item": "左欄_供給地点特定番号テキスト",
+   "fixed": "固定",
+   "sample": "例）供給地点特定番号",
+   "json": "",
+   "note": "2バイトのインデントを設定"
+  },
+  {
+   "band": "ガス料金",
+   "item": "左欄_供給地点特定番号",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）03-0011-1000-2003-0702-1786",
+   "json": "spin_str",
+   "note": ""
+  },
+  {
+   "band": "ガス料金",
+   "item": "左欄_契約種別テキスト",
+   "fixed": "固定",
+   "sample": "例）契約種別",
+   "json": "",
+   "note": "2バイトのインデントを設定"
+  },
+  {
+   "band": "ガス料金",
+   "item": "左欄_契約種別",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）一般契約",
+   "json": "product_name",
+   "note": ""
+  },
+  {
+   "band": "ガス料金",
+   "item": "左欄_ガス種テキスト",
+   "fixed": "固定",
+   "sample": "例）ガス種",
+   "json": "",
+   "note": "2バイトのインデントを設定"
+  },
+  {
+   "band": "ガス料金",
+   "item": "左欄_ガス種",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）13A　45メガジュール",
+   "json": "gas_type",
+   "note": ""
+  },
+  {
+   "band": "ガス料金",
+   "item": "中欄_検針日テキスト",
+   "fixed": "固定",
+   "sample": "例）検針日",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "ガス料金",
+   "item": "中欄_検針日",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）12月11日",
+   "json": "reading_date",
+   "note": ""
+  },
+  {
+   "band": "ガス料金",
+   "item": "中欄_使用期間テキスト",
+   "fixed": "固定",
+   "sample": "例）使用期間（日数）",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "ガス料金",
+   "item": "中欄_使用量期間",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）11月16日-12月15日 (31日間)",
+   "json": "reading_start - reading_end",
+   "note": ""
+  },
+  {
+   "band": "ガス料金",
+   "item": "中欄_今回指示数テキスト",
+   "fixed": "固定",
+   "sample": "例）今回指示数",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "ガス料金",
+   "item": "中欄_今回指示数",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）162015",
+   "json": "reading_value",
+   "note": ""
+  },
+  {
+   "band": "ガス料金",
+   "item": "中欄_前回指示数テキスト",
+   "fixed": "固定",
+   "sample": "例）前回指示数",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "ガス料金",
+   "item": "中欄_前回指示数",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）123456",
+   "json": "previous_reading_value",
+   "note": ""
+  },
+  {
+   "band": "ガス料金",
+   "item": "中欄_取付指示数テキスト",
+   "fixed": "固定",
+   "sample": "例）取付指示数",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "ガス料金",
+   "item": "中欄_取付指示数",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）123456",
+   "json": "meter_value_on_installation",
+   "note": ""
+  },
+  {
+   "band": "ガス料金",
+   "item": "中欄_旧メーター使用量テキスト",
+   "fixed": "固定",
+   "sample": "例）旧メーター使用量",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "ガス料金",
+   "item": "中欄_旧メーター使用量",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）123,456,789㎥",
+   "json": "old_meter_usage_amount",
+   "note": ""
+  },
+  {
+   "band": "ガス料金",
+   "item": "中欄_ご使用量テキスト",
+   "fixed": "固定",
+   "sample": "例）ご使用量",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "ガス料金",
+   "item": "中欄_ご使用量",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）123,456,789㎥",
+   "json": "consumption_amount",
+   "note": ""
+  },
+  {
+   "band": "ガス料金",
+   "item": "中欄_メーター社番テキスト",
+   "fixed": "固定",
+   "sample": "例）メーター社番",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "ガス料金",
+   "item": "中欄_メーター社番",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）1111-22222-3333",
+   "json": "meter_number_str",
+   "note": ""
+  },
+  {
+   "band": "ガス料金",
+   "item": "中欄_前月使用量テキスト",
+   "fixed": "固定",
+   "sample": "例）前月使用量",
+   "json": "",
+   "note": "NULLの場合出力しない"
+  },
+  {
+   "band": "ガス料金",
+   "item": "中欄_前月使用量",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）123,456,789㎥",
+   "json": "last_month_consumption_amount",
+   "note": "NULLの場合出力しない"
+  },
+  {
+   "band": "ガス料金",
+   "item": "中欄_前年同月使用量テキスト",
+   "fixed": "固定",
+   "sample": "例）前年同月使用量",
+   "json": "",
+   "note": "NULLの場合出力しない"
+  },
+  {
+   "band": "ガス料金",
+   "item": "中欄_前年同月使用量",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）123,456,789㎥",
+   "json": "last_year_consumption_amount",
+   "note": "NULLの場合出力しない"
+  },
+  {
+   "band": "ガス料金",
+   "item": "右欄_請求金額テキスト",
+   "fixed": "固定",
+   "sample": "例）請求金額",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "ガス料金",
+   "item": "右欄_請求金額",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）143,561円",
+   "json": "total_charge_amount",
+   "note": "小数点以下表示不要"
+  },
+  {
+   "band": "ガス料金",
+   "item": "右欄_料金内訳名称1",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）基本料金",
+   "json": "",
+   "note": "2バイトのインデントを設定"
+  },
+  {
+   "band": "ガス料金",
+   "item": "右欄_料金内訳金額1",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）23,436.66円",
+   "json": "standing_charge_amount",
+   "note": ""
+  },
+  {
+   "band": "ガス料金",
+   "item": "右欄_料金内訳名称2",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）従量料金",
+   "json": "",
+   "note": "2バイトのインデントを設定"
+  },
+  {
+   "band": "ガス料金",
+   "item": "右欄_料金内訳金額2",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）120,124.62円",
+   "json": "consumption_charge_amount",
+   "note": ""
+  },
+  {
+   "band": "ガス料金",
+   "item": "右欄_料金内訳名称3",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）ガス料金割引額",
+   "json": "",
+   "note": "discountsが空の場合出力しない"
+  },
+  {
+   "band": "ガス料金",
+   "item": "右欄_料金内訳金額3",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）",
+   "json": "discounts. gross_amount",
+   "note": "discountsが空の場合出力しない"
+  },
+  {
+   "band": "ガス料金",
+   "item": "右欄_料金内訳名称4",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）",
+   "json": "",
+   "note": "NULLの場合出力しない"
+  },
+  {
+   "band": "ガス料金",
+   "item": "右欄_料金内訳金額4",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）",
+   "json": "",
+   "note": "NULLの場合出力しない"
+  },
+  {
+   "band": "ガス料金",
+   "item": "右欄_料金内訳名称5",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）",
+   "json": "",
+   "note": "NULLの場合出力しない"
+  },
+  {
+   "band": "ガス料金",
+   "item": "右欄_料金内訳金額5",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）",
+   "json": "",
+   "note": "NULLの場合出力しない"
+  },
+  {
+   "band": "ガス料金割引額",
+   "item": "左欄_ガス料金割引額テキスト",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）口座割引額",
+   "json": "credit_contexts > display",
+   "note": "対象が無い場合、欄を出力しない"
+  },
+  {
+   "band": "ガス料金割引額",
+   "item": "右欄_請求金額テキスト",
+   "fixed": "固定",
+   "sample": "例）請求金額",
+   "json": "-",
+   "note": "対象が無い場合、欄を出力しない"
+  },
+  {
+   "band": "ガス料金割引額",
+   "item": "右欄_割引額",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）▲55円",
+   "json": "credit_contexts > gross_amount",
+   "note": "対象が無い場合、欄を出力しない"
+  },
+  {
+   "band": "ガス料金取消額",
+   "item": "左欄_料金テキスト",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）ガス料金取消額",
+   "json": "",
+   "note": "NULLの場合出力しない"
+  },
+  {
+   "band": "ガス料金取消額",
+   "item": "左欄_月分",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）2024年11月",
+   "json": "",
+   "note": "NULLの場合出力しない"
+  },
+  {
+   "band": "ガス料金取消額",
+   "item": "右欄_請求金額テキスト",
+   "fixed": "固定",
+   "sample": "例）請求金額",
+   "json": "",
+   "note": "NULLの場合出力しない"
+  },
+  {
+   "band": "ガス料金取消額",
+   "item": "右欄_請求金額",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）▲143,561円",
+   "json": "",
+   "note": "NULLの場合出力しない"
+  },
+  {
+   "band": "ガス料金延滞利息",
+   "item": "左欄_料金テキスト",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）ガス料金延滞利息",
+   "json": "charge_contexts > display",
+   "note": "対象が無い場合、欄を出力しない"
+  },
+  {
+   "band": "ガス料金延滞利息",
+   "item": "左欄_非課税テキスト",
+   "fixed": "固定",
+   "sample": "例）（非課税）",
+   "json": "-",
+   "note": "対象が無い場合、欄を出力しない"
+  },
+  {
+   "band": "ガス料金延滞利息",
+   "item": "中欄_対象年月日",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）対象年月日　2月7日",
+   "json": "charge_contexts > note",
+   "note": "対象が無い場合、欄を出力しない"
+  },
+  {
+   "band": "ガス料金延滞利息",
+   "item": "右欄_請求金額テキスト",
+   "fixed": "固定",
+   "sample": "例）請求金額",
+   "json": "-",
+   "note": "対象が無い場合、欄を出力しない"
+  },
+  {
+   "band": "ガス料金延滞利息",
+   "item": "右欄_請求金額",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）27円",
+   "json": "charge_contexts > gross_amount",
+   "note": "対象が無い場合、欄を出力しない"
+  },
+  {
+   "band": "デマンド",
+   "item": "左欄_デマンドテキスト",
+   "fixed": "固定",
+   "sample": "例）デマンド",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "デマンド",
+   "item": "左欄_デマンド検針日テキスト",
+   "fixed": "固定",
+   "sample": "例）検針日",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "デマンド",
+   "item": "左欄_デマンド検針日",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）12月11日",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "デマンド",
+   "item": "左欄_デマンド検針時刻テキスト",
+   "fixed": "固定",
+   "sample": "例）時間",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "デマンド",
+   "item": "左欄_デマンド検針時間",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）12時11分",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "デマンド",
+   "item": "中欄_全日使用量テキスト",
+   "fixed": "固定",
+   "sample": "例）全日使用量",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "デマンド",
+   "item": "中欄_全日使用量",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）1,789㎥",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "デマンド",
+   "item": "中欄_最大時間流量テキスト",
+   "fixed": "固定",
+   "sample": "最大時間流量",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "デマンド",
+   "item": "中欄_最大時間流量",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）123㎥",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "デマンド",
+   "item": "中欄_デマンドメーター社番テキスト",
+   "fixed": "固定",
+   "sample": "例）メーター社番",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "デマンド",
+   "item": "中欄_デマンドメーター社番",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）1111-22222-3333",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "電気料金",
+   "item": "左欄_料金テキスト",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）電気料金",
+   "json": "electricity_consumption_contexts\nに対象があれば出力する",
+   "note": ""
+  },
+  {
+   "band": "電気料金",
+   "item": "左欄_月分",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）2024年11月",
+   "json": "reading_date",
+   "note": ""
+  },
+  {
+   "band": "電気料金",
+   "item": "左欄_税率",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）（10％）",
+   "json": "charge_taxed_rate",
+   "note": ""
+  },
+  {
+   "band": "電気料金",
+   "item": "左欄_供給地点特定番号テキスト",
+   "fixed": "固定",
+   "sample": "例）供給地点特定番号",
+   "json": "spin_strに値がある場合のみ出力する",
+   "note": "2バイトのインデントを設定"
+  },
+  {
+   "band": "電気料金",
+   "item": "左欄_供給地点特定番号",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）03-0011-1000-2003-0702-1786",
+   "json": "spin_str",
+   "note": ""
+  },
+  {
+   "band": "電気料金",
+   "item": "左欄_契約種別テキスト",
+   "fixed": "固定",
+   "sample": "例）契約種別",
+   "json": "product_nameに値がある場合のみ出力する",
+   "note": "2バイトのインデントを設定"
+  },
+  {
+   "band": "電気料金",
+   "item": "左欄_料金メニュー",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）ずっとも電気１Ｓ",
+   "json": "product_name",
+   "note": "4バイトのインデントを設定"
+  },
+  {
+   "band": "電気料金",
+   "item": "左欄_契約容量",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）40Ａ",
+   "json": "contracted_capacity",
+   "note": ""
+  },
+  {
+   "band": "電気料金",
+   "item": "中欄_検針日テキスト",
+   "fixed": "固定",
+   "sample": "例）検針日",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "電気料金",
+   "item": "中欄_検針日",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）12月11日",
+   "json": "reading_date",
+   "note": ""
+  },
+  {
+   "band": "電気料金",
+   "item": "中欄_使用期間テキスト",
+   "fixed": "固定",
+   "sample": "例）使用期間（日数）",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "電気料金",
+   "item": "中欄_使用量期間",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）11月16日-12月15日 (31日間)",
+   "json": "reading_start - reading_end",
+   "note": ""
+  },
+  {
+   "band": "電気料金",
+   "item": "中欄_ご使用量テキスト",
+   "fixed": "固定",
+   "sample": "例）ご使用量",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "電気料金",
+   "item": "中欄_ご使用量",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）38,559ｋＷｈ",
+   "json": "consumption_amount",
+   "note": ""
+  },
+  {
+   "band": "電気料金",
+   "item": "中欄_前月使用量テキスト",
+   "fixed": "固定",
+   "sample": "例）前月使用量",
+   "json": "",
+   "note": "NULLの場合出力しない"
+  },
+  {
+   "band": "電気料金",
+   "item": "中欄_前月使用量",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）38,559ｋＷｈ",
+   "json": "last_month_consumption_amount",
+   "note": "NULLの場合出力しない"
+  },
+  {
+   "band": "電気料金",
+   "item": "中欄_前年同月使用量テキスト",
+   "fixed": "固定",
+   "sample": "例）前年同月使用量",
+   "json": "",
+   "note": "NULLの場合出力しない"
+  },
+  {
+   "band": "電気料金",
+   "item": "中欄_前年同月使用量",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）38,559ｋＷｈ",
+   "json": "last_year_consumption_amount",
+   "note": "NULLの場合出力しない"
+  },
+  {
+   "band": "電気料金",
+   "item": "右欄_請求金額テキスト",
+   "fixed": "固定",
+   "sample": "例）請求金額",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "電気料金",
+   "item": "右欄_請求金額",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）143,561円",
+   "json": "total_charge_amount",
+   "note": "小数点以下表示不要"
+  },
+  {
+   "band": "電気料金",
+   "item": "右欄_料金内訳名称1",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）基本料金",
+   "json": "-",
+   "note": ""
+  },
+  {
+   "band": "電気料金",
+   "item": "右欄_料金内訳金額1",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）23,436.66円",
+   "json": "standing_charge_amount",
+   "note": ""
+  },
+  {
+   "band": "電気料金",
+   "item": "右欄_料金内訳名称2",
+   "fixed": "Krakenパラメタ",
+   "sample": "例1）電力量料金１\n例2）電力料金ピーク",
+   "json": "consumption_charges_contexts[0].label",
+   "note": "0の場合出力しない"
+  },
+  {
+   "band": "電気料金",
+   "item": "右欄_料金内訳金額2",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）120,124.62円",
+   "json": "consumption_charges_contexts[0].amount",
+   "note": "0の場合出力しない"
+  },
+  {
+   "band": "電気料金",
+   "item": "右欄_料金内訳名称3",
+   "fixed": "Krakenパラメタ",
+   "sample": "例1）電力量料金２\n例2）電力料金オフピーク",
+   "json": "consumption_charges_contexts[1].label",
+   "note": ""
+  },
+  {
+   "band": "電気料金",
+   "item": "右欄_料金内訳金額3",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）9,989.00円",
+   "json": "consumption_charges_contexts[1].amount",
+   "note": ""
+  },
+  {
+   "band": "電気料金",
+   "item": "右欄_料金内訳名称4",
+   "fixed": "Krakenパラメタ",
+   "sample": "例1）電力量料金３\n例2）電力量料金夜間",
+   "json": "consumption_charges_contexts[2].label",
+   "note": "0の場合出力しない"
+  },
+  {
+   "band": "電気料金",
+   "item": "右欄_料金内訳金額4",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）9,989.00円",
+   "json": "consumption_charges_contexts[2].amount",
+   "note": "0の場合出力しない"
+  },
+  {
+   "band": "電気料金",
+   "item": "右欄_料金内訳名称5",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）燃料費調整額",
+   "json": "-",
+   "note": ""
+  },
+  {
+   "band": "電気料金",
+   "item": "右欄_料金内訳金額5",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）9,989.00円",
+   "json": "fuel_cost_adjustment_amount",
+   "note": ""
+  },
+  {
+   "band": "電気料金",
+   "item": "右欄_料金内訳名称6",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）セット割引額等",
+   "json": "discounts. name",
+   "note": ""
+  },
+  {
+   "band": "電気料金",
+   "item": "右欄_料金内訳金額6",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）▲9,989.00円",
+   "json": "discounts. gross_amount",
+   "note": ""
+  },
+  {
+   "band": "電気料金",
+   "item": "右欄_料金内訳名称7",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）再エネ促進賦課金",
+   "json": "-",
+   "note": ""
+  },
+  {
+   "band": "電気料金",
+   "item": "右欄_料金内訳金額7",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）9,989.00円",
+   "json": "renewable_energy_charge_amount",
+   "note": ""
+  },
+  {
+   "band": "電気料金",
+   "item": "右欄_料金内訳名称8",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）",
+   "json": "-",
+   "note": "NULLの場合出力しない"
+  },
+  {
+   "band": "電気料金",
+   "item": "右欄_料金内訳金額8",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）",
+   "json": "-",
+   "note": "NULLの場合出力しない"
+  },
+  {
+   "band": "電気料金",
+   "item": "右欄_料金内訳名称9",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）",
+   "json": "-",
+   "note": "NULLの場合出力しない"
+  },
+  {
+   "band": "電気料金",
+   "item": "右欄_料金内訳金額9",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）",
+   "json": "-",
+   "note": "NULLの場合出力しない"
+  },
+  {
+   "band": "電気料金割引額",
+   "item": "",
+   "fixed": "",
+   "sample": "",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "電気料金取消額",
+   "item": "",
+   "fixed": "",
+   "sample": "",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "電気料金延滞利息",
+   "item": "左欄_料金テキスト",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）電気料金延滞利息",
+   "json": "charge_contexts > display",
+   "note": "対象が無い場合、欄を出力しない"
+  },
+  {
+   "band": "電気料金延滞利息",
+   "item": "左欄_非課税テキスト",
+   "fixed": "固定",
+   "sample": "例）（非課税）",
+   "json": "-",
+   "note": "対象が無い場合、欄を出力しない"
+  },
+  {
+   "band": "電気料金延滞利息",
+   "item": "中欄_対象年月日",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）対象年月日　2月 7日",
+   "json": "charge_contexts > note",
+   "note": "対象が無い場合、欄を出力しない"
+  },
+  {
+   "band": "電気料金延滞利息",
+   "item": "右欄_請求金額テキスト",
+   "fixed": "固定",
+   "sample": "例）請求金額",
+   "json": "-",
+   "note": "対象が無い場合、欄を出力しない"
+  },
+  {
+   "band": "電気料金延滞利息",
+   "item": "右欄_請求金額",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）27円",
+   "json": "charge_contexts > gross_amount",
+   "note": "対象が無い場合、欄を出力しない"
+  },
+  {
+   "band": "他商材",
+   "item": "左欄_料金テキスト",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）水とでんきの駆けつけサービス、エネファーム安心定額サポート、など",
+   "json": "charge_contexts > display",
+   "note": "対象が無い場合、欄を出力しない"
+  },
+  {
+   "band": "他商材",
+   "item": "左欄_税率",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）（10％）",
+   "json": "charge_contexts > tax_rate",
+   "note": "対象が無い場合、欄を出力しない\n0の場合はエラー扱いとする。（他商材は免税対象外であるため）"
+  },
+  {
+   "band": "他商材",
+   "item": "中欄_取引年月日テキスト",
+   "fixed": "固定",
+   "sample": "例）取引年月日",
+   "json": "-",
+   "note": "対象が無い場合、欄を出力しない"
+  },
+  {
+   "band": "他商材",
+   "item": "中欄_取引年月日",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）2025年12月11日",
+   "json": "charge_contexts > transaction_date",
+   "note": "対象が無い場合、欄を出力しない"
+  },
+  {
+   "band": "他商材",
+   "item": "右欄_請求金額テキスト",
+   "fixed": "固定",
+   "sample": "例）請求金額",
+   "json": "-",
+   "note": "対象が無い場合、欄を出力しない"
+  },
+  {
+   "band": "他商材",
+   "item": "右欄_請求金額",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）143,561円",
+   "json": "charge_contexts > gross_amount",
+   "note": "対象が無い場合、欄を出力しない。\n0の場合はエラー扱いとする。（明細として0円請求を掲載するケースは想定がない）"
+  },
+  {
+   "band": "他商材",
+   "item": "左欄_料金テキスト",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）水とでんきの駆けつけサービス、エネファーム安心定額サポート、など",
+   "json": "credit_contexts > display",
+   "note": "他商材のマイナス料金ケース。\n対象が無い場合、欄を出力しない"
+  },
+  {
+   "band": "他商材",
+   "item": "左欄_税率",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）（10％）",
+   "json": "credit_contexts > tax_rate",
+   "note": "対象が無い場合、欄を出力しない\n0の場合はエラー扱いとする。（他商材は免税対象外であるため）"
+  },
+  {
+   "band": "他商材",
+   "item": "中欄_取引年月日テキスト",
+   "fixed": "固定",
+   "sample": "例）取引年月日",
+   "json": "-",
+   "note": "対象が無い場合、欄を出力しない"
+  },
+  {
+   "band": "他商材",
+   "item": "中欄_取引年月日",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）2025年12月11日",
+   "json": "credit_contexts > transaction_date",
+   "note": "対象が無い場合、欄を出力しない"
+  },
+  {
+   "band": "他商材",
+   "item": "右欄_請求金額テキスト",
+   "fixed": "固定",
+   "sample": "例）請求金額",
+   "json": "-",
+   "note": "対象が無い場合、欄を出力しない"
+  },
+  {
+   "band": "他商材",
+   "item": "右欄_請求金額",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）▲143,561円",
+   "json": "credit_contexts > gross_amount",
+   "note": "対象が無い場合、欄を出力しない。\n0の場合はエラー扱いとする。（明細として0円請求を掲載するケースは想定がない）"
+  },
+  {
+   "band": "手数料",
+   "item": "左欄_料金テキスト",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）帳票発行手数料",
+   "json": "printing_fee_context\nに対象があれば出力する",
+   "note": "対象が無い場合、欄を出力しない"
+  },
+  {
+   "band": "手数料",
+   "item": "左欄_税率",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）（10％）",
+   "json": "printing_fee_context.tax_rate",
+   "note": "対象が無い場合、欄を出力しない"
+  },
+  {
+   "band": "手数料",
+   "item": "右欄_請求金額テキスト",
+   "fixed": "固定",
+   "sample": "例）請求金額",
+   "json": "",
+   "note": "対象が無い場合、欄を出力しない"
+  },
+  {
+   "band": "手数料",
+   "item": "右欄_請求金額",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）143,561円",
+   "json": "printing_fee_context.total_gross_amount",
+   "note": "対象が無い場合、欄を出力しない"
+  },
+  {
+   "band": "手数料",
+   "item": "右欄_手数料テキスト",
+   "fixed": "固定",
+   "sample": "例）検針票発行手数料",
+   "json": "printing_fee_context.charges[].display",
+   "note": "対象が無い場合、欄を出力しない\n2バイトのインデントを設定"
+  },
+  {
+   "band": "手数料",
+   "item": "右欄_手数料金額",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）165円",
+   "json": "printing_fee_context.charges[].gross_amount",
+   "note": "対象が無い場合、欄を出力しない"
+  },
+  {
+   "band": "残高",
+   "item": "",
+   "fixed": "",
+   "sample": "",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "合計",
+   "item": "右欄_ご請求金額合計テキスト",
+   "fixed": "固定",
+   "sample": "例）ご請求金額合計",
+   "json": "billing_totals_context",
+   "note": ""
+  },
+  {
+   "band": "合計",
+   "item": "右欄_ご請求金額合計",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）19,989円",
+   "json": "billing_totals_context.gross_amount",
+   "note": ""
+  },
+  {
+   "band": "合計",
+   "item": "右欄_合計税率１",
+   "fixed": "固定",
+   "sample": "例）（１０％対象）",
+   "json": "-",
+   "note": ""
+  },
+  {
+   "band": "合計",
+   "item": "右欄_合計税率１金額",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）19,989円",
+   "json": "billing_totals_context.gross_amount_10_pct",
+   "note": ""
+  },
+  {
+   "band": "合計",
+   "item": "右欄_合計税率２",
+   "fixed": "固定",
+   "sample": "例）（非課税又は免税対象）",
+   "json": "-",
+   "note": "NULLの場合出力しない"
+  },
+  {
+   "band": "合計",
+   "item": "右欄_合計税率２金額",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）19,989円",
+   "json": "billing_totals_context.tax_exempt_amount",
+   "note": "NULLの場合出力しない"
+  },
+  {
+   "band": "合計",
+   "item": "右欄_内消費税等テキスト",
+   "fixed": "固定",
+   "sample": "例）内消費税等",
+   "json": "-",
+   "note": ""
+  },
+  {
+   "band": "合計",
+   "item": "右欄_内消費税等金額",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）19,989円",
+   "json": "billing_totals_context.tax_amount",
+   "note": ""
+  },
+  {
+   "band": "合計",
+   "item": "右欄_消費税等税率１",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）（１０％対象）",
+   "json": "-",
+   "note": ""
+  },
+  {
+   "band": "合計",
+   "item": "右欄_消費税等税率１金額",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）19,989円",
+   "json": "billing_totals_context.tax_amount_10_pct",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "左欄_供給地点特定番号テキスト",
+   "fixed": "固定",
+   "sample": "例）供給地点特定番号",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "左欄_供給地点特定番号",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）03-0011-1000-2003-0702-1786",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "中欄_検針日テキスト",
+   "fixed": "固定",
+   "sample": "例）検針日",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "中欄_検針日",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）12月11日",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "中欄_使用期間テキスト",
+   "fixed": "固定",
+   "sample": "例）使用期間（日数）",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "中欄_使用量期間",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）11月16日-12月15日 (31日間)",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "中欄_今回指示数テキスト",
+   "fixed": "固定",
+   "sample": "例）今回指示数",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "中欄_今回指示数",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）162015",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "中欄_前回示数テキスト",
+   "fixed": "固定",
+   "sample": "例）前回指示数",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "中欄_前回指示数",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）123456",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "中欄_ご使用量テキスト",
+   "fixed": "固定",
+   "sample": "例）ご使用量",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "中欄_ご使用量",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）123,456,789㎥",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "中欄_メーター社番テキスト",
+   "fixed": "固定",
+   "sample": "例）メーター社番",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "中欄_メーター社番",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）1111-22222-3333",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "中欄_前月使用量テキスト",
+   "fixed": "固定",
+   "sample": "例）前月使用量",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "中欄_前月使用量",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）123,456,789㎥",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "中欄_前年同月使用量テキスト",
+   "fixed": "固定",
+   "sample": "例）前年同月使用量",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "中欄_前年同月使用量",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）123,456,789㎥",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "右欄_使用者住所１",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）港区",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "右欄_使用者住所２",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）新橋 1-4",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "右欄_使用者住所３",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）○○○",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "右欄_使用者住所４",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "右欄_使用者名１",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）○○○",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "右欄_使用者名２",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）○○○　様",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "補足",
+   "item": "３つの欄が同じ行数になるように、項目の無い欄は空行で調整する。",
+   "fixed": "",
+   "sample": "",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "",
+   "item": "NULLで項目名も出力しない項目の場合は、上に詰める。",
+   "fixed": "",
+   "sample": "",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "",
+   "item": "欄の最大行数を超える場合は改ページする。",
+   "fixed": "",
+   "sample": "",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "",
+   "item": "欄の種別が変わる場合、または、繰り返しの場合は、空行を１行入れる。ただしページの先頭となる場合は空行は不要。",
+   "fixed": "",
+   "sample": "",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "",
+   "item": "単位はカンマ、マイナス符号、お客さま番号等のハイフン、「　様」の編集はKrakenで行う前提",
+   "fixed": "",
+   "sample": "",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "",
+   "item": "HUBは配置（右詰、左詰、何行目に出す等）を行う前提",
+   "fixed": "",
+   "sample": "",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "",
+   "item": "左欄_内容",
+   "fixed": "",
+   "sample": "",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "",
+   "item": "中欄_内容",
+   "fixed": "",
+   "sample": "",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "",
+   "item": "右欄_内容",
+   "fixed": "",
+   "sample": "",
+   "json": "",
+   "note": ""
+  }
+ ],
+ "json_path_to_kra007": {
+  "customer_context.billing_address_context.billing_address_post_code": [
+   "封書検針票IF No.5.0（共通部_郵送先_郵便番号）"
+  ],
+  "customer_context.billing_address_context.billing_address_line_1": [
+   "封書検針票IF No.6.0（共通部_郵送先_住所1）"
+  ],
+  "customer_context.billing_address_context.billing_address_line_2": [
+   "封書検針票IF No.7.0（共通部_郵送先_住所2）"
+  ],
+  "customer_context.billing_address_context.billing_address_line_3": [
+   "封書検針票IF No.8.0（共通部_郵送先_住所3）"
+  ],
+  "customer_context.billing_address_context.billing_address_line_4": [
+   "封書検針票IF No.9.0（共通部_郵送先_住所4）"
+  ],
+  "customer_context.billing_address_context.billing_address_line_5": [
+   "封書検針票IF No.10.0（共通部_郵送先_住所5）"
+  ],
+  "customer_context.billing_address_context.billing_address_line_6": [
+   "封書検針票IF No.11.0（共通部_郵送先_店名屋号等）"
+  ],
+  "customer_context.billing_address_context.billing_customer_name": [
+   "封書検針票IF No.12.0（共通部_郵送先_お客さま名）"
+  ],
+  "customer_context.company_code": [
+   "封書検針票IF No.15.0（共通部_社用コード）"
+  ],
+  "billing_document_context.billed_at": [
+   "封書検針票IF No.25.0（共通部_検針年）",
+   "封書検針票IF No.26.0（共通部_検針月）"
+  ],
+  "supply_point_context.customer_number": [
+   "封書検針票IF No.27.0（共通部_お客さま通知番号）"
+  ],
+  "payment_context.payment_amount": [
+   "封書検針票IF No.29.0（共通部_請求金額）"
+  ],
+  "payment_context.payment_method": [
+   "封書検針票IF No.30.0（共通部_支払方法別文言１）",
+   "封書検針票IF No.31.0（共通部_支払方法別文言２）"
+  ],
+  "supply_point_context.next_reading_date": [
+   "封書検針票IF No.33.0（共通部_請求日）"
+  ],
+  "supply_point_context.supply_usage_address_context.postal_address_line_4": [
+   "封書検針票IF No.34.0（共通部_使用者_店名屋号等）",
+   "封書検針票IF No.37.0（共通部_使用者_住所2）"
+  ],
+  "supply_point_context.supply_usage_address_context.postal_address_line_6": [
+   "封書検針票IF No.34.0（共通部_使用者_店名屋号等）"
+  ],
+  "supply_point_context.supply_usage_address_context.postal_customer_name": [
+   "封書検針票IF No.35.0（共通部_使用者_お客さま名）"
+  ],
+  "supply_point_context.supply_usage_address_context.postal_address_line_1": [
+   "封書検針票IF No.36.0（共通部_使用者_住所1）"
+  ],
+  "supply_point_context.supply_usage_address_context.postal_address_line_2": [
+   "封書検針票IF No.36.0（共通部_使用者_住所1）"
+  ],
+  "supply_point_context.supply_usage_address_context.postal_address_line_3": [
+   "封書検針票IF No.37.0（共通部_使用者_住所2）"
+  ],
+  "billing_document_context.template_id": [
+   "封書検針票IF No.38.0（帳票ＩＤ）"
+  ],
+  "gas_rate_context.gas_supply_type": [
+   "封書検針票IF No.180-2（ガス当月適用料金表種別名）"
+  ],
+  "gas_rate_context.gas_standing_charge": [
+   "封書検針票IF No.180-4（ガス当月適用基本料金）"
+  ],
+  "gas_rate_context.gas_consumption_charge_rate": [
+   "封書検針票IF No.180-6（ガス当月適用単位料金）"
+  ],
+  "gas_rate_context.gas_consumption_charge_unit": [
+   "封書検針票IF No.180-6（ガス当月適用単位料金）"
+  ],
+  "next_month_gas_rate_context.gas_rate_a.tier_name": [
+   "封書検針票IF No.181-2（ガス翌月適用使用量区画１）"
+  ],
+  "next_month_gas_rate_context.gas_rate_a.tier_start": [
+   "封書検針票IF No.181-2（ガス翌月適用使用量区画１）"
+  ],
+  "next_month_gas_rate_context.gas_rate_a.tier_end": [
+   "封書検針票IF No.181-2（ガス翌月適用使用量区画１）"
+  ],
+  "next_month_gas_rate_context.gas_rate_a.gross_price": [
+   "封書検針票IF No.181-3（ガス翌月適用単位料金１）"
+  ],
+  "next_month_gas_rate_context.gas_rate_b.tier_name": [
+   "封書検針票IF No.181-4（ガス翌月適用使用量区画２）"
+  ],
+  "next_month_gas_rate_context.gas_rate_b.tier_start": [
+   "封書検針票IF No.181-4（ガス翌月適用使用量区画２）"
+  ],
+  "next_month_gas_rate_context.gas_rate_b.tier_end": [
+   "封書検針票IF No.181-4（ガス翌月適用使用量区画２）"
+  ],
+  "next_month_gas_rate_context.gas_rate_b.gross_price": [
+   "封書検針票IF No.181-5（ガス翌月適用単位料金２）"
+  ],
+  "next_month_gas_rate_context.gas_rate_c.tier_name": [
+   "封書検針票IF No.181-6（ガス翌月適用使用量区画３）"
+  ],
+  "next_month_gas_rate_context.gas_rate_c.tier_start": [
+   "封書検針票IF No.181-6（ガス翌月適用使用量区画３）"
+  ],
+  "next_month_gas_rate_context.gas_rate_c.tier_end": [
+   "封書検針票IF No.181-6（ガス翌月適用使用量区画３）"
+  ],
+  "next_month_gas_rate_context.gas_rate_c.gross_price": [
+   "封書検針票IF No.181-7（ガス翌月適用単位料金３）"
+  ],
+  "next_month_gas_rate_context.gas_rate_d.tier_name": [
+   "封書検針票IF No.181-8（ガス翌月適用使用量区画４）"
+  ],
+  "next_month_gas_rate_context.gas_rate_d.tier_start": [
+   "封書検針票IF No.181-8（ガス翌月適用使用量区画４）"
+  ],
+  "next_month_gas_rate_context.gas_rate_d.tier_end": [
+   "封書検針票IF No.181-8（ガス翌月適用使用量区画４）"
+  ],
+  "next_month_gas_rate_context.gas_rate_d.gross_price": [
+   "封書検針票IF No.181-9（ガス翌月適用単位料金４）"
+  ],
+  "next_month_gas_rate_context.gas_rate_e.tier_name": [
+   "封書検針票IF No.181-10（ガス翌月適用使用量区画５）"
+  ],
+  "next_month_gas_rate_context.gas_rate_e.tier_start": [
+   "封書検針票IF No.181-10（ガス翌月適用使用量区画５）"
+  ],
+  "next_month_gas_rate_context.gas_rate_e.tier_end": [
+   "封書検針票IF No.181-10（ガス翌月適用使用量区画５）"
+  ],
+  "next_month_gas_rate_context.gas_rate_e.gross_price": [
+   "封書検針票IF No.181-11（ガス翌月適用単位料金５）"
+  ],
+  "next_month_gas_rate_context.gas_rate_f.tier_name": [
+   "封書検針票IF No.181-12（ガス翌月適用使用量区画６）"
+  ],
+  "next_month_gas_rate_context.gas_rate_f.tier_start": [
+   "封書検針票IF No.181-12（ガス翌月適用使用量区画６）"
+  ],
+  "next_month_gas_rate_context.gas_rate_f.tier_end": [
+   "封書検針票IF No.181-12（ガス翌月適用使用量区画６）"
+  ],
+  "next_month_gas_rate_context.gas_rate_f.gross_price": [
+   "封書検針票IF No.181-13（ガス翌月適用単位料金６）"
+  ],
+  "consumption_charges_contexts[].label": [
+   "左欄_中欄_右欄 電気料金／右欄_料金内訳名称2",
+   "左欄_中欄_右欄 電気料金／右欄_料金内訳名称3",
+   "左欄_中欄_右欄 電気料金／右欄_料金内訳名称4"
+  ],
+  "consumption_charges_contexts[].amount": [
+   "左欄_中欄_右欄 電気料金／右欄_料金内訳金額2",
+   "左欄_中欄_右欄 電気料金／右欄_料金内訳金額3",
+   "左欄_中欄_右欄 電気料金／右欄_料金内訳金額4"
+  ],
+  "printing_fee_context.tax_rate": [
+   "左欄_中欄_右欄 手数料／左欄_税率"
+  ],
+  "printing_fee_context.total_gross_amount": [
+   "左欄_中欄_右欄 手数料／右欄_請求金額"
+  ],
+  "printing_fee_context.charges[].display": [
+   "左欄_中欄_右欄 手数料／右欄_手数料テキスト"
+  ],
+  "printing_fee_context.charges[].gross_amount": [
+   "左欄_中欄_右欄 手数料／右欄_手数料金額"
+  ],
+  "billing_totals_context.gross_amount": [
+   "左欄_中欄_右欄 合計／右欄_ご請求金額合計"
+  ],
+  "billing_totals_context.gross_amount_10_pct": [
+   "左欄_中欄_右欄 合計／右欄_合計税率１金額"
+  ],
+  "billing_totals_context.tax_exempt_amount": [
+   "左欄_中欄_右欄 合計／右欄_合計税率２金額"
+  ],
+  "billing_totals_context.tax_amount": [
+   "左欄_中欄_右欄 合計／右欄_内消費税等金額"
+  ],
+  "billing_totals_context.tax_amount_10_pct": [
+   "左欄_中欄_右欄 合計／右欄_消費税等税率１金額"
+  ]
+ },
+ "kraken_param_without_json_path": [
+  {
+   "band": "ガス料金",
+   "item": "右欄_料金内訳名称1",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）基本料金",
+   "json": "",
+   "note": "2バイトのインデントを設定"
+  },
+  {
+   "band": "ガス料金",
+   "item": "右欄_料金内訳名称2",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）従量料金",
+   "json": "",
+   "note": "2バイトのインデントを設定"
+  },
+  {
+   "band": "ガス料金",
+   "item": "右欄_料金内訳名称3",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）ガス料金割引額",
+   "json": "",
+   "note": "discountsが空の場合出力しない"
+  },
+  {
+   "band": "ガス料金",
+   "item": "右欄_料金内訳名称4",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）",
+   "json": "",
+   "note": "NULLの場合出力しない"
+  },
+  {
+   "band": "ガス料金",
+   "item": "右欄_料金内訳金額4",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）",
+   "json": "",
+   "note": "NULLの場合出力しない"
+  },
+  {
+   "band": "ガス料金",
+   "item": "右欄_料金内訳名称5",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）",
+   "json": "",
+   "note": "NULLの場合出力しない"
+  },
+  {
+   "band": "ガス料金",
+   "item": "右欄_料金内訳金額5",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）",
+   "json": "",
+   "note": "NULLの場合出力しない"
+  },
+  {
+   "band": "ガス料金取消額",
+   "item": "左欄_料金テキスト",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）ガス料金取消額",
+   "json": "",
+   "note": "NULLの場合出力しない"
+  },
+  {
+   "band": "ガス料金取消額",
+   "item": "左欄_月分",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）2024年11月",
+   "json": "",
+   "note": "NULLの場合出力しない"
+  },
+  {
+   "band": "ガス料金取消額",
+   "item": "右欄_請求金額",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）▲143,561円",
+   "json": "",
+   "note": "NULLの場合出力しない"
+  },
+  {
+   "band": "デマンド",
+   "item": "左欄_デマンド検針日",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）12月11日",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "デマンド",
+   "item": "左欄_デマンド検針時間",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）12時11分",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "デマンド",
+   "item": "中欄_全日使用量",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）1,789㎥",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "デマンド",
+   "item": "中欄_最大時間流量",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）123㎥",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "デマンド",
+   "item": "中欄_デマンドメーター社番",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）1111-22222-3333",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "左欄_供給地点特定番号",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）03-0011-1000-2003-0702-1786",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "中欄_検針日",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）12月11日",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "中欄_使用量期間",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）11月16日-12月15日 (31日間)",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "中欄_今回指示数",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）162015",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "中欄_前回指示数",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）123456",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "中欄_ご使用量",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）123,456,789㎥",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "中欄_メーター社番",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）1111-22222-3333",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "中欄_前月使用量",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）123,456,789㎥",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "中欄_前年同月使用量",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）123,456,789㎥",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "右欄_使用者住所１",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）港区",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "右欄_使用者住所２",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）新橋 1-4",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "右欄_使用者住所３",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）○○○",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "右欄_使用者住所４",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "右欄_使用者名１",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）○○○",
+   "json": "",
+   "note": ""
+  },
+  {
+   "band": "メーター内訳",
+   "item": "右欄_使用者名２",
+   "fixed": "Krakenパラメタ",
+   "sample": "例）○○○　様",
+   "json": "",
+   "note": ""
+  }
+ ]
+}

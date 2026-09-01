@@ -1,0 +1,147 @@
+No,JSON項目名,項目名,諸元（テーブル・項目）,加工内容,区分,KRA007該当項目,備考
+1,customer_context.customer_name,お客さま名,accounts_account.billing_name（未設定時は jpn AccountUserDetails.kanji_name、さらに未設定時は kana_name）／支払人住所の同意時はTG様の支払人氏名,customer_context.billing_address_context.billing_customer_name と同値（全角変換済み）,参照切替あり,,支払人住所の同意またはキャンペーン適用時は、口座の請求先ではなくTG様の支払人情報を参照
+2,customer_context.billing_address_context.billing_address_post_code,郵送先_郵便番号,accounts_account.billing_postcode／支払人住所の同意時はTG様の支払人郵便番号,そのまま出力,参照切替あり,封書検針票IF No.5.0（共通部_郵送先_郵便番号）,支払人住所の同意またはキャンペーン適用時は、口座の請求先ではなくTG様の支払人情報を参照
+3,customer_context.billing_address_context.billing_address_line_1,郵送先_住所1,addresses_address（accounts_account.billing_address_obj 経由）／支払人住所の同意時はTG様の支払人住所,住所を最大6行（各30バイト以内）に分割し、都道府県・市区町村／町名番地／建物名／部屋番号の順に格納したうえで全角変換,加工あり,封書検針票IF No.6.0（共通部_郵送先_住所1）,支払人住所の同意またはキャンペーン適用時は、口座の請求先ではなくTG様の支払人情報を参照
+4,customer_context.billing_address_context.billing_address_line_2,郵送先_住所2,addresses_address（accounts_account.billing_address_obj 経由）／支払人住所の同意時はTG様の支払人住所,住所を最大6行（各30バイト以内）に分割し、都道府県・市区町村／町名番地／建物名／部屋番号の順に格納したうえで全角変換,加工あり,封書検針票IF No.7.0（共通部_郵送先_住所2）,支払人住所の同意またはキャンペーン適用時は、口座の請求先ではなくTG様の支払人情報を参照
+5,customer_context.billing_address_context.billing_address_line_3,郵送先_住所3,addresses_address（accounts_account.billing_address_obj 経由）／支払人住所の同意時はTG様の支払人住所,住所を最大6行（各30バイト以内）に分割し、都道府県・市区町村／町名番地／建物名／部屋番号の順に格納したうえで全角変換,加工あり,封書検針票IF No.8.0（共通部_郵送先_住所3）,支払人住所の同意またはキャンペーン適用時は、口座の請求先ではなくTG様の支払人情報を参照
+6,customer_context.billing_address_context.billing_address_line_4,郵送先_住所4,addresses_address（accounts_account.billing_address_obj 経由）／支払人住所の同意時はTG様の支払人住所,住所を最大6行（各30バイト以内）に分割し、都道府県・市区町村／町名番地／建物名／部屋番号の順に格納したうえで全角変換,加工あり,封書検針票IF No.9.0（共通部_郵送先_住所4）,支払人住所の同意またはキャンペーン適用時は、口座の請求先ではなくTG様の支払人情報を参照
+7,customer_context.billing_address_context.billing_address_line_5,郵送先_住所5,addresses_address（accounts_account.billing_address_obj 経由）／支払人住所の同意時はTG様の支払人住所,住所を最大6行（各30バイト以内）に分割し、都道府県・市区町村／町名番地／建物名／部屋番号の順に格納したうえで全角変換,加工あり,封書検針票IF No.10.0（共通部_郵送先_住所5）,支払人住所の同意またはキャンペーン適用時は、口座の請求先ではなくTG様の支払人情報を参照
+8,customer_context.billing_address_context.billing_address_line_6,郵送先_住所6,addresses_address（accounts_account.billing_address_obj 経由）／支払人住所の同意時はTG様の支払人住所,住所を最大6行（各30バイト以内）に分割し、都道府県・市区町村／町名番地／建物名／部屋番号の順に格納したうえで全角変換,加工あり,封書検針票IF No.11.0（共通部_郵送先_店名屋号等）,支払人住所の同意またはキャンペーン適用時は、口座の請求先ではなくTG様の支払人情報を参照
+9,customer_context.billing_address_context.billing_customer_name,郵送先_お客さま名,accounts_account.billing_name（未設定時は jpn AccountUserDetails.kanji_name、さらに未設定時は kana_name）／支払人住所の同意時はTG様の支払人氏名,全角変換。敬称「様」は付与しない,参照切替あり,封書検針票IF No.12.0（共通部_郵送先_お客さま名）,敬称「様」を付与しない実装のため、KRA007 No.12.0 のsample（例）上北沢　太郎　様）と不一致。支払人住所の同意またはキャンペーン適用時は、口座の請求先ではなくTG様の支払人情報を参照
+10,customer_context.company_code,999B0-A-12345678-kraken1002,accounts_account.number ＋ コード内定数（エリアコード部・帳票ID部）,999B0-（accounts_account.number）-kraken1002 の形式で連結,加工あり,封書検針票IF No.15.0（共通部_社用コード）,前後の 999B0 と kraken1002 はコード内固定値。DBに諸元なし
+11,billing_document_context.issue_date,発行日：XXXX年XX月XX日,issuance_billingdocument.finalized_at（プレビュー時は処理時刻）,UTC・ミリ秒付きISO8601形式（末尾Z）に変換,テーブル直結,,
+12,billing_document_context.billed_at,XXXX年XX月分,ガス契約ありの場合は gas_consumption_contexts[].reading_end（最新）、ガスなしの場合は electricity_consumption_contexts[].reading_date、いずれもない場合は issuance_billingdocument.finalized_at,UTC・ミリ秒付きISO8601形式（末尾Z）に変換,参照切替あり,封書検針票IF No.25.0（共通部_検針年） / 封書検針票IF No.26.0（共通部_検針月）,電気のみの場合、電気の reading_end は期間末日の前日となるため reading_date を使用
+13,billing_document_context.template_id,テンプレートID (*),DBに諸元なし（コード内定義）,固定値「*」,固定値,封書検針票IF No.38.0（帳票ＩＤ）,コード内固定値のため、DBを見ても変更有無は判断できない
+14,gas_consumption_contexts[].gas_type,ガス種：13A 45メガジュール,DBに諸元なし（コード内定義）,固定値「13A 45メガジュール」,固定値,,契約中のガス種別に関わらず常に同一値。DBに諸元なし
+15,gas_consumption_contexts[].product_name,契約種別：一般契約,market_supply_product.code（Agreement 経由。アドオン区画がある場合は区画を付加）,商品コードからコード内の表示名対応表を引いて出力,加工あり,,market_supply_product.display_name ではなくコード内の対応表を参照するため、DB上の商品名を変更しても検針票の表示は変わらない
+16,gas_consumption_contexts[].meter_number_str,メーター社番：559-698-495,market_jpn_gas_gassupplypoint.physical_meter_number,そのまま出力,テーブル直結,,メーター社番をハイフンなしで出力。KRA007のsample（例）1111-22222-3333）はハイフンありのため、ハイフン編集はHUB側で必要
+17,gas_consumption_contexts[].spin_str,供給地点特定番号：00100019368041034,market_jpn_gas_gassupplypoint.spin,そのまま出力,テーブル直結,,供給地点特定番号をハイフンなしで出力。KRA007のsampleはハイフンありのため、ハイフン編集はHUB側で必要
+18,gas_consumption_contexts[].consumption_amount,"ご使用量：1,701m3",market_jpn_gas_gasreading.usage（メーター交換・閉栓を挟む場合は対象期間の検針を合算）,整数値は整数、端数がある場合は末尾0を除去して出力,加工あり,,メーター交換または供給停止がある月は複数検針の合算値
+19,gas_consumption_contexts[].last_month_consumption_amount,"前月使用量適宜：1,701m3",market_jpn_gas_gasreading.consumption_cubic_meters（前月の通常検針）,整数値は整数、端数がある場合は末尾0を除去して出力。該当検針がない場合と再請求の場合はnull,参照切替あり,,
+20,gas_consumption_contexts[].last_year_consumption_amount,"前年同月使用量：1,701m3",market_jpn_gas_gasreading.consumption_cubic_meters（前年同月の通常検針）,整数値は整数、端数がある場合は末尾0を除去して出力。該当検針がない場合と再請求の場合はnull,参照切替あり,,
+21,gas_consumption_contexts[].old_meter_usage_amount,旧メーター使用量,market_jpn_gas_gasreading.meter_value_on_removal と交換前メーターの前回指示数の差,メーター交換ありの場合のみ整数で出力、それ以外はnull,加工あり,,
+22,gas_consumption_contexts[].meter_value_on_installation,取付指示数,market_jpn_gas_gasreading.meter_value_on_installation,そのまま出力（整数またはnull）,テーブル直結,,
+23,gas_consumption_contexts[].meter_replacement_flag,,market_jpn_gas_gasreading の検針列からメーター交換の有無を判定,真偽値,加工あり,,機能フラグ（ガスメーター交換・閉栓のお知らせ）が無効の場合は常にfalse
+24,gas_consumption_contexts[].gas_shutoff_flag,,market_jpn_gas_gasreading の供給停止検針および閉栓日数から判定,真偽値。滞納閉栓・保安閉栓のいずれでもtrue,加工あり,,
+25,gas_consumption_contexts[].dunning_shutoff_flag,,market_jpn_gas_gasreading の供給停止検針が滞納による停止かどうかで判定,真偽値。gas_shutoff_flag がtrueかつ滞納閉栓の場合にtrue,加工あり,,
+26,gas_consumption_contexts[].safety_shutoff_flag,,market_jpn_gas_gasreading の供給停止検針が滞納による停止かどうかで判定,真偽値。gas_shutoff_flag がtrueかつ滞納閉栓でない場合にtrue,加工あり,,
+27,gas_consumption_contexts[].charge_taxed_rate,0.1 for 10% tax rate,billing_accountcharge の税明細から取得した税率,整数値は整数、端数がある場合は末尾0を除去して出力（10%は0.1）,加工あり,,
+28,gas_consumption_contexts[].reading_value,"今回指示数：107,733",market_jpn_gas_gasreading.current_meter_value（未設定時は0）,整数値は整数、端数がある場合は末尾0を除去して出力,テーブル直結,,
+29,gas_consumption_contexts[].previous_reading_value,"前回指示数：106,032",market_jpn_gas_gasreading.previous_meter_value（未設定時は0）,整数値は整数、端数がある場合は末尾0を除去して出力,テーブル直結,,
+30,gas_consumption_contexts[].reading_date,検針日：11月 1日,market_jpn_gas_gasreading.reading_date,現地時間の0時に揃えたうえでUTC・ミリ秒付きISO8601形式（末尾Z）に変換,加工あり,,
+31,gas_consumption_contexts[].reading_start,10月 1日,market_jpn_gas_gasreading.start_at（検針を合算する場合は対象期間の開始）,UTC・ミリ秒付きISO8601形式（末尾Z）に変換,テーブル直結,,
+32,gas_consumption_contexts[].reading_end,11月 1日,market_jpn_gas_gasreading.end_at（検針を合算する場合は対象期間の終了）,UTC・ミリ秒付きISO8601形式（末尾Z）に変換,テーブル直結,,
+33,gas_consumption_contexts[].standing_charge_amount,"基本料金：23,436.66円",billing_accountcharge の基本料金明細行（gross_amount）,小数第2位まで出力,テーブル直結,,
+34,gas_consumption_contexts[].consumption_charge_amount,"従量料金：120,124.62円",billing_accountcharge の従量料金明細行（gross_amount）,小数第2位まで出力,テーブル直結,,
+35,gas_consumption_contexts[].set_discount_amount,セット割引額等,billing_accountcharge の割引明細行（gross_amount）,明細の合計。整数値は整数、端数がある場合は末尾0を除去して出力,加工あり,,電気の同名項目は円未満切り捨てで出力されるため、ガスと電気で丸め方が異なる
+36,gas_consumption_contexts[].discounts[].name,ずっともパック割引額,billing_accountcharge の割引明細行の supply_type から取得した割引コード,割引コードから区分値表を引いて日本語名称に変換,区分値変換,,名称はコード内の対応表で定義。DBに表示名の諸元なし
+37,gas_consumption_contexts[].discounts[].gross_amount,-151円,billing_accountcharge の割引明細行（gross_amount）,整数値は整数、端数がある場合は末尾0を除去して出力,テーブル直結,,
+38,gas_consumption_contexts[].total_charge_amount,"請求金額：142,000円",billing_accountcharge.gross_amount,円未満切り捨てで整数に変換,テーブル直結,,
+39,gas_consumption_contexts[].is_recharge,,billing_accountcharge が再請求対象かどうかで判定,真偽値,加工あり,,
+40,gas_rate_context.gas_supply_type,A / B ...,billing_accountcharge の従量料金明細行の supply_type から判定した料金表種別,最新のガス使用分から料金表種別（A／B…）を転記。ガス契約がない場合はブロック全体がnull,加工あり,封書検針票IF No.180-2（ガス当月適用料金表種別名）,
+41,gas_rate_context.gas_standing_charge,基本料金,billing_accountcharge の基本料金明細行（gross_amount。最新のガス使用分）,小数第2位まで出力,加工あり,封書検針票IF No.180-4（ガス当月適用基本料金）,
+42,gas_rate_context.gas_consumption_charge_rate,単位料金,billing_accountcharge の従量料金明細行の単価（最新のガス使用分）,小数第2位まで出力,加工あり,封書検針票IF No.180-6（ガス当月適用単位料金）,
+43,gas_rate_context.gas_consumption_charge_unit,単位料金単位 (円／㎥),DBに諸元なし（コード内定義）,固定値「/㎥」,固定値,封書検針票IF No.180-6（ガス当月適用単位料金）,コード内固定値。DBに諸元なし
+44,next_month_gas_rate_context.gas_rate_a.tier_name,Tier A rate,market_supply_productrate.band（翌月適用の従量料金レート）,区画記号（A）に変換。ガス契約がない場合と最終検針の場合はブロック全体がnull,加工あり,封書検針票IF No.181-2（ガス翌月適用使用量区画１）,
+45,next_month_gas_rate_context.gas_rate_a.tier_start,,market_supply_productrate.params 内の tier.start,0はそのまま、0以外は開始値に1を加算して下限を包含表示,加工あり,封書検針票IF No.181-2（ガス翌月適用使用量区画１）,
+46,next_month_gas_rate_context.gas_rate_a.tier_end,,market_supply_productrate.params 内の tier.end,そのまま出力（上限なしの区画はnull）,テーブル直結,封書検針票IF No.181-2（ガス翌月適用使用量区画１）,
+47,next_month_gas_rate_context.gas_rate_a.gross_price,,market_supply_productrate.params 内の gross_price_per_unit ＋ 翌月適用の原料費調整単価（FuelCostAdjustment.params 内の gross_price_per_unit）,単価と原料費調整単価を合算して明細桁数に丸めたうえで、整数値は整数、端数がある場合は末尾0を除去して出力,加工あり,封書検針票IF No.181-3（ガス翌月適用単位料金１）,
+48,next_month_gas_rate_context.gas_rate_b.tier_name,Tier B rate,market_supply_productrate.band（翌月適用の従量料金レート）,区画記号（B）に変換。ガス契約がない場合と最終検針の場合はブロック全体がnull,加工あり,封書検針票IF No.181-4（ガス翌月適用使用量区画２）,
+49,next_month_gas_rate_context.gas_rate_b.tier_start,,market_supply_productrate.params 内の tier.start,0はそのまま、0以外は開始値に1を加算して下限を包含表示,加工あり,封書検針票IF No.181-4（ガス翌月適用使用量区画２）,
+50,next_month_gas_rate_context.gas_rate_b.tier_end,,market_supply_productrate.params 内の tier.end,そのまま出力（上限なしの区画はnull）,テーブル直結,封書検針票IF No.181-4（ガス翌月適用使用量区画２）,
+51,next_month_gas_rate_context.gas_rate_b.gross_price,,market_supply_productrate.params 内の gross_price_per_unit ＋ 翌月適用の原料費調整単価（FuelCostAdjustment.params 内の gross_price_per_unit）,単価と原料費調整単価を合算して明細桁数に丸めたうえで、整数値は整数、端数がある場合は末尾0を除去して出力,加工あり,封書検針票IF No.181-5（ガス翌月適用単位料金２）,
+52,next_month_gas_rate_context.gas_rate_c.tier_name,Tier C rate,market_supply_productrate.band（翌月適用の従量料金レート）,区画記号（C）に変換。ガス契約がない場合と最終検針の場合はブロック全体がnull,加工あり,封書検針票IF No.181-6（ガス翌月適用使用量区画３）,
+53,next_month_gas_rate_context.gas_rate_c.tier_start,,market_supply_productrate.params 内の tier.start,0はそのまま、0以外は開始値に1を加算して下限を包含表示,加工あり,封書検針票IF No.181-6（ガス翌月適用使用量区画３）,
+54,next_month_gas_rate_context.gas_rate_c.tier_end,,market_supply_productrate.params 内の tier.end,そのまま出力（上限なしの区画はnull）,テーブル直結,封書検針票IF No.181-6（ガス翌月適用使用量区画３）,
+55,next_month_gas_rate_context.gas_rate_c.gross_price,,market_supply_productrate.params 内の gross_price_per_unit ＋ 翌月適用の原料費調整単価（FuelCostAdjustment.params 内の gross_price_per_unit）,単価と原料費調整単価を合算して明細桁数に丸めたうえで、整数値は整数、端数がある場合は末尾0を除去して出力,加工あり,封書検針票IF No.181-7（ガス翌月適用単位料金３）,
+56,next_month_gas_rate_context.gas_rate_d.tier_name,Tier D rate,market_supply_productrate.band（翌月適用の従量料金レート）,区画記号（D）に変換。ガス契約がない場合と最終検針の場合はブロック全体がnull,加工あり,封書検針票IF No.181-8（ガス翌月適用使用量区画４）,
+57,next_month_gas_rate_context.gas_rate_d.tier_start,,market_supply_productrate.params 内の tier.start,0はそのまま、0以外は開始値に1を加算して下限を包含表示,加工あり,封書検針票IF No.181-8（ガス翌月適用使用量区画４）,
+58,next_month_gas_rate_context.gas_rate_d.tier_end,,market_supply_productrate.params 内の tier.end,そのまま出力（上限なしの区画はnull）,テーブル直結,封書検針票IF No.181-8（ガス翌月適用使用量区画４）,
+59,next_month_gas_rate_context.gas_rate_d.gross_price,,market_supply_productrate.params 内の gross_price_per_unit ＋ 翌月適用の原料費調整単価（FuelCostAdjustment.params 内の gross_price_per_unit）,単価と原料費調整単価を合算して明細桁数に丸めたうえで、整数値は整数、端数がある場合は末尾0を除去して出力,加工あり,封書検針票IF No.181-9（ガス翌月適用単位料金４）,
+60,next_month_gas_rate_context.gas_rate_e.tier_name,Tier E rate,market_supply_productrate.band（翌月適用の従量料金レート）,区画記号（E）に変換。ガス契約がない場合と最終検針の場合はブロック全体がnull,加工あり,封書検針票IF No.181-10（ガス翌月適用使用量区画５）,
+61,next_month_gas_rate_context.gas_rate_e.tier_start,,market_supply_productrate.params 内の tier.start,0はそのまま、0以外は開始値に1を加算して下限を包含表示,加工あり,封書検針票IF No.181-10（ガス翌月適用使用量区画５）,
+62,next_month_gas_rate_context.gas_rate_e.tier_end,,market_supply_productrate.params 内の tier.end,そのまま出力（上限なしの区画はnull）,テーブル直結,封書検針票IF No.181-10（ガス翌月適用使用量区画５）,
+63,next_month_gas_rate_context.gas_rate_e.gross_price,,market_supply_productrate.params 内の gross_price_per_unit ＋ 翌月適用の原料費調整単価（FuelCostAdjustment.params 内の gross_price_per_unit）,単価と原料費調整単価を合算して明細桁数に丸めたうえで、整数値は整数、端数がある場合は末尾0を除去して出力,加工あり,封書検針票IF No.181-11（ガス翌月適用単位料金５）,
+64,next_month_gas_rate_context.gas_rate_f.tier_name,Tier F rate,market_supply_productrate.band（翌月適用の従量料金レート）,区画記号（F）に変換。ガス契約がない場合と最終検針の場合はブロック全体がnull,加工あり,封書検針票IF No.181-12（ガス翌月適用使用量区画６）,
+65,next_month_gas_rate_context.gas_rate_f.tier_start,,market_supply_productrate.params 内の tier.start,0はそのまま、0以外は開始値に1を加算して下限を包含表示,加工あり,封書検針票IF No.181-12（ガス翌月適用使用量区画６）,
+66,next_month_gas_rate_context.gas_rate_f.tier_end,,market_supply_productrate.params 内の tier.end,そのまま出力（上限なしの区画はnull）,テーブル直結,封書検針票IF No.181-12（ガス翌月適用使用量区画６）,
+67,next_month_gas_rate_context.gas_rate_f.gross_price,,market_supply_productrate.params 内の gross_price_per_unit ＋ 翌月適用の原料費調整単価（FuelCostAdjustment.params 内の gross_price_per_unit）,単価と原料費調整単価を合算して明細桁数に丸めたうえで、整数値は整数、端数がある場合は末尾0を除去して出力,加工あり,封書検針票IF No.181-13（ガス翌月適用単位料金６）,
+68,gas_reversing_credit_contexts[].gross_amount,,billing_accountcredit.gross_amount（ガス料金の取消対象クレジット）,円未満切り捨てで整数に変換,テーブル直結,,KRA007「ガス料金取消額」欄はKraken JSON列が未記入。対応は別紙（KRA007未記入パラメタ対応一覧）に記載
+69,gas_reversing_credit_contexts[].reading_date,,取消対象となった billing_accountcharge の明細期間の終了日,現地時間の0時に揃えたうえでUTC・ミリ秒付きISO8601形式（末尾Z）に変換,加工あり,,
+70,gas_reversing_credit_contexts[].reading_start,,取消対象となった billing_accountcharge の明細期間の開始日,UTC・ミリ秒付きISO8601形式（末尾Z）に変換,加工あり,,
+71,gas_reversing_credit_contexts[].reading_end,,取消対象となった billing_accountcharge の明細期間の終了日,UTC・ミリ秒付きISO8601形式（末尾Z）に変換,加工あり,,
+72,electricity_consumption_contexts[].spin_str,供給地点特定番号:0300111001301606071571,market_jpn_electricity_electricitysupplypoint.spin,そのまま出力,テーブル直結,,供給地点特定番号をハイフンなしで出力。KRA007のsampleはハイフンありのため、ハイフン編集はHUB側で必要
+73,electricity_consumption_contexts[].contracted_capacity,40A,billing_accountcharge の基本料金明細行の契約容量と単位（機能フラグ有効時）／それ以外は market_jpn_electricity_electricitysupplypoint および供給契約詳細,契約容量と単位を連結した表示文字列（例：40A、kVA、kW）,参照切替あり,,
+74,electricity_consumption_contexts[].product_name,契約種別：電１,market_supply_product.code（Agreement 経由）,商品コードからコード内の表示名対応表を引いて出力,区分値変換,,market_supply_product.display_name ではなくコード内の対応表を参照するため、DB上の商品名を変更しても検針票の表示は変わらない。対応表に未登録のコードはエラーとなる
+75,electricity_consumption_contexts[].consumption_amount,ご使用量：415ｋＷｈ,market_jpn_electricity_electricityintervalreading.value,整数値は整数、端数がある場合は末尾0を除去して出力,テーブル直結,,
+76,electricity_consumption_contexts[].last_month_consumption_amount,前月使用量適宜：415ｋＷｈ,market_jpn_electricity_electricityintervalreading.value（前月分）,整数値は整数、端数がある場合は末尾0を除去して出力。該当検針がない場合と再請求の場合はnull,参照切替あり,,
+77,electricity_consumption_contexts[].last_year_consumption_amount,同月使用量：415ｋＷｈ,market_jpn_electricity_electricityintervalreading.value（前年同月分）,整数値は整数、端数がある場合は末尾0を除去して出力。該当検針がない場合と再請求の場合はnull,参照切替あり,,
+78,electricity_consumption_contexts[].charge_taxed_rate,0.1 for 10% tax rate,billing_accountcharge の税明細から取得した税率,整数値は整数、端数がある場合は末尾0を除去して出力（10%は0.1）,加工あり,,
+79,electricity_consumption_contexts[].reading_date,検針日：11月 1日,market_jpn_electricity_electricityintervalreading の検針日,現地時間の0時に揃えたうえでUTC・ミリ秒付きISO8601形式（末尾Z）に変換,加工あり,,
+80,electricity_consumption_contexts[].reading_start,10月 1日,market_jpn_electricity_electricityintervalreading.start_at,UTC・ミリ秒付きISO8601形式（末尾Z）に変換,テーブル直結,,
+81,electricity_consumption_contexts[].reading_end,11月 1日,market_jpn_electricity_electricityintervalreading.end_at,end_at から1日減算したうえでUTC・ミリ秒付きISO8601形式（末尾Z）に変換,加工あり,,検針票上の使用期間を末日包含で表示するための減算。DB上の期間終了日とは1日ずれる
+82,electricity_consumption_contexts[].standing_charge_amount,基本料金：858.00円,billing_accountcharge の基本料金明細行（gross_amount。明細がない場合は0）,小数第2位まで出力,テーブル直結,,
+83,electricity_consumption_contexts[].consumption_charges[],"電力量料金1: 2,373.60円, ...",billing_accountcharge の電力量料金明細行（gross_amount。時間帯別は集約後）,各要素を小数第2位まで出力。並び順は無ラベル→段階→時間帯（ピーク・オフピーク・夜間）,加工あり,,consumption_charge_contexts[].amount と同じ値を持つ並列の配列
+84,electricity_consumption_contexts[].fuel_cost_adjustment_amount,燃料費調整額: -430.76円,billing_accountcharge の燃料費調整明細行（gross_amount）,小数第2位まで出力,テーブル直結,,
+85,electricity_consumption_contexts[].set_discount_amount,セット割引額等: -29.00円 (The sum of all discounts),billing_accountcharge の割引明細行（gross_amount）,明細の合計を円未満切り捨てで整数に変換,加工あり,,ガスの同名項目は円未満の切り捨てを行わないため、ガスと電気で丸め方が異なる
+86,electricity_consumption_contexts[].discounts[].name,ずっともパック割引額,billing_accountcharge の割引明細行の supply_type から取得した割引コード,割引コードから区分値表を引いて日本語名称に変換,区分値変換,,名称はコード内の対応表で定義。DBに表示名の諸元なし
+87,electricity_consumption_contexts[].discounts[].gross_amount,-151円,billing_accountcharge の割引明細行（gross_amount）,整数値は整数、端数がある場合は末尾0を除去して出力,テーブル直結,,
+88,electricity_consumption_contexts[].renewable_energy_charge_amount,再エネ促進賦課金: 338.00円,billing_accountcharge の再エネ賦課金明細行（gross_amount）,円未満切り捨てで整数に変換,テーブル直結,,
+89,electricity_consumption_contexts[].total_charge_amount,"請求金額：4,323円",billing_accountcharge.gross_amount,円未満切り捨てで整数に変換,テーブル直結,,
+90,electricity_consumption_contexts[].is_recharge,,billing_accountcharge が再請求対象かどうかで判定,真偽値,加工あり,,
+91,electricity_consumption_contexts[].consumption_charge_contexts[].amount,,billing_accountcharge の電力量料金明細行（gross_amount。時間帯別は集約後）,小数第2位まで出力。旧データでは配列自体がnull,加工あり,左欄_中欄_右欄 電気料金／右欄_料金内訳金額2 / 左欄_中欄_右欄 電気料金／右欄_料金内訳金額3 / 左欄_中欄_右欄 電気料金／右欄_料金内訳金額4,KRA007側は親要素 electricity_consumption_contexts[]. を省き、かつ consumption_charges_contexts[]（charges）と表記しているが、本項目 consumption_charge_contexts[] と同一
+92,electricity_consumption_contexts[].consumption_charge_contexts[].label,,billing_accountcharge の電力量料金明細行の段階番号または時間帯区分,無ラベルは空文字、段階制は段階番号、時間帯別はピーク・オフピーク・夜間に変換,区分値変換,左欄_中欄_右欄 電気料金／右欄_料金内訳名称2 / 左欄_中欄_右欄 電気料金／右欄_料金内訳名称3 / 左欄_中欄_右欄 電気料金／右欄_料金内訳名称4,KRA007側は親要素 electricity_consumption_contexts[]. を省き、かつ consumption_charges_contexts[]（charges）と表記しているが、本項目 consumption_charge_contexts[] と同一。ラベルの文言はコード内定義
+93,electricity_reversing_credit_contexts[].gross_amount,,billing_accountcredit.gross_amount（電気料金の取消対象クレジット）,円未満切り捨てで整数に変換,テーブル直結,,
+94,electricity_reversing_credit_contexts[].reading_date,,取消対象となった billing_accountcharge の明細期間の終了日,翌日0時に揃えたうえでUTC・ミリ秒付きISO8601形式（末尾Z）に変換,加工あり,,
+95,electricity_reversing_credit_contexts[].reading_start,,取消対象となった billing_accountcharge の明細期間の開始日,UTC・ミリ秒付きISO8601形式（末尾Z）に変換,加工あり,,
+96,electricity_reversing_credit_contexts[].reading_end,,取消対象となった billing_accountcharge の明細期間の終了日,UTC・ミリ秒付きISO8601形式（末尾Z）に変換,加工あり,,
+97,billing_totals_context.gross_amount,"ご請求金額合計: 170,303円",ガス・電気の total_charge_amount と、付帯・その他・帳票発行手数料の billing_accountcharge／billing_accountcredit の gross_amount,明細の合計を円未満切り捨てで整数に変換,加工あり,左欄_中欄_右欄 合計／右欄_ご請求金額合計,
+98,billing_totals_context.gross_amount_10_pct,"(10%対象): 170,303円",ガス・電気の total_charge_amount と、付帯・その他・帳票発行手数料の billing_accountcharge／billing_accountcredit の gross_amount のうち税率10%のもの,明細の合計を円未満切り捨てで整数に変換,加工あり,左欄_中欄_右欄 合計／右欄_合計税率１金額,
+99,billing_totals_context.tax_amount,"内消費税等: 15,474円",ガス・電気の total_charge_amount と、付帯・その他・帳票発行手数料の billing_accountcharge／billing_accountcredit の gross_amount に対応する消費税額,明細の合計を円未満切り捨てで整数に変換,加工あり,左欄_中欄_右欄 合計／右欄_内消費税等金額,
+100,billing_totals_context.tax_amount_10_pct,"(10%対象): 15,474円",ガス・電気の total_charge_amount と、付帯・その他・帳票発行手数料の billing_accountcharge／billing_accountcredit の gross_amount のうち税率10%のものに対応する消費税額,明細の合計を円未満切り捨てで整数に変換,加工あり,左欄_中欄_右欄 合計／右欄_消費税等税率１金額,
+101,billing_totals_context.tax_exempt_amount,"(非課税又は免税): 1,100円",延滞利息の billing_accountcharge.gross_amount,明細の合計を円未満切り捨てで整数に変換,加工あり,左欄_中欄_右欄 合計／右欄_合計税率２金額,非課税・免税として集計するのは延滞利息のみ
+102,supply_point_context.customer_number,お客さま番号,ガス契約ありの場合は market_jpn_gas_gassupplypoint.spin の下11桁／電気のみの場合はTG様側から連携されたお客さま番号（外部アカウント情報の CUSTOMER_REGISTRATION_NUMBER、なければ主契約者の同番号）,4桁目と7桁目の後にハイフンを挿入（1234-567-8901 形式）,参照切替あり,封書検針票IF No.27.0（共通部_お客さま通知番号）,
+103,supply_point_context.supply_usage_address_context.postal_address_line_1,使用者_住所1(ハガキ),addresses_address（供給地点の物件住所 rich_address）,住所を最大6行（各30バイト以内）に分割し、都道府県・市区町村／町名番地／建物名／部屋番号の順に格納したうえで全角変換,加工あり,封書検針票IF No.36.0（共通部_使用者_住所1）,
+104,supply_point_context.supply_usage_address_context.postal_address_line_2,使用者_住所2(ハガキ),addresses_address（供給地点の物件住所 rich_address）,住所を最大6行（各30バイト以内）に分割し、都道府県・市区町村／町名番地／建物名／部屋番号の順に格納したうえで全角変換,加工あり,封書検針票IF No.36.0（共通部_使用者_住所1）,
+105,supply_point_context.supply_usage_address_context.postal_address_line_3,使用者_住所3(ハガキ),addresses_address（供給地点の物件住所 rich_address）,住所を最大6行（各30バイト以内）に分割し、都道府県・市区町村／町名番地／建物名／部屋番号の順に格納したうえで全角変換,加工あり,封書検針票IF No.37.0（共通部_使用者_住所2）,
+106,supply_point_context.supply_usage_address_context.postal_address_line_4,使用者_住所4(ハガキ),addresses_address（供給地点の物件住所 rich_address）,住所を最大6行（各30バイト以内）に分割し、都道府県・市区町村／町名番地／建物名／部屋番号の順に格納したうえで全角変換,加工あり,封書検針票IF No.34.0（共通部_使用者_店名屋号等） / 封書検針票IF No.37.0（共通部_使用者_住所2）,
+107,supply_point_context.supply_usage_address_context.postal_address_line_5,使用者_住所5(ハガキ),addresses_address（供給地点の物件住所 rich_address）,住所を最大6行（各30バイト以内）に分割し、都道府県・市区町村／町名番地／建物名／部屋番号の順に格納したうえで全角変換,加工あり,,
+108,supply_point_context.supply_usage_address_context.postal_address_line_6,使用者_住所6(ハガキ),addresses_address（供給地点の物件住所 rich_address）,住所を最大6行（各30バイト以内）に分割し、都道府県・市区町村／町名番地／建物名／部屋番号の順に格納したうえで全角変換,加工あり,封書検針票IF No.34.0（共通部_使用者_店名屋号等）,
+109,supply_point_context.supply_usage_address_context.postal_customer_name,使用者_お客さま名(ハガキ),法人は accounts_account.billing_name（未設定時は AccountUserDetails.kanji_name／kana_name）／個人は主契約者の AccountUserDetails.kanji_name（未設定時は kana_name）,全角変換。敬称「様」は付与しない,参照切替あり,封書検針票IF No.35.0（共通部_使用者_お客さま名）,敬称「様」を付与しない実装のため、KRA007 No.35.0 のsample（例）有）○○　様）と不一致
+110,supply_point_context.next_reading_date,次回検針予定日,market_jpn_gas_gassupplypoint の検針スケジュール,YYYY-MM-DD形式に変換。電気のみ契約・最終検針・スケジュール未取得の場合はnull,加工あり,封書検針票IF No.33.0（共通部_請求日）,
+111,payment_context.payment_amount,ご請求金額（円）,billing_totals_context.gross_amount と同値,円未満切り捨てで整数に変換,加工あり,封書検針票IF No.29.0（共通部_請求金額）,
+112,payment_context.payment_method,お支払い方法,支払指示の支払種別,支払種別を区分値表で口座振替／カード払い／標準払込書／電子請求に変換。支払予定または支払指示がない場合はnull,区分値変換,封書検針票IF No.30.0（共通部_支払方法別文言１） / 封書検針票IF No.31.0（共通部_支払方法別文言２）,中間コンテキストにある payment_method_title は本JSONには出力されない
+113,payment_context.payment_scheduled_date,口座振替予定日 (only for direct debit),PaymentSchedule の口座振替予定日,YYYY-MM-DD形式に変換。非営業日の場合は東京ガス様の翌営業日に繰り下げ。支払方法が口座振替以外の場合はnull,加工あり,,
+114,printing_fee_context.tax_rate,税額 0.1 for 10% tax rate,billing_accountcharge.posting_date 時点の標準税率,標準税率を100で除して出力（10%は0.1）。整数値は整数、端数がある場合は末尾0を除去して出力。帳票発行手数料の請求がない場合はブロック全体がnull,加工あり,左欄_中欄_右欄 手数料／左欄_税率,
+115,printing_fee_context.total_gross_amount,請求金額,帳票発行手数料に該当する billing_accountcharge.gross_amount,明細の合計を円未満切り捨てで整数に変換,加工あり,左欄_中欄_右欄 手数料／右欄_請求金額,
+116,printing_fee_context.charges[].gross_amount,"請求金額: 1,100円",billing_accountcharge.gross_amount,円未満切り捨てで整数に変換,テーブル直結,左欄_中欄_右欄 手数料／右欄_手数料金額,
+117,printing_fee_context.charges[].net_amount,"税別金額: 1,000円",billing_accountcharge.net_amount（未設定時は0）,円未満切り捨てで整数に変換,テーブル直結,,
+118,printing_fee_context.charges[].tax_amount,消費税額: 100円,billing_accountcharge.sales_tax_amount（未設定時は0）,円未満切り捨てで整数に変換,テーブル直結,,
+119,printing_fee_context.charges[].tax_rate,0.1 for 10% tax rate,printing_fee_context.tax_rate と同値,整数値は整数、端数がある場合は末尾0を除去して出力,加工あり,,
+120,printing_fee_context.charges[].reason_code,理由コード,billing_accountcharge.reason,そのまま出力,テーブル直結,,
+121,printing_fee_context.charges[].display,表示用理由,billing_accountcharge.display,そのまま出力,テーブル直結,左欄_中欄_右欄 手数料／右欄_手数料テキスト,本項目のみ billing_accountcharge.display をそのまま参照。charge_contexts[].display はコード内の理由定義を参照するため出所が異なる
+122,printing_fee_context.charges[].applied_date,適用日: XXXX年XX月XX日,billing_accountcharge.applied_date,YYYY-MM-DD形式に変換,テーブル直結,,
+123,printing_fee_context.charges[].note,手数料明細_備考,DBに諸元なし（コード内定義）,手数料明細では値を設定せず、常にnullを出力,固定値,,charge_contexts[]と同一のクラスを使用しているため、手数料明細にもキーのみ出力されます。値は常にnullで、KRA007に対応する項目はありません。
+124,printing_fee_context.charges[].transaction_date,手数料明細_取引年月日,DBに諸元なし（コード内定義）,手数料明細では値を設定せず、常にnullを出力,固定値,,charge_contexts[]と同一のクラスを使用しているため、手数料明細にもキーのみ出力されます。値は常にnullで、KRA007に対応する項目はありません。
+125,notice_contexts[].code,Unique code for the notice,DBに諸元なし（コード内定義）,お知らせ種別のコードを出力。補助金のお知らせは年月日を含むコードに整形。コード重複を除外し優先度の昇順に整列,区分値変換,,KRA007 封書検針票IF No.182.0（メッセージ）は親要素 notice_contexts を指定しており、個別項目の指定はなし。お知らせの種別・文言・優先度はいずれもコード内定義で、DBに一覧テーブルなし
+126,notice_contexts[].message,Message to the customer,DBに諸元なし（コード内定義）。補助金のお知らせのみ単価・対象月を MetiCreditPeriod 系テーブルから取得,コード内の定型文をそのまま出力。補助金の数値部分は全角に変換,区分値変換,,文言の変更はDBではなくコード改修が必要
+127,notice_contexts[].priority,Priority order of the notice defined by the client,DBに諸元なし（コード内定義）,コード内定義の整数（定義表の値の10倍）。昇順の並び替えキー,区分値変換,,
+128,charge_contexts[].gross_amount,"請求金額: 1,100円",billing_accountcharge.gross_amount,円未満切り捨てで整数に変換,テーブル直結,,付帯料金・その他料金・延滞利息を1つの配列に結合して出力。中間コンテキストでは別々の配列
+129,charge_contexts[].net_amount,"税別金額: 1,000円",billing_accountcharge.net_amount（未設定時は0）,円未満切り捨てで整数に変換,テーブル直結,,
+130,charge_contexts[].tax_amount,消費税額: 100円,billing_accountcharge.sales_tax_amount（未設定時は0）,円未満切り捨てで整数に変換,テーブル直結,,
+131,charge_contexts[].tax_rate,0.1 for 10% tax rate,付帯料金はTG様側から連携（billing_accountcharge の metadata 内 tax_rate）／それ以外は計上日時点の標準税率を100で除した値、消費税額がない場合は0,整数値は整数、端数がある場合は末尾0を除去して出力,参照切替あり,,付帯料金の税率はTG様から連携されたメタデータを参照
+132,charge_contexts[].reason_code,理由コード: LATE_PAYMENT_INTEREST,billing_accountcharge.reason に対応する料金理由定義のコード,そのまま出力,区分値変換,,
+133,charge_contexts[].display,表示用理由: 延滞利息,billing_accountcharge.reason に対応する料金理由定義の表示名,理由定義から日本語表示名を出力,区分値変換,,billing_accountcharge.display の値ではなくコード内の理由定義を参照
+134,charge_contexts[].applied_date,適用日: XXXX年XX月XX日,billing_accountcharge.applied_date,YYYY-MM-DD形式に変換,テーブル直結,,
+135,charge_contexts[].note,お知らせ: 対象年月日,延滞利息の対象となった検針日,延滞利息のみ「対象年月日 M月D日」の形式で出力。それ以外は空文字またはnull,加工あり,,
+136,charge_contexts[].transaction_date,取引年月日: XXXX年XX月XX日,TG様側から連携（billing_accountcharge の metadata 内 transaction_date）,YYYY年M月D日形式に変換（月日はゼロ埋めなし）。付帯料金以外は空文字,TG連携値,,値の起点はTG様から連携されたメタデータ。Kraken側で算出した日付ではない
+137,credit_contexts[].gross_amount,請求金額: -55円,billing_accountcredit.gross_amount,符号を反転したうえで円未満切り捨てで整数に変換,加工あり,,付帯クレジットとその他クレジット（取消分を除く）を1つの配列に結合して出力。中間コンテキストでは別々の配列
+138,credit_contexts[].net_amount,税別金額: -50円,billing_accountcredit.net_amount（未設定時は0）,符号を反転したうえで円未満切り捨てで整数に変換,加工あり,,
+139,credit_contexts[].tax_amount,消費税額: -5円,billing_accountcredit.sales_tax_amount（未設定時は0）,符号を反転したうえで円未満切り捨てで整数に変換,加工あり,,
+140,credit_contexts[].tax_rate,0.1 for 10% tax rate,付帯クレジットはTG様側から連携（billing_accountcredit の metadata 内 tax_rate）／それ以外は計上日時点の標準税率を100で除した値、消費税額がない場合は0,整数値は整数、端数がある場合は末尾0を除去して出力,参照切替あり,,付帯クレジットの税率はTG様から連携されたメタデータを参照
+141,credit_contexts[].reason_code,理由コード: GAS_DIRECT_DEBIT_DISCOUNT,billing_accountcredit.reason に対応するクレジット理由定義のコード,そのまま出力,区分値変換,,
+142,credit_contexts[].display,表示用理由: 口座割引額,billing_accountcredit.reason に対応するクレジット理由定義の表示名,理由定義から日本語表示名を出力。付帯クレジットは返金を示す接尾辞を除去,区分値変換,,
+143,credit_contexts[].applied_date,適用日: XXXX年XX月XX日,billing_accountcredit.applied_date,YYYY-MM-DD形式に変換,テーブル直結,,
+144,credit_contexts[].note,お知らせ: 対象年月日 X月X日,延滞金の取消の場合のみ、取消対象の延滞金を計上したステートメントの検針日（同一燃料）を参照,「対象年月日 M月D日」の形式で出力します。月日のゼロ埋めはありません。検針日が取得できない場合はnull、延滞金の取消以外のクレジットでは空文字を出力します。,加工あり,,延滞金の取消をクレジットとして出力する対応にあわせて追加された項目です。8月28日にお渡しした一覧には含まれておりません。
+145,credit_contexts[].transaction_date,取引年月日: XXXX年XX月XX日,TG様側から連携（billing_accountcredit の metadata 内 transaction_date）,YYYY年M月D日形式に変換（月日はゼロ埋めなし）。付帯クレジット以外は空文字,TG連携値,,値の起点はTG様から連携されたメタデータ。Kraken側で算出した日付ではない
+146,credit_contexts[].show_positive_amount,,DBに諸元なし（コード内定義）,ステートメント出力時は値を設定しないため、現時点では常にfalseを出力します。,固定値,,クレジット明細で同一のクラスを使用しているため、キーのみ出力されます。KRA007に対応する項目はありません。

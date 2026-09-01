@@ -15,7 +15,7 @@
     <key>WorkingDirectory</key>
     <string>/Users/rei.samuelsson/Projects/tg-billing-desk</string>
 
-    <!-- Mon (1), Wed (3), Thu (4) at 11:00 local time, just as the standup ends.
+    <!-- Mon (1) and Wed (3) at 11:00 local time, just as the standup ends.
          The Notion meeting note lands about five minutes later, and the meeting
          sometimes overruns, so run_post.sh polls every five minutes until 11:45
          and gives up after that. It will not rebuild a page it already built
@@ -24,7 +24,6 @@
     <array>
         <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>0</integer></dict>
         <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>0</integer></dict>
-        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>11</integer><key>Minute</key><integer>0</integer></dict>
     </array>
 
     <key>EnvironmentVariables</key>

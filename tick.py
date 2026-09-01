@@ -6,6 +6,7 @@ is finished. Sending a message usually moves it to the middle one, and it comes
 back to you on the same number when they reply.
 
     ./tick.py                            where everything is
+    ./tick.py --rebuild                  redraw both pages, change nothing
     ./tick.py 4                          finished, nothing comes back
     ./tick.py 2 -w "Kevin"               sent, ball is with Kevin
     ./tick.py 2 -w "Kevin" -n "asked about the account-level hold"
@@ -25,6 +26,7 @@ import sys
 from pathlib import Path
 
 import board as B
+import keep
 from render import item_state
 
 ROOT = Path(__file__).resolve().parent
@@ -85,12 +87,25 @@ def main() -> int:
     parser.add_argument("--sent", action="store_true", help="finished, and it was a message")
     parser.add_argument("--dropped", action="store_true", help="finished, no longer worth doing")
     parser.add_argument("--undo", action="store_true", help="back to with you, clear the note")
+    parser.add_argument(
+        "--rebuild",
+        action="store_true",
+        help="redraw both pages from the board without moving anything",
+    )
     args = parser.parse_args()
 
     data = B.load()
     if not data.get("tickets"):
         print("no board yet. Run: tg build", file=sys.stderr)
         return 1
+
+    # An agent that has just edited the board needs the pages redrawn and has no
+    # state to move. It used to read this file to find the two render commands.
+    if args.rebuild:
+        rebuild()
+        print("output/desk.html and output/desk.md rebuilt from the board")
+        if not args.ids:
+            return 0
 
     if not args.ids:
         show(data)
@@ -105,6 +120,7 @@ def main() -> int:
         _, item = B.by_id(data, ident)
         if args.undo or args.mine:
             item.pop("hold", None)
+            item.pop("waits_on", None)
             item["sent_by_you"] = False
             B.set_state(item, "todo", args.note)
             continue
@@ -118,6 +134,9 @@ def main() -> int:
         else:
             B.set_state(item, "done", args.note)
 
+    # Snapshot before writing, the same as every agent run does. tick.py is the
+    # most frequent writer, so it should not be the one without a way back.
+    keep.keep("tick")
     B.save(data)
     rebuild()
     show(data)
