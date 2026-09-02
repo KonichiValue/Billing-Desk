@@ -115,9 +115,13 @@ The audit and the SWEEP PLAN both key off `checked`: a thread looked at since th
 ticket's newest event is not re-read next time. **A sweep that reads a thread and
 leaves `checked` alone has signed the next sweep up to read it all over again**,
 which is most of what made past sweeps slow. So the rule is simple: open a thread
-→ set its `checked`; find a newer message → also move `last_at`. The SWEEP PLAN
+→ stamp it with `./note.py checked <ticket>` (add `--thread <url>` to stamp one,
+`--last-at`/`--last-from` when a newer message was there); the SWEEP PLAN then
 lists only the threads not yet looked at since the last event, so if you work it
-honestly the list shrinks every sweep instead of staying at two dozen.
+honestly the list shrinks every sweep instead of staying at two dozen. Use
+`./note.py` for the repetitive writes (stamping threads, adding an event,
+`./note.py swept` for `checked_at`) rather than hand-writing a board script —
+that hand-writing is what sends a sweep reading `board.py` and dumping the board.
 
 ## 2. Sweep every open ticket
 

@@ -256,51 +256,39 @@ def _sweep_plan(b: dict) -> None:
 
 
 CHEATSHEET = """WRITE CHEATSHEET  (the whole of a sweep's writing -- no help(board), no board.json dump)
-  Load once, mutate in memory, save once. board.save refuses a shape no renderer
-  can survive, so a clean return is the confirmation -- do not read the file back.
+
+The three edits a sweep repeats need NO python -- use ./note.py, one command each:
+
+  ./note.py checked 保安閉栓                     # stamp every thread on the ticket as looked-at now
+  ./note.py checked 検針票諸元 --thread slack     # only threads whose url contains "slack"
+  ./note.py checked 託送HOLD --thread <url> --last-at "2026-09-02 14:30" --last-from "Heqing"  # a newer message was there
+  ./note.py event 保安閉栓 --who "Robert Balayan, Kraken CE" --what "..." --so-what "..." --where Slack --url "https://..."
+  ./note.py swept                               # set checked_at = now (once, near the end)
+
+Item STATE is ./tick.py (never hand-edit it):
+  ./tick.py 34 -w "Sayaka, TG" -n "answered, awaiting sign-off"   # sent, ball with them
+  ./tick.py 8 --mine        # they replied, back to him     ./tick.py 5 --dropped -n "TG handled it"
+
+For the rest -- a draft to rewrite, a new item, a news row -- load once, mutate, save once.
+board.save refuses a shape no renderer can survive, so a clean return is the confirmation;
+do not read the file back:
 
   import board
   b = board.load()
   t = next(x for x in b["tickets"] if x["ref"] == "検針票諸元")   # a ticket by its tag
-  _, i = board.by_id(b, 29)                                       # an item by its number
+  _, i = board.by_id(b, 8)                                        # an item by its number
 
-  # An event on the timeline (time order; so_what only if it changes what he does):
-  t["events"].append({"on": "2026-09-02", "at": "14:30", "who": "Heqing Qian, Kraken",
-                      "what": "...", "so_what": "", "where": "Slack", "source_url": "..."})
-
-  # Every thread you look at, stamp when you looked. "checked" is when you last looked
-  # (this is what stops the next sweep re-reading a quiet thread); "last_at" is the newest
-  # message and only moves if a newer one is actually there -- never fake it to "today":
-  th = t["threads"][0]; th["checked"] = board.now()
-  th["last_at"] = "2026-09-02 14:30"; th["last_from"] = "Heqing"   # only if a newer message exists
-
-  # They replied: same number back to todo, rewrite the draft, say what happened:
-  board.set_state(i, "todo", "Ryan answered on the mapping")
-  i["draft"] = {"language": "ja", "target": "Tanaka-san", "body_ruby": "..."}
+  i["draft"] = {"language": "ja", "target": "Tanaka-san", "body_ruby": "..."}   # after ./tick.py 8 --mine
   i["progress_note"] = "..."
 
-  # He sent it and nothing comes back / it is with someone:
-  board.set_state(i, "sent", "posted to the thread")
-  board.set_state(i, "waiting", "sent", who="Kevin")
-
-  # Its work is done, or it is no longer worth doing:
-  board.set_state(i, "done", "the question was answered in the thread")
-  board.set_state(i, "dropped", "TG handled it themselves")
-
-  # Genuinely new work (never renumber, never reuse):
-  t["items"].append({"id": board.next_id(b), "state": "todo", "title": "...",
+  t["items"].append({"id": board.next_id(b), "state": "todo", "title": "...",   # genuinely new work
                      "steps": ["..."], "done_when": "...", "why": "...", "urgency": "today"})
 
-  # A news row (five at most), or drop one whose route has closed:
-  b.setdefault("news", []).append({"topic": "...", "what": "...", "why": "...",
+  b.setdefault("news", []).append({"topic": "...", "what": "...", "why": "...",  # news row, five at most
                                    "on": "2026-09-02", "source_url": "..."})
-
-  b["checked_at"] = board.now()      # last thing before saving
-  board.save(b)                      # raises on a bad shape rather than writing it
+  board.save(b)
 
 REBUILD:  ./tick.py --rebuild   (once, at the end -- redraws both pages, moves nothing)
-STATE:    board.set_state stamps state_at + history exactly as ./tick.py does. ./tick.py
-          is for Rei's own moves from the terminal or the page; never hand-edit output/.
 SCHEMA:   the docstring at the top of board.py is the contract. Read it once if you must;
           never run help(board), and never dump state/board.json to see a current value."""
 
