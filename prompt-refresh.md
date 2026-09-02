@@ -311,6 +311,17 @@ This is the normal reading of a ticket, not a special case: most of what sits on
 the board at any time is genuinely waiting on somebody, and the front of the list
 should be only the handful of things that are truly his to do now.
 
+**A waiting item gets a chase date, and a CE build gets a real one.** Every
+`waiting` item needs `waits_on.chase_on` or it sits forever (the audit flags a
+missing one). A conditional chase — "at the next session if they stay quiet" — is
+fine for a question sitting with a person. But when the item waits on a **CE
+build** (an engineer building it, a PR promised, a fix queued), it has to land
+inside the cycle, so give it a **concrete date, on or before the cycle end**. The
+current cycle's end is in the Asana section name (e.g. "This Cycle's Priority
+(8/31-9/16)" → 2026-09-16), so a build with no other deadline is chased by then,
+sooner if something was promised sooner. Set it with `./tick.py <n> -w "<who>"
+--chase <date>`, or `./tick.py <n> --chase <date>` on an item already waiting.
+
 Two things TG need in one place go in one comment, on the older number, not two
 comments an hour apart. Drop the number that got folded in with a note saying
 where it went. A shorter list that is all real is the point; five items he

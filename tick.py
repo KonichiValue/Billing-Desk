@@ -83,6 +83,13 @@ def main() -> int:
     parser.add_argument("ids", nargs="*", help="item numbers from the desk")
     parser.add_argument("-n", "--note", default="", help="what happened, in a few words")
     parser.add_argument("-w", "--waiting", metavar="WHO", help="sent, now with this person")
+    parser.add_argument(
+        "--chase",
+        metavar="WHEN",
+        default="",
+        help="when to chase if they stay quiet: a date (2026-09-16) or a condition. "
+        "Use with -w, or on its own to set it on an item already waiting.",
+    )
     parser.add_argument("--mine", action="store_true", help="it is back with you")
     parser.add_argument("--sent", action="store_true", help="finished, and it was a message")
     parser.add_argument("--dropped", action="store_true", help="finished, no longer worth doing")
@@ -127,10 +134,16 @@ def main() -> int:
         if args.waiting:
             item["sent_by_you"] = True
             B.set_state(item, "waiting", args.note, who=args.waiting)
+            if args.chase:
+                item.setdefault("waits_on", {})["chase_on"] = args.chase
         elif args.dropped:
             B.set_state(item, "dropped", args.note)
         elif args.sent:
             B.set_state(item, "sent", args.note)
+        elif args.chase:
+            # --chase on its own: set the chase date on an item already waiting,
+            # without moving its state or resetting how long it has been there.
+            item.setdefault("waits_on", {})["chase_on"] = args.chase
         else:
             B.set_state(item, "done", args.note)
 

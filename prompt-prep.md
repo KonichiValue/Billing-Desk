@@ -18,9 +18,18 @@ you do not write about.
 
 ## Half one: bring the board up to date
 
-Read `prompt-refresh.md` and do everything in it, including the rebuild at the
-end. The script must sit on top of the newest replies, not yesterday's, and the
-sweep is written down in one place so the two routines cannot drift.
+**First check how fresh the board already is.** `./digest.py` prints `checked_at`
+at the top. If it is within the last ~15 minutes, a full sweep just ran and the
+board is already current — do **not** re-run it. Do the one cheap confirmation
+(the batched Asana `modified_at.after=checked_at` gate, and a glance at the
+threads the SWEEP PLAN still lists as not looked at), fold in anything it turns
+up, and go straight to the script. Re-sweeping a board that was swept minutes ago
+is most of why prep feels slow, and it changes nothing.
+
+Only when `checked_at` is genuinely stale (hours old, or you cannot tell): read
+`prompt-refresh.md` and do everything in it, including the rebuild at the end. The
+script must sit on top of the newest replies, not yesterday's, and the sweep is
+written down in one place so the two routines cannot drift.
 
 That gives you a current `state/board.json`: every open TG billing ticket
 assigned to Rei, every item of work on it, and the timeline of how each got
