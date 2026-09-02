@@ -45,6 +45,24 @@ written back by the WRITE CHEATSHEET it ends with.** So, without exception:
   `checked_at`, save. Use those forms. You do not need to reconstruct the schema
   to write the board, and reconstructing it is how a sweep loses its time.
 
+These are the exact detours that have made real sweeps take fifteen minutes. Each
+one is banned, not discouraged:
+
+- **No writing the digest to `/tmp` and reading it back.** Read `./digest.py`
+  once, in the conversation. A sweep that read `/tmp/digest_full.txt` four times
+  is a sweep re-reading its own notes instead of talking to Asana.
+- **No `git` at all** — not `git status`, not `git log`, not `git diff`, not
+  `git check-ignore` on `state/board.json`. Whether the board is tracked is not
+  your concern; `board.save` and `./tick.py` handle the file. This is pure
+  wandering and it costs minutes.
+- **No reading source to re-learn the tools.** No `help(board)`, no
+  `inspect.getsource(...)`, no opening `audit.py` or `board.py` to read the code.
+  The docstring at the top of `board.py` is the only reference you may open, once.
+  The cheatsheet already has the calls you need.
+- **No subagents, ever.** Do not "hand off to a subagent", do not spawn
+  `cursor-agent`, do not delegate a slice of the sweep. You are the whole sweep in
+  one process. A second agent writes the board underneath you and doubles the cost.
+
 ## What the board is
 
 `state/board.json` is the only durable file, and `board.py` documents its shape.
@@ -82,13 +100,24 @@ thread whose watermark is older than the events taken out of it. Fix all of them
 in this sweep. They are cheap, they are why the page drifts, and nobody else is
 going to do them.
 
-The thread watermarks matter most, because they are self-inflicted. Each thread
-carries `last_at`, the point you read forward from. A sweep that reads a thread,
-writes an event dated later, and leaves `last_at` alone has quietly moved the
-next sweep's starting line backwards. Do that a few times and threads look quiet
-when they are not, which is exactly how the board ends up behind. **Every thread
-you open, set `last_at` and `last_from` to its newest message, even when nothing
-in it changed.**
+The thread watermarks matter most, because they are self-inflicted, and they are
+two different facts you must not confuse:
+
+- `last_at` (with `last_from`) is the **newest message in the thread**. It stays
+  old and honest when the thread is quiet. Move it only when a genuinely newer
+  message is there. Never stamp it to "today" to look current: that is the
+  fabrication the last sweep rightly refused, and it hides real messages.
+- `checked` is **when you last looked at the thread**. Set it to `board.now()`
+  every single time you open or search a thread, even when nothing was said. This
+  is not a claim about the thread's contents, only a record that you looked.
+
+The audit and the SWEEP PLAN both key off `checked`: a thread looked at since the
+ticket's newest event is not re-read next time. **A sweep that reads a thread and
+leaves `checked` alone has signed the next sweep up to read it all over again**,
+which is most of what made past sweeps slow. So the rule is simple: open a thread
+→ set its `checked`; find a newer message → also move `last_at`. The SWEEP PLAN
+lists only the threads not yet looked at since the last event, so if you work it
+honestly the list shrinks every sweep instead of staying at two dozen.
 
 ## 2. Sweep every open ticket
 

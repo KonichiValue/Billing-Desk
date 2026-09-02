@@ -199,13 +199,32 @@ def _sweep_plan(b: dict) -> None:
     _out(
         "     ticket whose thread moved below. An unchanged ticket costs the one gate call."
     )
-    _out("  2. Threads to read forward from (skip any with no message newer than its mark):")
+    _out("  2. Threads worth reading -- only those NOT looked at since the ticket last moved.")
+    _out("     After you look at one, set th['checked'] = board.now() so it drops off next time.")
     for t in b.get("tickets", []):
         threads = t.get("threads") or []
         if not threads:
             continue
-        _out(f"     {t.get('ref') or t.get('id')}:")
+        events = t.get("events") or []
+        newest = max(
+            (audit.as_date(e.get("on")) for e in events if audit.as_date(e.get("on"))),
+            default=None,
+        )
+        need, quiet = [], 0
         for th in threads:
+            looked = max(
+                (d for d in (audit.as_date(th.get("checked")), audit.as_date(th.get("last_at"))) if d),
+                default=None,
+            )
+            if newest is not None and looked is not None and looked >= newest:
+                quiet += 1
+            else:
+                need.append(th)
+        if not need:
+            _out(f"     {t.get('ref')}: all {len(threads)} looked at since the last event -- skip")
+            continue
+        _out(f"     {t.get('ref')}:" + (f"  ({quiet} quiet, skip)" if quiet else ""))
+        for th in need:
             _out(
                 f"       - [{th.get('where', '?')}] from {th.get('last_at', '?')}"
                 f"  {th.get('url', '')}"
@@ -249,8 +268,11 @@ CHEATSHEET = """WRITE CHEATSHEET  (the whole of a sweep's writing -- no help(boa
   t["events"].append({"on": "2026-09-02", "at": "14:30", "who": "Heqing Qian, Kraken",
                       "what": "...", "so_what": "", "where": "Slack", "source_url": "..."})
 
-  # Every thread you open, move its watermark forward -- even if nothing changed:
-  th = t["threads"][0]; th["last_at"] = "2026-09-02 14:30"; th["last_from"] = "Heqing"
+  # Every thread you look at, stamp when you looked. "checked" is when you last looked
+  # (this is what stops the next sweep re-reading a quiet thread); "last_at" is the newest
+  # message and only moves if a newer one is actually there -- never fake it to "today":
+  th = t["threads"][0]; th["checked"] = board.now()
+  th["last_at"] = "2026-09-02 14:30"; th["last_from"] = "Heqing"   # only if a newer message exists
 
   # They replied: same number back to todo, rewrite the draft, say what happened:
   board.set_state(i, "todo", "Ryan answered on the mapping")

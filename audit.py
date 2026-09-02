@@ -107,11 +107,16 @@ def check_dates(b: dict, rep: Report) -> None:
 
 
 def check_freshness(b: dict, rep: Report) -> None:
-    """Records on the same ticket that disagree about when it last moved.
+    """Threads nobody has looked at since the ticket last moved.
 
-    A thread stamped four days older than the ticket's newest event means the
-    sweep read the event and never went back to the thread it came out of. The
-    next sweep then trusts the older stamp and reads from the wrong point.
+    Two different facts live on a thread. `last_at` is the newest message in it,
+    which stays old and honest when the thread is quiet. `checked` is when a sweep
+    last looked at it. The stale case this catches is the second one: an event
+    landed on the ticket and nobody has since opened the thread it might have come
+    from, so the next sweep reads from the wrong point. Comparing `last_at` alone
+    flagged every quiet thread on a moving ticket forever, which is why sweeps
+    re-read all of them every time; comparing the later of the two fixes that,
+    because a thread looked at today clears even when nothing new was said in it.
     """
     for ticket in b.get("tickets", []):
         events = ticket.get("events") or []
@@ -119,14 +124,17 @@ def check_freshness(b: dict, rep: Report) -> None:
         if newest is None:
             continue
         for th in ticket.get("threads") or []:
-            seen = as_date(th.get("last_at"))
-            if seen is not None and seen < newest:
+            looked = max(
+                (d for d in (as_date(th.get("checked")), as_date(th.get("last_at"))) if d),
+                default=None,
+            )
+            if looked is not None and looked < newest:
                 rep.add(
-                    "Threads stamped older than the ticket's own events",
+                    "Threads not looked at since the ticket last moved",
                     f"  {ticket.get('ref')}: thread \"{th.get('label', '')[:40]}\" "
-                    f"last read {th.get('last_at')}, but the ticket has an event on "
-                    f"{newest}. Re-read it and move last_at, or the next sweep "
-                    f"starts from the wrong line.",
+                    f"last looked at {th.get('checked') or th.get('last_at')}, but the "
+                    f"ticket has an event on {newest}. Open it and set `checked` (and "
+                    f"`last_at` if a newer message is there), or the next sweep re-reads it.",
                 )
 
     stamp = b.get("checked_at")

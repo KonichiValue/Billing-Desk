@@ -25,10 +25,10 @@
     "model": "auto"
   },
   "refresh": {
-    "model": "claude-sonnet-5-thinking-medium"
+    "model": "auto"
   },
   "prep": {
-    "model": "claude-sonnet-5-thinking-high"
+    "model": "auto"
   },
   "slack": {
     "search_scope": "all",
