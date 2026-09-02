@@ -294,6 +294,19 @@ kill most candidates:
   recoveries. Confirming to them what they did themselves is noise. So is
   chasing a Kraken queue position, which is not his to move.
 
+**If the next move is someone else's, the item is `waiting` on them, not a
+`todo`.** A `todo` means Rei can act on it this minute. The moment the ball is
+with another person — an engineer has picked up the build and opened a thread but
+not yet answered, CE has the cause and a PR is coming, a task has been handed to
+another team who will report back when done — the item is `waiting` on that named
+person (or `monitor` if there is no single owner), and the sweep's only job on it
+is to scout for their reply. Leaving it `todo` puts work at the front of his list
+that he cannot actually start, which is the noise this desk exists to remove. Flip
+it back to `todo` only when they come back or the next concrete step becomes his.
+This is the normal reading of a ticket, not a special case: most of what sits on
+the board at any time is genuinely waiting on somebody, and the front of the list
+should be only the handful of things that are truly his to do now.
+
 Two things TG need in one place go in one comment, on the older number, not two
 comments an hour apart. Drop the number that got folded in with a note saying
 where it went. A shorter list that is all real is the point; five items he
