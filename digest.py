@@ -19,14 +19,26 @@ board.save(b)`, and `./tick.py` rebuilds the pages.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from collections import Counter
 from datetime import datetime
+from pathlib import Path
 
 import audit
 import board as B
 
 WRAP = 160
+ROOT = Path(__file__).resolve().parent
+
+
+def _project_gids() -> list[str]:
+    """The two TG project gids the gate query runs against, from config.json."""
+    try:
+        conf = json.loads((ROOT / "config.json").read_text(encoding="utf-8"))
+        return [p["gid"] for p in conf.get("asana", {}).get("projects", []) if p.get("gid")]
+    except (OSError, ValueError, KeyError):
+        return []
 
 
 def _age(stamp: str) -> str:
@@ -164,6 +176,113 @@ def _item_line(i: dict, full: bool) -> None:
         _out(f"            state_note: {_clip(i.get('state_note'), 120, full)}")
 
 
+def _sweep_plan(b: dict) -> None:
+    """The worklist for a sweep, made from the watermarks rather than reasoned out.
+
+    A sweep used to work out what to read by dumping the board through a dozen
+    one-liners: which tickets, which threads, from when. All of that is already on
+    the board, so this prints it as instructions the sweep can follow without
+    opening `state/board.json` at all. Read exactly what this names, from the
+    timestamps it names, and nothing turns into reconnaissance.
+    """
+    checked = b.get("checked_at", "")
+    since = checked[:10] if checked else "never"
+    gids = _project_gids()
+    _out("SWEEP PLAN  (read this, not the raw board -- built from the watermarks above)")
+    _out(
+        "  1. Asana gate, ONE call: search_tasks modified_at.after=" + (since or "?")
+        + (f" projects={','.join(gids)}" if gids else "")
+    )
+    _out(
+        "     Deep-read (get_task / get_task_stories) only the gids it returns, plus any"
+    )
+    _out(
+        "     ticket whose thread moved below. An unchanged ticket costs the one gate call."
+    )
+    _out("  2. Threads to read forward from (skip any with no message newer than its mark):")
+    for t in b.get("tickets", []):
+        threads = t.get("threads") or []
+        if not threads:
+            continue
+        _out(f"     {t.get('ref') or t.get('id')}:")
+        for th in threads:
+            _out(
+                f"       - [{th.get('where', '?')}] from {th.get('last_at', '?')}"
+                f"  {th.get('url', '')}"
+            )
+    _out("  3. Build tickets, re-read only if the gate flags them:")
+    any_build = False
+    for t in b.get("tickets", []):
+        bld = (t.get("internal_ticket") or {}).get("build") or {}
+        if bld.get("kt"):
+            any_build = True
+            _out(
+                f"       - {bld['kt']} ({t.get('ref')}) stage={bld.get('stage', '?')}"
+                f" moved_on={bld.get('moved_on', '?')}"
+            )
+    if not any_build:
+        _out("       - none on the board")
+    _out("  4. Open items, so a reply maps straight to a number to move:")
+    for t in b.get("tickets", []):
+        opens = [i for i in t.get("items", []) if B.is_open(i)]
+        if not opens:
+            continue
+        bits = []
+        for i in opens:
+            who = (i.get("waits_on") or {}).get("who")
+            tail = f"->{who}" if who else ""
+            bits.append(f"{i.get('id')}({i.get('state', 'todo')}{tail})")
+        _out(f"       {t.get('ref')}: " + "  ".join(bits))
+    _out()
+
+
+CHEATSHEET = """WRITE CHEATSHEET  (the whole of a sweep's writing -- no help(board), no board.json dump)
+  Load once, mutate in memory, save once. board.save refuses a shape no renderer
+  can survive, so a clean return is the confirmation -- do not read the file back.
+
+  import board
+  b = board.load()
+  t = next(x for x in b["tickets"] if x["ref"] == "検針票諸元")   # a ticket by its tag
+  _, i = board.by_id(b, 29)                                       # an item by its number
+
+  # An event on the timeline (time order; so_what only if it changes what he does):
+  t["events"].append({"on": "2026-09-02", "at": "14:30", "who": "Heqing Qian, Kraken",
+                      "what": "...", "so_what": "", "where": "Slack", "source_url": "..."})
+
+  # Every thread you open, move its watermark forward -- even if nothing changed:
+  th = t["threads"][0]; th["last_at"] = "2026-09-02 14:30"; th["last_from"] = "Heqing"
+
+  # They replied: same number back to todo, rewrite the draft, say what happened:
+  board.set_state(i, "todo", "Ryan answered on the mapping")
+  i["draft"] = {"language": "ja", "target": "Tanaka-san", "body_ruby": "..."}
+  i["progress_note"] = "..."
+
+  # He sent it and nothing comes back / it is with someone:
+  board.set_state(i, "sent", "posted to the thread")
+  board.set_state(i, "waiting", "sent", who="Kevin")
+
+  # Its work is done, or it is no longer worth doing:
+  board.set_state(i, "done", "the question was answered in the thread")
+  board.set_state(i, "dropped", "TG handled it themselves")
+
+  # Genuinely new work (never renumber, never reuse):
+  t["items"].append({"id": board.next_id(b), "state": "todo", "title": "...",
+                     "steps": ["..."], "done_when": "...", "why": "...", "urgency": "today"})
+
+  # A news row (five at most), or drop one whose route has closed:
+  b.setdefault("news", []).append({"topic": "...", "what": "...", "why": "...",
+                                   "on": "2026-09-02", "source_url": "..."})
+
+  b["checked_at"] = board.now()      # last thing before saving
+  board.save(b)                      # raises on a bad shape rather than writing it
+
+REBUILD:  ./tick.py --rebuild   (once, at the end -- redraws both pages, moves nothing)
+STATE:    board.set_state stamps state_at + history exactly as ./tick.py does. ./tick.py
+          is for Rei's own moves from the terminal or the page; never hand-edit output/.
+SCHEMA:   the docstring at the top of board.py is the contract. Read it once if you must;
+          never run help(board), and never dump state/board.json to see a current value."""
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--full", action="store_true", help="closed items too, and no truncation")
@@ -208,6 +327,9 @@ def main() -> int:
                 _out("  " + line)
         _out("  Run ./audit.py when you are done. It should print nothing.")
         _out()
+
+    if not args.items_only:
+        _sweep_plan(b)
 
     if not args.items_only:
         sessions = b.get("sessions") or []
@@ -266,11 +388,7 @@ def main() -> int:
             _item_line(i, full)
         _out()
 
-    _out("WRITE with:  import board; b = board.load(); ...; board.save(b)")
-    _out("             board.save refuses duplicate item numbers; use board.next_id(b) for a new one")
-    _out("STATE only via ./tick.py  (never hand-edit state, never hand-edit output/)")
-    _out("REBUILD:     ./tick.py --rebuild   (redraws both pages, moves nothing)")
-    _out("SCHEMA:      the docstring at the top of board.py, already the contract")
+    _out(CHEATSHEET)
     return 0
 
 

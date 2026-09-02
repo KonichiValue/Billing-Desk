@@ -26,6 +26,25 @@ Three things are never a workaround, however reasonable they look:
 - Guessing what a ticket or a thread now says. A source you could not read is a
   source you do not report on.
 
+## The board reads and writes in two calls, so do not go looking
+
+This is the one rule that decides whether a refresh takes five minutes or
+fifteen. **Almost everything a sweep needs is printed by `./digest.py` once, and
+written back by the WRITE CHEATSHEET it ends with.** So, without exception:
+
+- **Never run `help(board)`, and never open `state/board.json` to see a current
+  value.** The digest already printed it, and dumping a 300KB file into the
+  conversation to read one field is the single most expensive thing a sweep does
+  and the reason past runs cost what they did. If you need the shape, the
+  docstring at the top of `board.py` is the contract; read it at most once.
+- **Never re-run `./digest.py`, and never write it to `/tmp` and read it back.**
+  Read it once, at the start. If you have lost a value from it, you are about to
+  spend more recovering it than it is worth; work from what the one read gave you.
+- **The digest ends with a WRITE CHEATSHEET.** It is the whole of a sweep's
+  writing: add an event, move an item, bump a watermark, add a news row, set
+  `checked_at`, save. Use those forms. You do not need to reconstruct the schema
+  to write the board, and reconstructing it is how a sweep loses its time.
+
 ## What the board is
 
 `state/board.json` is the only durable file, and `board.py` documents its shape.
@@ -42,20 +61,19 @@ each was last read, its last events, and every open item with its steps, its
 draft and what it is queued behind. Add `--full` only if you need closed items or
 untruncated prose.
 
-From that, note per ticket the timestamp of the last entry in `events`, which is
-the line you are checking forward from, and note which items are `todo`, `hold`
-or `waiting` and who each waiting item sits with.
+**The digest ends by printing a SWEEP PLAN: work it, do not rebuild it.** It is
+the worklist for this sweep, made from the watermarks already on the board so you
+do not have to derive it: the one Asana gate query to run, every thread with the
+timestamp to read *forward from*, the build tickets to re-check, and every open
+item number with who it sits with. Read exactly the threads it names, from the
+times it names. Working this list is the difference between a five-minute sweep
+and a fifteen-minute one; deriving it yourself by dumping the board is the thing
+the section above forbids.
 
-That is the only read of the board you need before the sweep. Do not open
-`state/board.json` with a one-line script to list the tickets, dump a fragment
-into `/tmp` and read it back, or work out the schema by printing `type()` and
-`keys()`, and do not run `help(board)`. One refresh ran `help(board)` four times
-and read the board twenty times around it; that was most of its thirteen minutes,
-and none of it was spent talking to Asana. The schema is the docstring at the top
-of `board.py`, and it is the contract: read it once if you need it, and trust it.
-
-To write, `import board`, mutate, `board.save(b)`. To redraw both pages,
-`./tick.py --rebuild`. Neither needs discovering.
+That is the only read of the board you need before the sweep. To write, `import
+board`, mutate, `board.save(b)` — the WRITE CHEATSHEET at the end of the digest
+has every form. To redraw both pages, `./tick.py --rebuild`. Neither needs
+discovering.
 
 **The `OUT OF DATE` block at the top of the digest is a worklist, not a warning.**
 Every line in it is something a previous sweep should have done and did not: a
@@ -74,12 +92,25 @@ in it changed.**
 
 ## 2. Sweep every open ticket
 
-Asana first, because the board should match it:
+Asana first, because the board should match it.
 
-- Every incomplete task assigned to Rei in `インシデント（TG Shared）` and
-  `Billing 2-Week Cycle [TG shared]`, **plus every ticket already on the board
-  that still has an open item**. Those two together are the ticket set. A ticket
-  that is open in Asana belongs on the board even when nothing needs him today.
+**Start with the one gate query the SWEEP PLAN names, and let it decide what you
+open.** A single `search_tasks` with `modified_at.after` set to the board's
+`checked_at` date, across both TG project gids, returns exactly the tickets that
+moved since the last sweep. Everything unchanged then costs nothing: you do not
+call `get_task` or `get_task_stories` on a ticket the gate did not return and no
+thread flagged. Calling `get_task` on all eight tickets and then pulling every
+`get_task_stories` regardless is the wasteful shape this replaces. The two things
+that still earn a deep read are a ticket the gate returned and a ticket whose
+thread moved in step 4.
+
+Against that gated set:
+
+- The ticket set is every incomplete task assigned to Rei in `インシデント（TG
+  Shared）` and `Billing 2-Week Cycle [TG shared]`, **plus every ticket already
+  on the board that still has an open item**. A ticket open in Asana belongs on
+  the board even when nothing needs him today; the gate just tells you which of
+  them to actually read this time.
 - For each ticket, refresh `asana`: `status`, `section`, `priority`, `category`,
   `severity`, `assignee`. These are what Asana says, not your reading of it, and
   the page prints them under Asana's own field names.
@@ -112,12 +143,12 @@ Asana first, because the board should match it:
   assigned, a release, a feature flag switched on, TG's own verification. Cite
   the item number in `note` rather than restating the item.
 
-Check `modified_at` before pulling comment bodies, so an unchanged ticket costs
-one call. A bump is not always a comment: a section move, a status change or a
-bulk edit stamps it too, and several tickets stamped the same minute is that
-rather than a conversation. Read the `asana` fields you already pulled against
-the board first, and pull the stories only when a changed field does not already
-explain the bump.
+For a ticket the gate returned, a bump is not always a comment: a section move, a
+status change or a bulk edit stamps `modified_at` too, and several tickets
+stamped the same minute is that rather than a conversation. Read the `asana`
+fields the gate already gave you against the board first, and pull
+`get_task_stories` only when a changed field does not already explain the bump.
+That keeps even a moved ticket to one story pull at most.
 
 ## 3. Migration daily when it has run
 

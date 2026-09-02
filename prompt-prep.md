@@ -122,9 +122,28 @@ answer himself becomes an `unknowns` entry.
 Every ticket gets `prep.script`: the actual sentences he will say. This is speech,
 not a translation of your English summary.
 
-Cover, in this order, skipping any block that does not apply:
-`現状` where it stands, `わかったこと` what we found since last time, `提案` what
-Kraken proposes, `お願い` what he needs from TG, `質問` what he needs answered.
+**At a standup the default is one `現状` block, and most tickets should stay
+there.** He is walking a whole board in fifteen minutes, so what he needs per
+ticket is where it stands right now, in one or two sentences, and then whatever
+he has to ask or tell TG. A ticket is not a presentation to be given: it is a
+line of status, plus an ask when there genuinely is one. The full run of blocks
+below is a ceiling for a contested ticket, not a shape to fill for every one. If
+you find yourself writing `わかったこと` and `提案` for a ticket nobody is
+arguing about, you are presenting where you should be reporting.
+
+**A ticket sitting with Kraken engineering is one or two lines, no more.** When
+the latest is that the requirements are agreed and Kraken is building it, that is
+the whole of the `現状`: 要件は合意済みで、Kraken側で対応中です, and stop. Add an
+approximate timing **only if a date has already been agreed and shared with TG**
+(`prep.estimate`); if none exists, say nothing about when, rather than hedging.
+Never reach for the build ticket, the queue position, the engineer or the size
+to pad it out — those never reach TG (see the hard constraint below), and the
+honest one-liner is the right answer, not a thin one.
+
+When a ticket does need more, cover, in this order, skipping any block that does
+not apply: `現状` where it stands, `わかったこと` what we found since last time,
+`提案` what Kraken proposes, `お願い` what he needs from TG, `質問` what he needs
+answered.
 
 Style:
 
@@ -144,8 +163,9 @@ Style:
   only restates the one before it.
 - Lead each block with the topic, not the wind-up. 「請求未発行の恒久対応についてです。」
   beats 「請求未発行の恒久対応について、お話しさせていただきたいと思います。」
-- Two to five lines per block. At most four blocks per ticket at a standup, six
-  at an onsite.
+- Two to five lines per block. Four blocks per ticket at a standup and six at an
+  onsite are ceilings for a contested ticket, not targets: a quiet ticket is one
+  `現状` block, often a single line.
 
 **Furigana.** Wrap kanji above N3 as `{漢字|かんじ}`, reading on the whole word,
 not per character. Words he knows (今日, 問題, 対応, 確認, 請求) need none. Err
@@ -174,9 +194,9 @@ what cleanup means, there **is** an ask and you have not found it yet.
 
 Set `tg_ask_needed` to `false` only when the chain came back genuinely clean: the
 fix covers everything, or the leftovers have a named owner and an agreed
-definition of done. Then give the ticket a `現状` block of two to four lines and
-stop. A ticket sitting with Kraken engineering with nothing outstanding is a good
-thing to report in one breath.
+definition of done. Then give the ticket a `現状` block of one or two lines and
+stop — a ticket sitting with Kraken engineering with nothing outstanding is a
+good thing to report in one breath, not a section to expand.
 
 Never invent a question to fill the 質問 block. A weak question wastes standup
 time. A missing one is worse: TG raise it instead and he answers cold on his own

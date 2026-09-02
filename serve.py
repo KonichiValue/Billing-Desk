@@ -38,7 +38,12 @@ import render
 
 ROOT = Path(__file__).resolve().parent
 KEY = secrets.token_urlsafe(16)
+# A refresh is a sweep. A prep is that same sweep and then the script written on
+# top of it, so it needs longer before the timeout counts it dead: a lean sweep
+# that finishes in time only to have the script it set up killed is the worst
+# outcome, because the page then shows yesterday's words on a board swept today.
 TIMEOUT_SECS = 900
+PREP_TIMEOUT_SECS = 1200
 
 job = {"state": "idle", "message": "", "url": "", "at": ""}
 job_lock = threading.Lock()
@@ -1066,19 +1071,20 @@ def run_agent(kind: str) -> None:
         cmd += ["--model", model]
     LOCK.write_text(f"{os.getpid()} desk-server {kind} {datetime.now():%H:%M}\n")
 
+    timeout = PREP_TIMEOUT_SECS if kind == "prep" else TIMEOUT_SECS
     try:
         for attempt in (1, 2):
             with log.open("a", encoding="utf-8") as fh:
                 fh.write(f"\n=== {datetime.now():%H:%M:%S} {kind} on {model} ===\n")
                 fh.flush()
-                ran = run_stream(cmd, prompt.read_text(encoding="utf-8"), TIMEOUT_SECS, fh)
+                ran = run_stream(cmd, prompt.read_text(encoding="utf-8"), timeout, fh)
                 fh.write(
                     f"\n{ran.text}\n"
                     f"=== {kind} ended after {ran.took}s, {ran.calls} tool calls, "
                     f"exit {ran.code} ===\n"
                 )
             if ran.code is None:
-                set_job("failed", f"the {kind} ran past 15 minutes and was stopped")
+                set_job("failed", f"the {kind} ran past {timeout // 60} minutes and was stopped")
                 return
             # A clean exit is not the same as work done. A run whose connection
             # drops can still exit nought having read nothing, and reporting that
