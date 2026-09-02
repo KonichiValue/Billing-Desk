@@ -31,6 +31,16 @@ there. `board.py` documents the shape.
 Only the speaking half is yours to write now. Do not touch item states, and do
 not rewrite `events` or `where_it_stands` beyond what the sweep already did.
 
+**Read the board for the script the same way the sweep does: once, and never by
+dumping it.** Writing the script needs the untruncated `where_it_stands`,
+`consequences`, `events` and `prepared` that the ordinary digest clips, so run
+`./digest.py --full` **once** and write from that. The hard rule in
+`prompt-refresh.md` holds here too: no `help(board)`, and no `python3 -c "import
+board; ... for t in b['tickets']: print(...)"` to read a field back. You may only
+`import board` to *write* your `prep` block, using the WRITE CHEATSHEET forms.
+Reading the board per ticket to compose is the flail that runs prep past its
+budget.
+
 Read `config.json` first for the Asana workspace, the two TG project GIDs, Rei's
 user GID and the Slack channel hints.
 
