@@ -932,6 +932,9 @@ def render_ticket(
         </div>
       </header>
 
+      {f'<p class="tk-about">{esc(" ".join(t["prep"]["issue"]))}</p>'
+       if isinstance((t.get("prep") or {}).get("issue"), list) and t["prep"]["issue"] else ""}
+
       {section("Where it stands",
                f'<p class="status">{esc(t.get("where_it_stands"))}</p>'
                + build_strip(internal),

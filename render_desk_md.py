@@ -206,6 +206,10 @@ def render_ticket(t: dict, index: dict[str, dict] | None = None) -> list[str]:
             f"- Internal build ticket, never mentioned to TG: "
             f"{link(internal['name'], internal.get('url', ''))}"
         )
+    # The plain-English "what this is about" from prep.issue, above Where it stands.
+    issue = (t.get("prep") or {}).get("issue")
+    if isinstance(issue, list) and issue:
+        out += ["", f"_{' '.join(issue)}_", ""]
     out += ["", t.get("where_it_stands", ""), ""]
     out += build_lines(internal)
     out += closes_lines(t.get("closes_when", []))
