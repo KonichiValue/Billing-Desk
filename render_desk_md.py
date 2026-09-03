@@ -94,16 +94,24 @@ def render_draft(d: dict, st: dict | None = None) -> list[str]:
         if gone
         else f"**Draft ({lang})** for {d.get('target', '')}"
     )
+    # A Japanese draft's text is in body_ruby (body_en is its translation, folded
+    # below); an English draft's text is in body_en with no body_ruby. Show the right
+    # one as the main body, or an English draft prints an empty code block.
+    is_ja = d.get("language") == "ja"
+    if is_ja:
+        body, translation = plain(d.get("body_ruby", "")), d.get("body_en")
+    else:
+        body, translation = plain(d.get("body_en") or d.get("body_ruby") or d.get("body", "")), None
     out = [
         head + (f" ({link('open thread', d['link'])})" if d.get("link") else ""),
         "",
         "```",
-        plain(d.get("body_ruby", "")),
+        body,
         "```",
         "",
     ]
-    if d.get("body_en"):
-        out += ["<details><summary>English</summary>", "", "```", d["body_en"], "```", "", "</details>", ""]
+    if translation:
+        out += ["<details><summary>English</summary>", "", "```", translation, "```", "", "</details>", ""]
     return out
 
 

@@ -347,14 +347,23 @@ def render_draft(d: dict, st: dict | None = None) -> str:
     """A draft to paste, or, once it has gone, a folded record of what went."""
     if not d:
         return ""
-    body = d.get("body_ruby", "")
     is_ja = d.get("language") == "ja"
-    rendered = furi(body) if is_ja else esc(body)
-    trans = (
-        f'<p class="draft-en">{esc(d.get("body_en"))}</p>'
-        if is_ja and d.get("body_en")
-        else ""
-    )
+    # Two shapes of draft. A Japanese draft keeps its furigana text in body_ruby and
+    # body_en is the translation shown beneath it. An English draft (to a Kraken
+    # colleague) keeps its text in body_en and has no body_ruby. Reading body_ruby
+    # for both rendered every English draft blank -- the text was saved, never shown.
+    if is_ja:
+        body = d.get("body_ruby", "")
+        rendered = furi(body)
+        trans = (
+            f'<p class="draft-en">{esc(d.get("body_en"))}</p>'
+            if d.get("body_en")
+            else ""
+        )
+    else:
+        body = d.get("body_en") or d.get("body_ruby") or d.get("body", "")
+        rendered = esc(body)
+        trans = ""
     # The draft is the thing he most often wants changed rather than explained,
     # and the box that changes it is at the foot of the card. This opens that box
     # with the ask already started, so a rewrite is one click from the words.
