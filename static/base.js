@@ -134,6 +134,34 @@
     });
   });
 
+  // The rest of the card's folds are not worth remembering forever, but they must
+  // survive the reload an answer triggers: a section he opened to ask a question
+  // should still be open when the answer lands, not snap back to its default. So
+  // remember them for this tab only (sessionStorage clears on close, so a fresh
+  // session still opens at the intended defaults), keyed by the card and the fold's
+  // position within it so every card keeps its own state.
+  var FOLDS='details.sub:not([data-remember]),details.qa-earlier';
+  [].forEach.call(document.querySelectorAll(FOLDS),function(d){
+    var card=d.closest('[id]');
+    if(!card)return;
+    var key='open-'+card.id+'-'+[].indexOf.call(card.querySelectorAll(FOLDS),d);
+    try{var was=sessionStorage.getItem(key);if(was!==null)d.open=was==='1';}catch(e){}
+    d.addEventListener('toggle',function(){
+      try{sessionStorage.setItem(key,d.open?'1':'0')}catch(e){}
+    });
+  });
+
+  // Keep his place across that same reload, so the card he was reading does not
+  // jump to the top when the answer lands. Skipped when the URL points at an
+  // anchor, so a link to a specific ticket still wins.
+  try{
+    var sy=sessionStorage.getItem('desk-scroll');
+    if(!location.hash&&sy!==null){var y=parseInt(sy,10);if(y)window.scrollTo(0,y);}
+  }catch(e){}
+  window.addEventListener('beforeunload',function(){
+    try{sessionStorage.setItem('desk-scroll',String(window.scrollY||window.pageYOffset||0))}catch(e){}
+  });
+
   // The ask box: the chat for one job. Opening it, the one-tap starters, and the
   // way out for when the page is a file on disk with no server behind it, which
   // is the same words with the job named, on the clipboard.
