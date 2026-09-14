@@ -273,7 +273,7 @@ PLAIN = (
     ("slack", "Reading the Slack thread"),
     ("notion", "Reading the Notion notes"),
     ("miro", "Reading the Miro board"),
-    ("databricks", "Looking at the data"),
+    ("ktdb", "Looking at the data"),
     ("kraken-core", "Reading the Kraken code"),
     ("prompt-", "Reading its own instructions"),
     ("docs/", "Reading the working files"),
@@ -553,11 +553,22 @@ def start_login() -> None:
 LOCK = ROOT / "state" / "refresh.lock"
 
 
+# A lock older than the longest job could ever run is stale by definition: the
+# holder crashed, or the server was killed mid-ask and restarted. Age is the only
+# honest test for an ask, which writes the server's own pid into the lock, so the
+# pid stays alive long after the ask that wrote it has gone and the pid check
+# alone would wedge the board for the life of the server.
+MAX_LOCK_AGE_SECS = PREP_TIMEOUT_SECS + 120
+
+
 def lock_held() -> bool:
-    """True when another refresh is already running, here or in a terminal."""
+    """True when a refresh, prep or ask is genuinely running, here or in a terminal."""
     if not LOCK.exists():
         return False
     try:
+        if time.time() - LOCK.stat().st_mtime > MAX_LOCK_AGE_SECS:
+            LOCK.unlink(missing_ok=True)  # stale: older than any job could run
+            return False
         pid = int(LOCK.read_text().split()[0])
         os.kill(pid, 0)
     except (ValueError, IndexError, OSError):
@@ -573,6 +584,11 @@ JOBS = {
 }
 
 ASK_TIMEOUT_SECS = 420
+# How long an ask will wait for a running sweep or prep to finish before it gives
+# up. A refresh runs up to 15 minutes and a prep up to 20, but blocking the queue
+# that long helps no one; wait a few minutes, then fail with the question kept so
+# Send retries it.
+LOCK_WAIT_SECS = 300
 
 def ask_model() -> str:
     """Which model answers a question from a card.
@@ -949,14 +965,33 @@ def run_ask(ask_id: str, ref: str, question: str, parent: str = "") -> None:
         save_ask(row)
         set_job("needs_login", f"{message} Press Log in and approve each one.")
         return
-    if lock_held():
-        row.update(
-            state="failed",
-            answer="Something else was already running against the board. Ask again.",
-        )
-        save_ask(row)
-        set_job("failed", "something is already running against the board")
-        return
+    # A refresh or prep writing the board must not be read out from under it: an
+    # answer is a read-modify-write of the whole file. But the answer to "something
+    # is running" is to wait for it, not to make him ask again -- the queue already
+    # runs one at a time, and the card already says "it starts on its own". So hold
+    # here until the sweep clears, then go, checking Cancel each time round. Only
+    # give up if it runs so long that something is likely wrong, and then the card
+    # keeps its question so Send retries it in one click.
+    waited = 0
+    while lock_held():
+        with cancel_lock:
+            if ask_id in cancelled:
+                row.update(state="cancelled", answer="You called this one off.")
+                save_ask(row)
+                set_job("idle", "Cancelled")
+                return
+        if waited >= LOCK_WAIT_SECS:
+            row.update(
+                state="failed",
+                answer="A sweep or prep has been running for a while, so your question "
+                       "could not start yet. Press Send to try it again.",
+            )
+            save_ask(row)
+            set_job("failed", "a sweep was still running; the question did not start")
+            return
+        set_job("running", "Waiting for the current sweep to finish, then your question runs")
+        time.sleep(3)
+        waited += 3
 
     which = ref.replace("item:", "job ").replace("ticket:", "")
     set_job("running", f"Thinking about {which}")
