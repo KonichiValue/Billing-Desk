@@ -220,6 +220,16 @@ Against that combined set:
   this sweep created one. Keep the gates nobody owns as items: an engineer
   assigned, a release, a feature flag switched on, TG's own verification. Cite
   the item number in `note` rather than restating the item.
+- **When a feature flag is switched on, the ticket description has to say so, or
+  TG will not know the change is live.** TG billing tickets carry a
+  `■ 機能Flag（Feature Flag）` block in the description with `テスト環境` and
+  `本番環境` each showing `On/Off`, and TG read that block for the current state.
+  "Released" and "switched on" are two events, so a build can sit behind a flag
+  that is off. On any flag-on event a sweep finds, raise or keep an item with a
+  **drafted** description edit that sets the matching `On/Off` to `ON`, and never
+  let a ticket head to close with its `本番環境` flag still showing `OFF` or blank
+  when it is actually on. The desk never writes to Asana, so this is a draft Rei
+  posts, like any other TG-facing change.
 
 For a ticket the gate returned, a bump is not always a comment: a section move, a
 status change or a bulk edit stamps `modified_at` too, and several tickets
