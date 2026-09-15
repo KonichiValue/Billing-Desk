@@ -187,6 +187,81 @@ def pages_render() -> list[str]:
     return bad
 
 
+RUBY = re.compile(r"\{([^|{}]+)\|([^|{}]+)\}")
+KANJI_RUN = re.compile(r"[一-鿿]+")
+
+# Bald three-kanji runs Rei reads without a reading. Kept deliberately tiny:
+# everything else this long in the billing vocabulary is a compound that wants
+# furigana, and a spurious flag only ever pushes the writer towards adding a
+# reading, which is the direction the house style already leans.
+BENIGN_BALD_RUNS = {
+    "対応中", "対応済", "確認中", "確認済", "未対応", "未確認", "今日中", "大丈夫",
+}
+
+# Two-kanji domain terms he reads out and stumbles on. The run check below only
+# catches three or more, so a bald 諸元 or 課金 slips straight through and reaches
+# a standup line with no reading, which is the exact bug this is meant to stop.
+# There is nothing everyday in here, so it never fires on 今日/対応/確認/請求: a
+# properly wrapped {保安閉栓|ほあんへいせん} is stripped before the scan, so only a
+# genuinely bald term is flagged.
+HARD_TERMS = (
+    "保安", "閉栓", "開栓", "託送", "検針", "諸元", "稼働", "供給", "中断",
+    "課金", "訂正", "封書", "帳票", "督促", "移管", "挙動", "賛同", "監視",
+    "証跡", "索引", "該当", "燃調", "逆転", "掃出",
+)
+
+
+def furigana_present() -> list[str]:
+    """Every kanji compound in a line he reads out has its reading over it.
+
+    The speaking view renders `{漢字|かんじ}` as ruby and leaves bald kanji bald
+    on purpose (`render.furi`), so a script line written without the markup
+    reaches him as kanji with no reading, which is exactly the word he stumbles
+    on out loud. The prep step drops it most reliably on the quiet one-line
+    `現状` blocks, where the model copies the bald examples in `prompt-prep.md`.
+
+    This flags a run of three or more un-annotated kanji, which in this
+    vocabulary is always a compound that wants a reading (保安閉栓,
+    託送番号不一致, 検針票, 強制発行), while leaving the everyday two-kanji words
+    (今日, 対応, 確認, 請求) alone. It reads only the spoken fields, the ones that
+    become "what I say": the script lines, the pushback answers and any TG
+    question. Drafts are messages, not speech, and are left to the eye.
+    """
+    data = B.load()
+    bad: list[str] = []
+    seen: set[tuple[str, str]] = set()
+
+    def scan(ref: str, where: str, text: str) -> None:
+        bald = RUBY.sub("", text or "")
+        for run in KANJI_RUN.findall(bald):
+            if len(run) >= 3 and run not in BENIGN_BALD_RUNS and (ref, run) not in seen:
+                seen.add((ref, run))
+                bad.append(f"{ref} ({where}): 「{run}」 has no furigana")
+        for term in HARD_TERMS:
+            if term in bald and (ref, term) not in seen:
+                seen.add((ref, term))
+                bad.append(f"{ref} ({where}): 「{term}」 has no furigana")
+
+    for t in data.get("tickets", []):
+        ref = str(t.get("ref") or t.get("id") or "?")
+        prep = t.get("prep") or {}
+        for block in prep.get("script", []):
+            head = block.get("heading", "現状")
+            for line in block.get("lines", []):
+                scan(ref, f"script {head}", line.get("ja_ruby", ""))
+        for q in prep.get("open_questions", []):
+            scan(ref, "question", q.get("ja_ruby", ""))
+        for p in prep.get("pushback", []):
+            scan(ref, "pushback", p.get("say_ja", ""))
+    # The X-Workstream rollup is read out to the same room, so it is held to the
+    # same rule as the standup script.
+    for r in (data.get("xws") or {}).get("raised", []):
+        ref = str(r.get("ref") or "?")
+        for line in r.get("say", []):
+            scan(ref, "X-Workstream", line.get("ja_ruby", ""))
+    return bad
+
+
 def board_shape() -> list[str]:
     return B.check(B.load())
 
@@ -205,6 +280,7 @@ CHECKS = (
     ("Every fetch handles a failure", promises_are_caught),
     ("The page reloads itself, but never over his typing", reload_guard_holds),
     ("The board is the shape the renderers expect", board_shape),
+    ("Spoken lines carry furigana", furigana_present),
     ("Both pages render", pages_render),
     ("The board is up to date", board_freshness),
 )
