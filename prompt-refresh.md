@@ -127,26 +127,63 @@ that hand-writing is what sends a sweep reading `board.py` and dumping the board
 
 Asana first, because the board should match it.
 
-**Start with the one gate query the SWEEP PLAN names, and let it decide what you
-open.** A single `search_tasks` with `modified_at.after` set to the board's
-`checked_at` date, across both TG project gids, returns exactly the tickets that
-moved since the last sweep. Everything unchanged then costs nothing: you do not
-call `get_task` or `get_task_stories` on a ticket the gate did not return and no
-thread flagged. Calling `get_task` on all eight tickets and then pulling every
-`get_task_stories` regardless is the wasteful shape this replaces. The two things
-that still earn a deep read are a ticket the gate returned and a ticket whose
-thread moved in step 4.
+**Two queries, and they answer different questions. Run both, every sweep.**
+Confusing them is how a ticket assigned to Rei never reaches the board at all,
+which has actually happened (料金未計算, task 1218254199254548: assigned to him and
+worked for a day, invisible here because only the incremental gate was run).
 
-Against that gated set:
+1. **The membership census — what is his.** A `search_tasks` for **every
+   incomplete task assigned to Rei across both TG project gids, with no
+   `modified_at` filter at all.** This is the full list of tickets that belong on
+   the board, and it is not optional and not conditional on anything having moved.
+   Compare it against the board's tickets by Asana task id: **any assigned,
+   incomplete task not already a ticket on the board is added this sweep**, cause
+   named or not. A ticket does not have to have moved since the last sweep to be
+   missing — it only has to have been created and assigned in a window no earlier
+   gate happened to catch, and then it stays invisible forever to a date-filtered
+   query because it never moves again. The census is the only thing that catches
+   that, so it runs first and it runs unfiltered. **Fetch it with
+   `opt_fields=completed,assignee.name,memberships.section.name,custom_fields.name,custom_fields.display_value`**
+   so this one call also carries, for every ticket, the fields step 2 writes into
+   `asana`: the current Status (the custom field named literally `Status`, whose
+   `display_value` is 開発中 / テスト中 / 実装完了 / 対応完了 and the like — not the
+   section, not the `ステータス` field), the section, the assignee and `completed`.
+   Reading them here, unfiltered and every sweep, is what stops a bare status
+   change — a ticket moved 開発中 → 実装完了 with no comment — from sitting stale for
+   days, which is the failure this half exists to prevent.
+
+2. **The incremental gate — what to read.** A `search_tasks` with `modified_at.after`
+   set to the board's `checked_at` date, across both TG project gids, returns the
+   tickets that moved since the last sweep. This decides depth, not membership:
+   everything unchanged costs nothing, so you do not call `get_task` or
+   `get_task_stories` on a ticket the gate did not return and no thread flagged.
+   Calling `get_task` on all of them and then pulling every `get_task_stories`
+   regardless is the wasteful shape this replaces. The things that earn a deep
+   read are a ticket the gate returned, a ticket whose thread moved in step 4, and
+   **any ticket the census turned up that is not yet on the board** — a brand-new
+   ticket is read in full the first time however old its last edit is.
+
+The SWEEP PLAN names the incremental gate. It does not replace the census: run
+the census even when the plan does not mention it, because the plan is built from
+what is already on the board and cannot list a ticket the board has never seen.
+
+Against that combined set:
 
 - The ticket set is every incomplete task assigned to Rei in `インシデント（TG
-  Shared）` and `Billing 2-Week Cycle [TG shared]`, **plus every ticket already
-  on the board that still has an open item**. A ticket open in Asana belongs on
-  the board even when nothing needs him today; the gate just tells you which of
-  them to actually read this time.
-- For each ticket, refresh `asana`: `status`, `section`, `priority`, `category`,
-  `severity`, `assignee`. These are what Asana says, not your reading of it, and
-  the page prints them under Asana's own field names.
+  Shared）` and `Billing 2-Week Cycle [TG shared]` (the census above),
+  **plus every ticket already on the board that still has an open item**. A ticket
+  open in Asana belongs on the board even when nothing needs him today, and the
+  gate only tells you which of them to actually re-read this time — it never
+  decides whether one belongs.
+- For **every** ticket on the board, refresh `asana` from the census every sweep,
+  not only the ones the gate flagged: `status` (the custom field named `Status`,
+  read from its `display_value` — 開発中 / テスト中 / 実装完了 / 対応完了 and the
+  like), `section`, `priority`, `category`, `severity`, `assignee`, `completed`.
+  These are what Asana says, not your reading of it, and the page prints them
+  under Asana's own field names. The census already carries all of them in one
+  call, so trueing up every ticket's Status costs nothing — and a status the page
+  shows must match the ticket the moment he opens it, so this is not optional and
+  not gated on a comment having appeared.
 - New tickets since the last sweep get added, with `where_it_stands`, `terms`
   and `threads` filled in the same way the morning prep does it.
 - A ticket completed in Asana keeps its card, with `asana.completed` true, and
@@ -159,6 +196,14 @@ Against that gated set:
   happened or somebody has actually taken it, and the note has to name who. A
   ticket leaves the board when every item on it is closed or dropped, and never
   before, because the items are how Rei refers to his own work.
+- **A board ticket that is open here but absent from the census was completed or
+  reassigned — find out which, never leave it on the last sweep's values.** The
+  census is every incomplete task still assigned to Rei, so a board ticket missing
+  from it has either been completed (set `asana.completed` true, move it to the
+  closed fold) or handed to someone else (`get_task` it, write the new
+  `asana.assignee`, add the reassignment event). A silent reassignment (検針票諸元
+  moving to Tanaka) or a silent close reads on the page as still-his and
+  still-open, which is exactly the stale status this must catch.
 - For each ticket with `internal_ticket.url`, refresh `internal_ticket.build`
   from that CE build task. `stage` is the one judgement in it: read Status
   (Kraken Cust), Client Engineering Status and the section together and pick
