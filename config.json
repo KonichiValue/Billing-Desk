@@ -22,13 +22,13 @@
     "days": ["Mon", "Wed"]
   },
   "ask": {
-    "model": "auto"
+    "model": "claude-opus-4-8"
   },
   "refresh": {
     "model": "auto"
   },
   "prep": {
-    "model": "auto"
+    "model": "claude-opus-4-8"
   },
   "slack": {
     "search_scope": "all",
