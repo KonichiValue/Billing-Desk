@@ -44,6 +44,12 @@ KEY = secrets.token_urlsafe(16)
 # outcome, because the page then shows yesterday's words on a board swept today.
 TIMEOUT_SECS = 900
 PREP_TIMEOUT_SECS = 1200
+# A launched agent that streams nothing for this long is a dead session (a lapsed
+# cursor-agent login, the MCP servers down), not slow work: a real sweep emits a
+# tool call within seconds and keeps emitting. Stop it here with a re-auth message
+# rather than making him watch the full timeout for a run that was never going to
+# do anything. "0 tool calls in 900s" is the exact failure this catches.
+STALL_SECS = 150
 
 job = {"state": "idle", "message": "", "url": "", "at": ""}
 job_lock = threading.Lock()
@@ -331,7 +337,7 @@ def mmss(secs: float) -> str:
 
 
 def read_events(stream, said: list[str], noise: list[str], calls: list[str],
-                began: float, fh=None) -> None:
+                began: float, beat: list[float], fh=None) -> None:
     """Turn the agent's event stream into progress, and into a readable log.
 
     Three things come out of one pass: the final message, whatever the CLI said
@@ -344,6 +350,7 @@ def read_events(stream, said: list[str], noise: list[str], calls: list[str],
             clean = ANSI.sub("", raw).strip()
             if not clean:
                 continue
+            beat[0] = time.time()   # any line from the agent is a sign of life
             if not clean.startswith("{"):
                 noise.append(clean)
                 set_live(last=clean[-200:])
@@ -394,6 +401,7 @@ class Ran(NamedTuple):
     code: int | None  # None means it was still going at the timeout
     took: int
     calls: int
+    stalled: bool = False  # killed for producing nothing, not for running long
 
 
 def run_stream(cmd: list[str], payload: str, timeout: int, fh=None, key: str = "sweep") -> Ran:
@@ -417,24 +425,35 @@ def run_stream(cmd: list[str], payload: str, timeout: int, fh=None, key: str = "
     said: list[str] = []
     noise: list[str] = []
     calls: list[str] = []
+    beat = [began]   # last time the agent emitted anything; read_events bumps it
     reader = threading.Thread(
-        target=read_events, args=(proc.stdout, said, noise, calls, began, fh), daemon=True
+        target=read_events, args=(proc.stdout, said, noise, calls, began, beat, fh), daemon=True
     )
     reader.start()
-    try:
-        code = proc.wait(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        proc.kill()
+    # Poll rather than one long wait, so a dead session (no output at all) is
+    # caught after STALL_SECS instead of at the full timeout. A run that is
+    # working keeps bumping beat; one that launched into nothing never does.
+    code: int | None = None
+    stalled = False
+    while True:
         try:
-            proc.wait(timeout=30)
+            code = proc.wait(timeout=5)
+            break
         except subprocess.TimeoutExpired:
-            pass
-        code = None
+            now = time.time()
+            stalled = now - beat[0] >= STALL_SECS
+            if stalled or now - began >= timeout:
+                proc.kill()
+                try:
+                    proc.wait(timeout=30)
+                except subprocess.TimeoutExpired:
+                    pass
+                break
     reader.join(timeout=10)
     with cancel_lock:
         procs.pop(key, None)
     return Ran("".join(said).strip(), "\n".join(noise), code,
-               round(time.time() - began), len(calls))
+               round(time.time() - began), len(calls), stalled)
 
 
 def cli(*args: str, timeout: int = 60) -> str:
@@ -1043,9 +1062,15 @@ def run_ask(ask_id: str, ref: str, question: str, parent: str = "") -> None:
             set_job("idle", "Cancelled")
             return
         if ran.code is None:
-            row.update(state="failed", answer="The question ran past seven minutes and was stopped.")
+            if ran.stalled:
+                msg = ("The agent started but produced nothing, so its session has "
+                       "most likely lapsed. Press Log in to re-authenticate, then "
+                       "press Send to try again.")
+            else:
+                msg = "The question ran past seven minutes and was stopped."
+            row.update(state="failed", answer=msg)
             save_ask(row)
-            set_job("failed", "the question ran past seven minutes and was stopped")
+            set_job("failed", msg)
             return
         answer, took = ran.text, ran.took
         # Logged with the model, the wait and the number of steps, so "this is
@@ -1162,7 +1187,14 @@ def run_agent(kind: str) -> None:
                     f"exit {ran.code} ===\n"
                 )
             if ran.code is None:
-                set_job("failed", f"the {kind} ran past {timeout // 60} minutes and was stopped")
+                if ran.stalled:
+                    set_job("failed",
+                            f"the {kind} started but produced nothing for "
+                            f"{STALL_SECS // 60} minutes and was stopped, so the agent "
+                            "session has most likely lapsed. Press Log in to "
+                            "re-authenticate, then try again.")
+                else:
+                    set_job("failed", f"the {kind} ran past {timeout // 60} minutes and was stopped")
                 return
             # A clean exit is not the same as work done. A run whose connection
             # drops can still exit nought having read nothing, and reporting that
