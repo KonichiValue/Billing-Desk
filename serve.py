@@ -64,10 +64,14 @@ live_lock = threading.Lock()
 # at once would have one of them silently overwrite the other.
 ask_queue: "queue.Queue[tuple[str, str, str, str]]" = queue.Queue()
 
-# What is running right now, so Cancel can stop it. A Cancel that only hid the
-# box was the worst version: he thinks he has called it off, the agent keeps
-# going, and a minute later it rewrites the draft he changed his mind about.
-running_now: dict[str, object] = {"proc": None, "ask_id": ""}
+# Questions run a small pool at a time, so asking on a second card does not wait
+# out the first. Cancel needs the process per question, not one shared slot, or
+# cancelling B would reach for A's process. A sweep (refresh/prep) still runs
+# alone: it is a read-modify-write of the whole board, so it claims the lock,
+# waits for in-flight questions to finish, and new questions wait on it.
+ASK_WORKERS = 2
+procs: dict[str, "subprocess.Popen[str]"] = {}   # ask_id (or "sweep") -> live process
+asks_running = 0                                  # questions in their agent run right now
 cancelled: set[str] = set()
 cancel_lock = threading.Lock()
 
@@ -76,7 +80,7 @@ def cancel_ask(ask_id: str) -> str:
     """Stop a question, whether it is running or still in the line."""
     with cancel_lock:
         cancelled.add(ask_id)
-        proc = running_now["proc"] if running_now["ask_id"] == ask_id else None
+        proc = procs.get(ask_id)
     if proc is not None:
         try:
             proc.terminate()
@@ -392,7 +396,7 @@ class Ran(NamedTuple):
     calls: int
 
 
-def run_stream(cmd: list[str], payload: str, timeout: int, fh=None) -> Ran:
+def run_stream(cmd: list[str], payload: str, timeout: int, fh=None, key: str = "sweep") -> Ran:
     """One agent run, reported as it goes."""
     began = time.time()
     set_live(start=True)
@@ -409,7 +413,7 @@ def run_stream(cmd: list[str], payload: str, timeout: int, fh=None) -> Ran:
         bufsize=1,
     )
     with cancel_lock:
-        running_now["proc"] = proc
+        procs[key] = proc
     said: list[str] = []
     noise: list[str] = []
     calls: list[str] = []
@@ -428,7 +432,7 @@ def run_stream(cmd: list[str], payload: str, timeout: int, fh=None) -> Ran:
         code = None
     reader.join(timeout=10)
     with cancel_lock:
-        running_now["proc"] = None
+        procs.pop(key, None)
     return Ran("".join(said).strip(), "\n".join(noise), code,
                round(time.time() - began), len(calls))
 
@@ -589,6 +593,10 @@ ASK_TIMEOUT_SECS = 420
 # that long helps no one; wait a few minutes, then fail with the question kept so
 # Send retries it.
 LOCK_WAIT_SECS = 300
+# How long a sweep waits for in-flight questions to finish before it gives up and
+# asks him to retry. A question answers in well under this; blocking a refresh
+# forever behind one that hung helps no one.
+SWEEP_WAIT_SECS = 180
 
 def ask_model() -> str:
     """Which model answers a question from a card.
@@ -936,6 +944,7 @@ def ask_context(ref: str, question: str, parent: str = "") -> str:
 
 def run_ask(ask_id: str, ref: str, question: str, parent: str = "") -> None:
     """One question, answered against the board and pinned back onto the card."""
+    global asks_running
     # The row already exists: the request handler wrote it as `queued` so the card
     # could find itself immediately. Keep its asked_at, which is when he asked
     # rather than when the queue got round to it.
@@ -949,8 +958,6 @@ def run_ask(ask_id: str, ref: str, question: str, parent: str = "") -> None:
         row["parent"] = parent
     row["state"] = "running"
     save_ask(row)
-    with cancel_lock:
-        running_now["ask_id"] = ask_id
     # An ask may rewrite the item it was asked about, so it gets a copy too.
     keep.keep("ask")
     prompt = ROOT / "prompt-ask.md"
@@ -972,26 +979,40 @@ def run_ask(ask_id: str, ref: str, question: str, parent: str = "") -> None:
     # here until the sweep clears, then go, checking Cancel each time round. Only
     # give up if it runs so long that something is likely wrong, and then the card
     # keeps its question so Send retries it in one click.
+    # Wait out a running sweep, then claim a slot. Questions run alongside each
+    # other; only a sweep (refresh/prep) is exclusive, so we wait on the sweep
+    # lock, not on the other questions. Claim a slot, then re-check the lock: if a
+    # sweep grabbed the board in the gap, drop the slot and wait again. Give up
+    # only if a sweep runs so long that something is likely wrong, keeping the
+    # question so Send retries it in one click.
     waited = 0
-    while lock_held():
-        with cancel_lock:
-            if ask_id in cancelled:
-                row.update(state="cancelled", answer="You called this one off.")
+    while True:
+        while lock_held():
+            with cancel_lock:
+                if ask_id in cancelled:
+                    row.update(state="cancelled", answer="You called this one off.")
+                    save_ask(row)
+                    set_job("idle", "Cancelled")
+                    return
+            if waited >= LOCK_WAIT_SECS:
+                row.update(
+                    state="failed",
+                    answer="A sweep or prep has been running for a while, so your question "
+                           "could not start yet. Press Send to try it again.",
+                )
                 save_ask(row)
-                set_job("idle", "Cancelled")
+                set_job("failed", "a sweep was still running; the question did not start")
                 return
-        if waited >= LOCK_WAIT_SECS:
-            row.update(
-                state="failed",
-                answer="A sweep or prep has been running for a while, so your question "
-                       "could not start yet. Press Send to try it again.",
-            )
-            save_ask(row)
-            set_job("failed", "a sweep was still running; the question did not start")
-            return
-        set_job("running", "Waiting for the current sweep to finish, then your question runs")
-        time.sleep(3)
-        waited += 3
+            set_job("running", "Waiting for the current sweep to finish, then your question runs")
+            time.sleep(3)
+            waited += 3
+        with cancel_lock:
+            asks_running += 1
+        if lock_held():                      # a sweep claimed the board in the gap
+            with cancel_lock:
+                asks_running -= 1
+            continue
+        break
 
     which = ref.replace("item:", "job ").replace("ticket:", "")
     set_job("running", f"Thinking about {which}")
@@ -1000,7 +1021,6 @@ def run_ask(ask_id: str, ref: str, question: str, parent: str = "") -> None:
            "--workspace", str(ROOT)]
     if model != "auto":
         cmd += ["--model", model]
-    LOCK.write_text(f"{os.getpid()} desk-server ask {datetime.now():%H:%M}\n")
     log = ROOT / "logs" / f"ask-{datetime.now():%Y-%m-%d}.log"
     log.parent.mkdir(exist_ok=True)
     try:
@@ -1011,6 +1031,7 @@ def run_ask(ask_id: str, ref: str, question: str, parent: str = "") -> None:
             cmd,
             prompt.read_text(encoding="utf-8") + ask_context(ref, question, parent),
             ASK_TIMEOUT_SECS,
+            key=ask_id,
         )
         with cancel_lock:
             called_off = ask_id in cancelled
@@ -1053,8 +1074,13 @@ def run_ask(ask_id: str, ref: str, question: str, parent: str = "") -> None:
         save_ask(row)
         set_job("failed", f"could not run the question: {exc}")
     finally:
-        clear_live()
-        LOCK.unlink(missing_ok=True)
+        with cancel_lock:
+            asks_running -= 1
+            still_asking = asks_running
+        # Only blank the live line when nothing else of ours is still running,
+        # or one question finishing would wipe the progress of another.
+        if not still_asking:
+            clear_live()
 
 
 def agent_model(kind: str) -> str:
@@ -1087,7 +1113,7 @@ def run_agent(kind: str) -> None:
         set_job("failed", "cursor-agent is not installed. Type 'refresh' in a Cursor chat instead.")
         return
     if lock_held():
-        set_job("failed", "something is already running against the board. Let it finish.")
+        set_job("failed", "a refresh or prep is already running. Let it finish.")
         return
 
     left, message = blockers()
@@ -1105,6 +1131,23 @@ def run_agent(kind: str) -> None:
     if model != "auto":
         cmd += ["--model", model]
     LOCK.write_text(f"{os.getpid()} desk-server {kind} {datetime.now():%H:%M}\n")
+
+    # The board is ours alone for a sweep. The lock is set now, so new questions
+    # wait on it; give any question already mid-run a moment to finish before we
+    # start reading and writing the whole file under it.
+    waited = 0
+    while True:
+        with cancel_lock:
+            busy = asks_running
+        if not busy:
+            break
+        if waited >= SWEEP_WAIT_SECS:
+            LOCK.unlink(missing_ok=True)
+            set_job("failed", "questions are still running against the board; let them finish, then press Refresh.")
+            return
+        set_job("running", "Waiting for open questions to finish, then starting")
+        time.sleep(3)
+        waited += 3
 
     timeout = PREP_TIMEOUT_SECS if kind == "prep" else TIMEOUT_SECS
     try:
@@ -1383,7 +1426,8 @@ def main() -> int:
     args = parser.parse_args()
 
     (ROOT / "state").mkdir(exist_ok=True)
-    threading.Thread(target=ask_worker, daemon=True).start()
+    for _ in range(ASK_WORKERS):
+        threading.Thread(target=ask_worker, daemon=True).start()
 
     # Claim the port before announcing the key. `serve.json` is how `tg` and the
     # browser find this server, so a second copy started by hand while launchd
