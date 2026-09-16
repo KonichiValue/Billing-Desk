@@ -227,8 +227,13 @@ Against that combined set:
   the item number in `note` rather than restating the item.
 - **When a feature flag is switched on, the ticket description has to say so, or
   TG will not know the change is live.** TG billing tickets carry a
-  `■ 機能Flag（Feature Flag）` block in the description with `テスト環境` and
-  `本番環境` each showing `On/Off`, and TG read that block for the current state.
+  `■ 機能Flag（Feature Flag）` block in the description, split into `テスト環境`
+  and `本番環境`, and under each a `リンク：` list with one line per flag: the
+  settings-page link to that flag then its `On/Off状況` (test:
+  `support.tokyogas-kraken.systems/config/settings/detail/<FLAG>/`, prod:
+  `support.tokyogas-kraken.energy/config/settings/detail/<FLAG>/`). Match the MOMI
+  ticket (託送HOLD, 1217646346076130) for layout. TG read that block for the
+  current state and click the links to check the flag.
   "Released" and "switched on" are two events, so a build can sit behind a flag
   that is off. On any flag-on event a sweep finds, raise or keep an item with a
   **drafted** description edit that sets the matching `On/Off` to `ON`, and never
