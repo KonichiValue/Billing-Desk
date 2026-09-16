@@ -186,8 +186,12 @@ Against that combined set:
   not gated on a comment having appeared.
 - New tickets since the last sweep get added, with `where_it_stands`, `terms`
   and `threads` filled in the same way the morning prep does it.
-- A ticket completed in Asana keeps its card, with `asana.completed` true, and
-  moves into the closed fold.
+- A ticket completed in Asana is **finished**: set `asana.completed` true, move it
+  into the closed fold, and from then on leave it alone. On later sweeps do not
+  `get_task` it, re-read its threads or refresh its fields, and it never earns a
+  prep block. Close or drop any items still open on it unless one is a genuine
+  follow-up that outlives the ticket (say why in its note), so a closed ticket
+  goes quiet rather than sitting on the active list.
 - **A reassignment changes who TG's owner is, not whose work it is.** When the
   Asana assignee moves to someone else, write the new name into
   `asana.assignee`, add the reassignment as an event, and address later drafts to
@@ -196,8 +200,9 @@ Against that combined set:
   happened or somebody has actually taken it, and the note has to name who. A
   ticket leaves the board when every item on it is closed or dropped, and never
   before, because the items are how Rei refers to his own work.
-- **A board ticket that is open here but absent from the census was completed or
-  reassigned — find out which, never leave it on the last sweep's values.** The
+- **A board ticket still open here (not already marked `asana.completed`) but
+  absent from the census was completed or reassigned — find out which, never leave
+  it on the last sweep's values.** The
   census is every incomplete task still assigned to Rei, so a board ticket missing
   from it has either been completed (set `asana.completed` true, move it to the
   closed fold) or handed to someone else (`get_task` it, write the new

@@ -142,6 +142,11 @@ which stays one short paragraph on the current position.
 
 ### Do not re-script what the last meeting already settled
 
+**A ticket completed in Asana is finished: give it no `prep` block, whatever its
+timeline shows.** A closed TG ticket is done, not a speaking item, so it never
+gets a script line and needs no update when the script is written. It stays in
+the closed fold as a record.
+
 A ticket earns a place in the script only when the **next** room has something
 still to do with it: a status TG have not heard, a question to ask, a decision to
 land. If it was talked through at the last session and came out with nothing owed
