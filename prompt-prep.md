@@ -89,6 +89,35 @@ changes what has to move into Asana instead.
    commitments in the threads: promising to bring something and arriving without
    it is the failure mode.
 
+### The Friday X-Workstream rollup, always, alongside the standup
+
+Every prep run writes **two** things now, not one: the full standup walk (below),
+and the Friday X-Workstream rollup in the board-level `xws` block. Write both,
+every time, whichever session is soonest. The standup is the room he walks ticket
+by ticket; the X-Workstream is the whole programme in one room, and only the
+absolute biggest billing items are ever taken up from him there. So the rollup is
+not a second copy of the standup: it is a shortlist.
+
+Set `script.for_date` to the **standup** and write the per-ticket `prep` for it as
+always. Do **not** put the X-Workstream in `sessions`: it lives only in `xws`, so
+the full walk stays pointed at the standup and the rollup renders as its own card.
+
+Into `xws` put its `for_date`, `at` (11:00), `built_at`, a one-line `headline`
+saying what he raises at the rollup this week, and `raised`: the shortlist. A
+ticket earns a place in `raised` only if the whole workstream needs it, which is a
+high bar. It clears the bar when it is a customer-visible incident resolved or
+still live, a production release the programme has to hear about (memory: prod
+releases are pre-announced in the Migration Daily), or a decision stuck long
+enough that it needs escalating above the standup. Most tickets never appear.
+Two or three items is a normal week; zero is a real answer, and `headline` then
+says so ("nothing from billing needs the room this week") with `raised` empty.
+
+Each `raised` entry is `{ref, why, say}`: `why` is one line on why it is big
+enough for the room, and `say` is one or two lines he actually says, higher
+altitude than a standup line, in the same `{ja_ruby, en}` shape with furigana.
+The hard constraint below holds here too: nothing internal reaches the room, even
+though it is a programme meeting, because TG sit in it.
+
 ### The order the meeting walks
 
 The standup works down the 2-week cycle board in the order the cards appear on
@@ -110,6 +139,36 @@ on the ticket, his own messages included, and `so_what` must be filled on any
 event that changed what happens next, because that line is what he reads out.
 Nothing is written twice: do not repeat the timeline inside `where_it_stands`,
 which stays one short paragraph on the current position.
+
+### Do not re-script what the last meeting already settled
+
+A ticket earns a place in the script only when the **next** room has something
+still to do with it: a status TG have not heard, a question to ask, a decision to
+land. If it was talked through at the last session and came out with nothing owed
+back from TG, only an action for Rei to carry out afterwards (post the agreed
+update to the ticket, attach the evidence once the run confirms), then it is
+**finished as a speaking item**. Give it no `prep` block at all. It stays on the
+desk as the item it is, and the speaking view is silent on it.
+
+The timeline is how you tell, not the ticket's status. An event like "gave the
+update at the standup, agreed to post the evidence in the ticket" means the room
+is done with it, even though the ticket is still open and the action is still
+Rei's to do. So read what Rei actually said last time before you write a `現状`
+line, not just where the work stands.
+
+Re-reading out a matter the room already closed is worse than leaving it off: it
+reads as unresolved, invites the same discussion a second time, and buries the
+one or two tickets that genuinely need the room.
+
+This is different from a ticket sitting quietly with Kraken engineering, which
+still earns its one-line `現状` because TG have a live interest in hearing it is
+in hand and have not been told since. The test is whether anything is still owed
+**in the room**: nothing owed, and last time already covered it, means no block.
+
+**It reopens only when something new happens.** If the recovery fails, the
+evidence is contested, TG raise a fresh question, or a promised date slips, it
+earns a slot again with the new fact as its `現状`. A settled item is silent on
+the speaking view, not deleted from the board.
 
 ### Trace what the fix does not cover
 
@@ -152,7 +211,10 @@ arguing about, you are presenting where you should be reporting.
 
 **A ticket sitting with Kraken engineering is one or two lines, no more.** When
 the latest is that the requirements are agreed and Kraken is building it, that is
-the whole of the `現状`: 要件は合意済みで、Kraken側で対応中です, and stop. Add an
+the whole of the `現状`: {要件|ようけん}は{合意済|ごういず}みで、Kraken側で対応中です,
+and stop. That one line is still a line he reads out, so it carries its furigana
+like any other (see below); a quiet ticket is the one the markup is most often
+dropped on. Add an
 approximate timing **only if a date has already been agreed and shared with TG**
 (`prep.estimate`); if none exists, say nothing about when, rather than hedging.
 Never reach for the build ticket, the queue position, the engineer or the size
@@ -166,7 +228,16 @@ answered.
 
 Style:
 
-- N2, ですます, business-polite and plain.
+- N2, ですます, kept plain rather than stiff. These are working conversations with
+  people he speaks to most days, so prefer direct plain-polite forms over heavy
+  keigo: 「{確認|かくにん}します」「お{願|ねが}いします」「{教|おし}えてください」
+  「〜と{思|おも}います」, not 「{確認|かくにん}させていただきます」
+  「お{願|ねが}いできますでしょうか」「ご{判断|はんだん}いただけますでしょうか」
+  「{恐|おそ}れ{入|い}りますが」. Stay polite, but cut the padding that makes a line
+  hard to say aloud. This is register only, and never touches the vocabulary rule
+  below: the technical terms are kept exactly, never simplified.
+- Wrong (too stiff): 「{本番|ほんばん}での{有効|ゆうこう}{化|か}にご{賛同|さんどう}いただけますでしょうか。」
+  Right (plain): 「{本番|ほんばん}で{進|すす}めてよいか{教|おし}えてください。」
 - **Every line is a complete, natural sentence.** One idea per line, but the line
   has to stand on its own when spoken. Never chop a sentence into fragments
   across lines. Roughly 25 to 50 characters is the sweet spot, longer when the
@@ -188,7 +259,13 @@ Style:
 
 **Furigana.** Wrap kanji above N3 as `{漢字|かんじ}`, reading on the whole word,
 not per character. Words he knows (今日, 問題, 対応, 確認, 請求) need none. Err
-towards adding it for technical and market vocabulary.
+towards adding it for technical and market vocabulary. This holds for **every**
+`ja_ruby` and `say_ja` you write, the one-line quiet `現状` as much as a
+six-block onsite, and for the standing vocabulary above: 課金GAPホールド,
+稼働確認, 託送番号不一致HOLD, 保安閉栓 and the rest all take their reading when
+they land in a spoken line. The bald compound is the failure this repo has seen
+most, so `./check.py` fails on a run of three or more un-annotated kanji in a
+spoken field: if it flags a line, the reading is missing, not the check wrong.
 
 Correct: `{託送番号|たくそうばんごう}が{一致|いっち}しません。`
 Wrong: `{託|たく}{送|そう}{番|ばん}{号|ごう}`
@@ -316,8 +393,23 @@ And once at board level:
    "bring": ["Anything he promised to have ready."]},
   {"kind": "standup", "date": "YYYY-MM-DD", "at": "10:30",
    "skipped": true, "reason": "Why not, if it is not running."}
-]
+],
+"xws": {
+  "for_date": "YYYY-MM-DD, the Friday",
+  "at": "11:00",
+  "built_at": "ISO 8601 with +09:00",
+  "headline": "What he raises at the rollup this week, or that nothing is big enough.",
+  "raised": [
+    {"ref": "the ticket tag",
+     "why": "One line: why this is big enough for the whole workstream.",
+     "say": [{"ja_ruby": "One or two rollup-level lines with {漢字|かんじ} markup.",
+              "en": "..."}]}
+  ]
+}
 ```
+
+`xws` is not in `sessions` on purpose: it is the rollup card, not a walk. Leave
+`raised` empty when nothing clears the bar, and let `headline` carry the week.
 
 Do not write `where_it_stands` inside `prep`. The speaking view reads it from the
 ticket, so there is one status and the script can never contradict the desk.
