@@ -190,14 +190,33 @@ def _sweep_plan(b: dict) -> None:
     gids = _project_gids()
     _out("SWEEP PLAN  (read this, not the raw board -- built from the watermarks above)")
     _out(
+        "  0. Membership census, ONE call, NO date filter: search_tasks assignee=me"
+        " completed=false" + (f" projects={','.join(gids)}" if gids else "")
+    )
+    _out(
+        "     This is what BELONGS on the board, not what moved. Any assigned incomplete"
+    )
+    _out(
+        "     task whose id is not already a ticket below is MISSING -- add it this sweep,"
+    )
+    _out(
+        "     cause named or not, and deep-read it in full. The gate cannot find it: a"
+    )
+    _out(
+        "     ticket that never moved since it was assigned is invisible to modified_at."
+    )
+    _out(
         "  1. Asana gate, ONE call: search_tasks modified_at.after=" + (since or "?")
         + (f" projects={','.join(gids)}" if gids else "")
     )
     _out(
-        "     Deep-read (get_task / get_task_stories) only the gids it returns, plus any"
+        "     This decides DEPTH, not membership. Deep-read (get_task / get_task_stories)"
     )
     _out(
-        "     ticket whose thread moved below. An unchanged ticket costs the one gate call."
+        "     only the gids it returns, plus any ticket whose thread moved below, plus any"
+    )
+    _out(
+        "     ticket the census turned up. An unchanged, already-known ticket costs nothing."
     )
     _out("  2. Threads worth reading -- only those NOT looked at since the ticket last moved.")
     _out("     After you look at one, set th['checked'] = board.now() so it drops off next time.")

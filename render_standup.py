@@ -38,6 +38,7 @@ from render import (
     script_meta,
     script_session,
     section,
+    sessions as all_sessions,
     when_words,
 )
 
@@ -414,9 +415,21 @@ def running_order(tickets: list[dict], ids: dict[str, str]) -> str:
     return f'<ul class="st-run">{"".join(rows)}</ul>'
 
 
-def prep_jump(tickets: list[dict], ids: dict[str, str]) -> str:
+def prep_jump(
+    tickets: list[dict],
+    ids: dict[str, str],
+    has_also: bool = False,
+    has_xws: bool = False,
+    has_huddle: bool = False,
+) -> str:
     """The same jump bar as the work view, in the order the meeting walks."""
     chips = ['<a href="#prep-need">Need to know</a>']
+    if has_huddle:
+        chips.append('<a href="#prep-huddle">Huddle</a>')
+    if has_xws:
+        chips.append('<a href="#prep-xws">X-Workstream</a>')
+    if has_also:
+        chips.append('<a href="#prep-also">Also today</a>')
     for n, t in enumerate(tickets, 1):
         ref = t.get("ref", "")
         prep = t.get("prep") or {}
@@ -455,6 +468,199 @@ def whole_day(sess: dict) -> str:
         <span class="fold-hint"></span></summary>
         <ul class="agenda">{out}</ul>
       </details>"""
+
+
+def render_also(board: dict, focused: dict, ids: dict[str, str]) -> str:
+    """The other rooms he still has to speak in the same span, folded small.
+
+    The page focuses on the soonest session, because that is the one he walks
+    into next. But a second meeting the same day carries things he has to have
+    thought about before he sits down, and losing them off the bottom of the
+    board is how he walks in cold. So every other live session sits here as a
+    short list of must-think notes: one fold, closed until he wants it, out of
+    the way of the script he is actually rehearsing.
+    """
+    others = [
+        s
+        for s in all_sessions(board)
+        if not s.get("skipped")
+        and (s.get("date"), s.get("at"), s.get("kind"))
+        != (focused.get("date"), focused.get("at"), focused.get("kind"))
+    ]
+    if not others:
+        return ""
+    blocks = []
+    for s in others:
+        when = when_words(s.get("date", ""), s.get("at", ""))
+        rows = []
+        for n in s.get("notes", []):
+            ref = n.get("ref", "")
+            tag = (
+                f'<a class="tag" href="#{esc(ids[ref])}">{esc(ref)}</a>'
+                if ref in ids
+                else f'<span class="tag">{esc(ref)}</span>'
+            )
+            say = ""
+            if n.get("say_ja"):
+                raw = plain(n.get("say_ja", ""))
+                say = f"""
+            <div class="also-say">
+              <p class="jp">{furi(n.get("say_ja", ""))}</p>
+              {f'<p class="en">{esc(n.get("say_en"))}</p>' if n.get("say_en") else ""}
+              {f'<button class="copy" data-copy="{esc(raw)}">copy</button>' if raw else ""}
+            </div>"""
+            rows.append(
+                f"""
+          <li>
+            {tag}
+            <div class="also-b">
+              <p class="also-think">{esc(n.get("think"))}</p>
+              {say}
+            </div>
+          </li>"""
+            )
+        body = ""
+        if s.get("focus"):
+            body += f'<p class="also-focus">{esc(s.get("focus"))}</p>'
+        if rows:
+            body += f'<ul class="also-notes">{"".join(rows)}</ul>'
+        elif not s.get("focus"):
+            body += '<p class="also-none">Nothing flagged to think through yet.</p>'
+        blocks.append(
+            f"""
+      <div class="also-sess">
+        <h4 class="also-when">{esc(s.get("name"))} &middot; {esc(when)}</h4>
+        {body}
+      </div>"""
+        )
+    n_sess = len(others)
+    return f"""
+  <details class="also" id="prep-also" data-remember="prep-also">
+    <summary>
+      <span class="also-tag">Also today</span>
+      <span class="also-sum">the other room{"s" if n_sess != 1 else ""}, and what to think through before you sit down</span>
+      <span class="fold-hint"></span>
+    </summary>
+    <div class="also-in">{"".join(blocks)}</div>
+  </details>"""
+
+
+def render_xws(board: dict, ids: dict[str, str]) -> str:
+    """The Friday X-Workstream rollup, one folded card pinned at the top.
+
+    The standup is the room he walks ticket by ticket, and it stays the full
+    view. The X-Workstream is the whole programme in one room, where only the
+    biggest billing items are ever taken up from him, so it is not one of the
+    sessions and does not drive the walk. It sits here as a shortlist he shows
+    with a button when the rollup comes round and leaves shut the rest of the
+    week, without pushing the standup he is actually rehearsing down the page.
+
+    An empty `raised` still draws, on its headline alone: walking in knowing
+    nothing from billing needs the room is worth the one line it takes to say.
+    """
+    xws = board.get("xws") or {}
+    if not xws.get("for_date") and not xws.get("headline") and not xws.get("raised"):
+        return ""
+    when = when_words(xws.get("for_date", ""), xws.get("at", ""))
+    raised = xws.get("raised", [])
+    rows = []
+    for r in raised:
+        ref = r.get("ref", "")
+        tag = (
+            f'<a class="tag" href="#{esc(ids[ref])}">{esc(ref)}</a>'
+            if ref in ids
+            else f'<span class="tag">{esc(ref)}</span>'
+        )
+        say = []
+        for line in r.get("say", []):
+            raw = plain(line.get("ja_ruby", ""))
+            say.append(
+                f"""
+            <div class="xws-say">
+              <p class="jp">{furi(line.get("ja_ruby", ""))}</p>
+              {f'<p class="en">{esc(line.get("en"))}</p>' if line.get("en") else ""}
+              {f'<button class="copy" data-copy="{esc(raw)}">copy</button>' if raw else ""}
+            </div>"""
+            )
+        rows.append(
+            f"""
+        <li>
+          {tag}
+          <div class="xws-b">
+            {f'<p class="xws-why">{esc(r.get("why"))}</p>' if r.get("why") else ""}
+            {"".join(say)}
+          </div>
+        </li>"""
+        )
+    if rows:
+        body = f'<ul class="xws-list">{"".join(rows)}</ul>'
+        sum_line = (
+            f"{len(raised)} billing item{'s' if len(raised) != 1 else ''} "
+            "big enough to raise at the programme rollup"
+        )
+    else:
+        body = '<p class="xws-none">Nothing from billing is big enough to raise this week.</p>'
+        sum_line = "nothing from billing needs the room this week"
+    lead = (
+        f'<p class="xws-lead">{esc(xws.get("headline"))}</p>'
+        if xws.get("headline")
+        else ""
+    )
+    return f"""
+  <details class="xws" id="prep-xws" data-remember="prep-xws">
+    <summary>
+      <span class="xws-tag">X-Workstream rollup{f" &middot; {esc(when)}" if when else ""}</span>
+      <span class="xws-sum">{esc(sum_line)}</span>
+      <span class="fold-hint"></span>
+    </summary>
+    <div class="xws-in">
+      {lead}
+      {body}
+    </div>
+  </details>"""
+
+
+def render_huddle(board: dict) -> str:
+    """The TG Team Huddle rollup, a short internal update folded at the top.
+
+    A weekly Kraken-side huddle (English, internal), not a TG room, so it is not
+    one of the sessions and does not drive the walk. Kept to the shape Rei writes
+    in Notion: a terse "on my plate" list and, only when something is genuinely
+    stuck, a blocker or two. He opens the card on the day and copies it across.
+    """
+    h = board.get("huddle") or {}
+    if not h.get("for_date") and not h.get("plate") and not h.get("blockers"):
+        return ""
+    when = when_words(h.get("for_date", ""), h.get("at", ""))
+    plate = h.get("plate", [])
+    blockers = h.get("blockers", [])
+    plate_html = "".join(f"<li>{esc(x)}</li>" for x in plate)
+    if blockers:
+        rows = "".join(f"<li>{esc(x)}</li>" for x in blockers)
+        blockers_block = (
+            '<p class="xws-lead"><b>Blockers</b></p>'
+            f'<ul class="xws-list">{rows}</ul>'
+        )
+        sum_line = (
+            f"{len(plate)} on your plate, "
+            f"{len(blockers)} blocker{'s' if len(blockers) != 1 else ''}"
+        )
+    else:
+        blockers_block = '<p class="xws-none">No blockers.</p>'
+        sum_line = f"{len(plate)} on your plate, no blockers"
+    return f"""
+  <details class="xws" id="prep-huddle" data-remember="prep-huddle">
+    <summary>
+      <span class="xws-tag">TG Team Huddle{f" &middot; {esc(when)}" if when else ""}</span>
+      <span class="xws-sum">{esc(sum_line)}</span>
+      <span class="fold-hint"></span>
+    </summary>
+    <div class="xws-in">
+      <p class="xws-lead"><b>On my plate</b></p>
+      <ul class="xws-list">{plate_html}</ul>
+      {blockers_block}
+    </div>
+  </details>"""
 
 
 def last_session(board: dict, sess: dict) -> str:
@@ -498,7 +704,12 @@ def render(board: dict, desk_ids: dict[str, str], built: str, stale: bool) -> st
             if onsite
             else ""
         )
+        empty_ids = {
+            ref: anchor(desk_id) for ref, desk_id in desk_ids.items()
+        }
         return f"""
+  {render_huddle(board)}
+  {render_xws(board, empty_ids)}
   {banner}
   <div class="st-empty">
     <h2>Nothing written yet {esc(for_what)}</h2>
@@ -511,6 +722,9 @@ def render(board: dict, desk_ids: dict[str, str], built: str, stale: bool) -> st
     tickets.sort(key=lambda t: (t.get("prep") or {}).get("order", 99))
     ids = {t.get("ref", ""): anchor(desk_ids.get(t.get("ref", ""), "")) for t in tickets}
     since = last_session(board, sess)
+    xws = render_xws(board, ids)
+    huddle = render_huddle(board)
+    also = render_also(board, sess, ids)
     cards = "".join(
         render_ticket(t, ids[t.get("ref", "")], desk_ids.get(t.get("ref", ""), ""), since)
         for t in tickets
@@ -536,8 +750,10 @@ def render(board: dict, desk_ids: dict[str, str], built: str, stale: bool) -> st
     if settle:
         speak += f', {settle} to settle in the room'
     return f"""
-  {prep_jump(tickets, ids)}
+  {prep_jump(tickets, ids, bool(also), bool(xws), bool(huddle))}
   {stale_note}
+  {huddle}
+  {xws}
   <details class="nk" id="prep-need" data-remember="prep-need" open>
     <summary>
       <span class="nk-k">Need to know</span>
@@ -554,6 +770,7 @@ def render(board: dict, desk_ids: dict[str, str], built: str, stale: bool) -> st
       {whole_day(sess)}
     </div>
   </details>
+  {also}
   {cards}
   <p class="foot">Written {esc(built)}. <kbd>1</kbd> your work,
   <kbd>2</kbd> what you say, <kbd>s</kbd> Japanese only, <kbd>/</kbd> find

@@ -53,6 +53,37 @@ real discussion starts, and none of those is the time on the invite. `mine` on a
 row is the part that concerns him, and those are the rows the page emphasises.
 Leave it out for an ordinary standup, where `at` is the whole story.
 
+`xws` is the Friday X-Workstream rollup, and it is deliberately not one of the
+`sessions`. The standup is a room he walks ticket by ticket; the X-Workstream is
+the whole programme in one room, where only the biggest billing items are ever
+taken up from him. So it does not drive the full speaking walk (that stays the
+soonest real `session`), it renders as one folded card at the top of the speaking
+view, shown or hidden with a button, holding a shortlist of the items big enough
+to surface. Keeping it out of `sessions` is what lets both be prepared at once:
+the standup as the full walk, the rollup as the exception list on top of it.
+
+    {"for_date": "2026-09-11", "at": "11:00", "built_at": "ISO+09:00",
+     "headline": "what he raises at the rollup, or that nothing is big enough",
+     "raised": [{"ref": "外部キー違反",
+                 "why": "why this one is big enough for the whole workstream",
+                 "say": [{"ja_ruby": "{漢字|かんじ}…", "en": "…"}]}]}
+
+An empty `raised` is a fact worth walking in with, so the card still draws on its
+`headline` alone: "nothing from billing needs the room this week" is a thing to
+know, not a blank.
+
+`huddle` is the TG Team Huddle rollup (Wednesday 11:30), a short Kraken-internal
+update in English, and like `xws` it is not one of the `sessions`. It renders as
+its own folded card on the speaking view and is only rewritten on a Wednesday.
+
+    {"for_date": "2026-09-16", "at": "11:30", "built_at": "ISO+09:00",
+     "plate": ["one terse line per thing on his plate now"],
+     "blockers": ["only a genuine blocker; usually one line or none"]}
+
+Both `plate` and `blockers` are plain strings, English, no furigana. Keep it to
+the short bullet shape Rei writes in Notion, and be selective: "No blockers" is
+the common, honest answer.
+
 `news` is what is moving around Rei that is not one of his tickets: a priority
 that changed, an outage upstream, a decision on somebody else's ticket that
 lands on his. The desk answers "what do I do" perfectly well without it, and
@@ -176,6 +207,19 @@ does not need persuading about his own list, he needs to know what to type.
 
 `draft` is the whole of the doing when the step is "send this", so a step that
 tells him to ask, tell, confirm or reply and carries no draft is a bug.
+
+    {"language": "ja",                     "ja" or "en", and it picks where the body is read from
+     "target": "who and where it goes",    the head of the box, e.g. "Asana comment on 保安閉栓, reply to Tamanoi"
+     "link": "https://...",                optional, the Go there button
+     "body_ruby": "{漢字|かんじ}で…",        a ja draft's text, with furigana on whole words
+     "body_en": "…",                       an en draft's text; or the translation shown under a ja draft
+     "sent": false}                        set true once he confirms it went
+
+The body has to be under the key the renderer reads, or the card shows an empty
+box that reads as ready to paste: a ja draft in `body_ruby` (furigana on whole
+words, never katakana), an en draft in `body_en`. `body_ja` and a bare `body`
+still render as a fallback but carry no furigana, so they are wrong for anything
+going to TG. board.check() refuses a draft with no readable body at all.
 
 `prepared` is the part an agent could do and therefore did. If the steps could
 be followed by something without judgement, following them was the agent's job,
@@ -411,6 +455,31 @@ def check(board: dict) -> list[str]:
                             f"{where}: prepared.findings[{n}] is a dict. Findings "
                             f"are strings; every reader joins them as prose."
                         )
+
+        # A draft dict need not carry a body: once a message has gone, the draft is a
+        # folded record of what went (target, link, posted/sent) and the summary is the
+        # point. What must never happen is body text saved under a key no renderer reads,
+        # because then the card shows an empty box where the message should be and reads
+        # as ready to paste. render_draft reads body_ruby/body_ja/body (ja) and
+        # body_en/body_ruby/body (en), so any other body* key is text that will never
+        # show. That is the fault that shipped three blank drafts once: a ja body saved
+        # under a bare key the ja branch did not read.
+        draft = item.get("draft")
+        if isinstance(draft, dict):
+            readable = {"body_ruby", "body_ja", "body", "body_en"}
+            for k, v in draft.items():
+                if (
+                    k.startswith("body")
+                    and k not in readable
+                    and str(v or "").strip()
+                ):
+                    is_ja = draft.get("language") == "ja"
+                    home = "body_ruby" if is_ja else "body_en"
+                    bad.append(
+                        f"{where}: draft body is under {k!r}, which no renderer reads, "
+                        f"so the card shows an empty box. Put the text in {home}"
+                        + (" (a ja draft to TG carries furigana as {漢字|かんじ})." if is_ja else ".")
+                    )
 
         state = item.get("state", "todo")
         if state not in OPEN_STATES + CLOSED_STATES:

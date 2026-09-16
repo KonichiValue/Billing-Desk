@@ -89,18 +89,29 @@ changes what has to move into Asana instead.
    commitments in the threads: promising to bring something and arriving without
    it is the failure mode.
 
-### The Friday X-Workstream rollup, always, alongside the standup
+### The meeting rollups, each only on its own day
 
-Every prep run writes **two** things now, not one: the full standup walk (below),
-and the Friday X-Workstream rollup in the board-level `xws` block. Write both,
-every time, whichever session is soonest. The standup is the room he walks ticket
-by ticket; the X-Workstream is the whole programme in one room, and only the
-absolute biggest billing items are ever taken up from him there. So the rollup is
-not a second copy of the standup: it is a shortlist.
+The standup walk (below) is written every prep run. The meeting **rollups** are
+not: each is written only when prep runs on **that meeting's day**, so pressing
+Write prep on a Tuesday does not churn Friday's rollup. Check today's weekday and
+touch only the rollups that fall on it:
 
-Set `script.for_date` to the **standup** and write the per-ticket `prep` for it as
-always. Do **not** put the X-Workstream in `sessions`: it lives only in `xws`, so
-the full walk stays pointed at the standup and the rollup renders as its own card.
+- **`xws`** — the Friday X-Workstream rollup (11:00). Write or update it only on a
+  Friday; on any other day leave the `xws` block exactly as it is.
+- **`huddle`** — the TG Team Huddle, Wednesday 11:30, a short Kraken-internal
+  update in English. Write or update it only on a Wednesday; otherwise leave the
+  `huddle` block as it is.
+
+For a daily meeting the day before is also acceptable; these two are weekly, so
+only the day itself. On any other day, write just the standup walk and leave both
+rollups untouched.
+
+The standup is the room he walks ticket by ticket; a rollup is the whole
+programme (`xws`) or his own status line (`huddle`) in one room, not a second copy
+of the walk. Set `script.for_date` to the **standup** and write the per-ticket
+`prep` for it as always. Do **not** put a rollup in `sessions`: each lives in its
+own block, so the full walk stays pointed at the standup and each renders as its
+own card.
 
 Into `xws` put its `for_date`, `at` (11:00), `built_at`, a one-line `headline`
 saying what he raises at the rollup this week, and `raised`: the shortlist. A
@@ -117,6 +128,17 @@ enough for the room, and `say` is one or two lines he actually says, higher
 altitude than a standup line, in the same `{ja_ruby, en}` shape with furigana.
 The hard constraint below holds here too: nothing internal reaches the room, even
 though it is a programme meeting, because TG sit in it.
+
+The **`huddle`** block is the TG Team Huddle update, and it is **English and
+internal** (Kraken side, TG are not in the room), so no furigana and the
+"nothing internal to TG" rule does not apply. Keep it as short as Rei writes it
+in Notion: `for_date`, `at` (11:30), `built_at`, `plate` (a terse
+one-line-per-item list of what is on his plate right now, JP ticket names fine),
+and `blockers`. **Be very selective on `blockers`:** only a genuine blocker
+belongs there, something actually stuck on another person or an unmade decision;
+most weeks it is one line or none, and "No blockers" is the honest answer far
+more often than a list. Match the bullet style of the latest weekly update on the
+Notion page. Each entry in `plate` and `blockers` is a plain string.
 
 ### The order the meeting walks
 

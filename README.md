@@ -494,15 +494,29 @@ in and this repo does not restate them.
 
 | Server | For | Sign-in |
 | --- | --- | --- |
-| `databricks-tg` | **The database.** Kraken's managed SQL endpoint on TG's production workspace, `tokyogas-prod`. Same tables TG's own patrol queries, so a hold list or an account's charges can be checked rather than asked about. | OAuth, and the workspace has to have managed MCP servers enabled |
-| `databricks-tg-genie` | The same data in questions rather than SQL, through Genie. | OAuth, same as above |
+| `ktdb-tg-krakencore` | **The database.** The `krakencore` Postgres analytics replica on TG's production account, served over `kraken db proxy`. Same tables TG's own patrol queries, so a hold list or an account's charges can be checked rather than asked about. Read-only, and only this one database: `consumption`, `messaging` and `voice` live on a services replica this account has no grant for. | Nothing to click. It rides on the Cloudfarer session, so `kraken cloudfarer login` when it lapses |
 
 **Never name a server here that a plugin already provides.** A project entry of
 the same name shadows the plugin and inherits none of its setup, so signing in
 under Tools & MCP can fix a server the chat is not the one using. This file
 briefly carried `notion` and `miro`, copied without the plugin's own headers,
 which is why a sign-in on 27 August did not change what the panel showed. Both
-are gone from it. Databricks is safe because nothing else claims those names.
+are gone from it. `ktdb-tg-krakencore` is safe because nothing else claims that
+name.
+
+**This file named Databricks until 8 September 2026, and that was wrong.** The
+managed endpoints do exist on `tokyogas-prod.cloud.databricks.com`, but two
+things stopped the entries that sat here from ever answering. Databricks refuses
+dynamic client registration, so a bare URL like the one in this file can never
+finish a sign-in, no matter how many times you approve it. A personal access
+token would sidestep that, but this account cannot reach the token page.
+
+A route does exist if it is ever needed: `uvx uc-mcp-proxy --auth-type
+databricks-cli` borrows a `databricks auth login` session and wants no OAuth app
+and no token. Nobody has confirmed this account can log in at all, so treat that
+as untested. None of it was ever the point. The data the desk needs was in
+Postgres the whole time, behind credentials that were already working in
+DataGrip.
 
 Three things follow from how Cursor loads all this.
 
@@ -517,12 +531,28 @@ cannot open an OAuth window. When a token lapses, that server simply is not
 there, and the run says so in `gaps` rather than failing. Sign in once in the
 desktop app under Tools & MCP and the terminal runs pick it up again.
 
+**The database is the one server a terminal run can reach on its own**, which is
+new since 8 September 2026 and the real gain from dropping Databricks. There is
+no OAuth window to open, because `ktdb-tg-krakencore` is a local command
+authenticating with this laptop's AWS credentials. Every `cursor-agent` call
+here already passes `--approve-mcps --trust`, so it loads without anyone
+approving anything, and nothing needed adding to make the page able to query.
+The one thing it cannot do for itself is renew the Cloudfarer session. When that
+lapses the queries fail, and the run should put `kraken cloudfarer login` in
+`gaps` for him rather than reporting the data as empty.
+
 **Cloud agents and the phone read none of this.** They never see a local
 `mcp.json` and they do not have the plugins. Add the servers under the MCP
 dropdown at [cursor.com/agents](https://cursor.com/agents), then choose them per
-run on mobile. They are all HTTP, which is the transport cloud agents accept,
-with one catch: anything on the Kraken network, the Slack hub and the Databricks
-workspace both, is only reachable from a cloud VM if it is exposed publicly.
+run on mobile. That works for the four plugin servers, which are HTTP, the
+transport cloud agents accept, with one catch: the Slack hub sits on the Kraken
+network and is only reachable from a cloud VM if it is exposed publicly.
+
+**The database is the exception, and it cannot follow.**
+`ktdb-tg-krakencore` is a local command, not a URL. It starts a proxy on this
+laptop and authenticates with this laptop's AWS credentials, so there is nothing
+a cloud VM or a phone could point at. Any run that is not on the machine has no
+database, and should say so in `gaps` rather than guessing at numbers.
 
 ## Any model, any assistant
 

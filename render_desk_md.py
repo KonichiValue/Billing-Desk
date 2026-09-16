@@ -454,6 +454,49 @@ def render_prep(prep: dict) -> list[str]:
     return block("What I say in the room", rows)
 
 
+def render_xws(data: dict) -> list[str]:
+    """The Friday X-Workstream rollup, in plain kanji. Only the biggest billing
+    items surface here, so it is a short list, and an empty one is a fact worth
+    stating rather than a section to drop."""
+    xws = data.get("xws") or {}
+    if not xws.get("for_date") and not xws.get("headline") and not xws.get("raised"):
+        return []
+    when = when_words(xws.get("for_date", ""), xws.get("at", ""))
+    rows: list[str] = []
+    if xws.get("headline"):
+        rows += [f"**{xws['headline']}**", ""]
+    raised = xws.get("raised", [])
+    if not raised:
+        rows.append("Nothing from billing is big enough to raise this week.")
+    for r in raised:
+        rows.append(f"- **{r.get('ref', '')}**"
+                    + (f" — {r['why']}" if r.get("why") else ""))
+        for line in r.get("say", []):
+            ja = plain(line.get("ja_ruby", ""))
+            if ja:
+                rows.append(f"  > {ja}")
+            if line.get("en"):
+                rows.append(f"  {line['en']}")
+    title = "X-Workstream rollup" + (f", {when}" if when else "")
+    return block(title, rows)
+
+
+def render_huddle(data: dict) -> list[str]:
+    """The TG Team Huddle: a short internal update, on-my-plate plus real
+    blockers only. English, since it is a Kraken-side room, not TG."""
+    h = data.get("huddle") or {}
+    if not h.get("for_date") and not h.get("plate") and not h.get("blockers"):
+        return []
+    when = when_words(h.get("for_date", ""), h.get("at", ""))
+    rows: list[str] = ["**On my plate**"]
+    rows += [f"- {x}" for x in h.get("plate", [])]
+    rows += ["", "**Blockers**"]
+    blockers = h.get("blockers", [])
+    rows += [f"- {x}" for x in blockers] if blockers else ["No blockers."]
+    title = "TG Team Huddle" + (f", {when}" if when else "")
+    return block(title, rows)
+
+
 def render(data: dict) -> str:
     pretty = date.today().strftime("%A %-d %B %Y")
     tickets = data.get("tickets", [])
@@ -521,6 +564,9 @@ def render(data: dict) -> str:
             out.append(f"> - Bring: {thing}")
         if sess.get("bring"):
             out.append("")
+
+    out += render_huddle(data)
+    out += render_xws(data)
 
     index = index_items(tickets)
     rows = tracked(tickets)

@@ -48,12 +48,18 @@ because the context is in the file:
 - **"Check the codebase for X"** &mdash; the Kraken Core checkout is at
  `~/Projects/kraken-core`, not here. Read `~/Projects/kraken-core/AGENTS.md`
  before touching it, and never run `./src/manage.py` directly.
-- **"What does the data say"** &mdash; TG's production data is in Databricks, and
- `.cursor/mcp.json` declares it as `databricks-tg`. Read only: a `SELECT` to see
- how many accounts a hold covers or what a charge actually did is the point, and
- nothing here ever writes to it. A single account is usually faster to read on
+- **"What does the data say"** &mdash; the production data this desk can reach is
+ the `krakencore` Postgres analytics replica, and `.cursor/mcp.json` declares it
+ as `ktdb-tg-krakencore`. Not Databricks, whatever an older note may say. Read
+ only: a `SELECT` to see how many accounts a hold covers or what a charge
+ actually did is the point, and nothing here ever writes to it. Only
+ `krakencore` is readable; `consumption`, `messaging` and `voice` sit on a
+ different replica this account has no grant for, so do not build a query that
+ needs them. A single account is usually faster to read on
  `support.tokyogas-kraken.energy/accounts/<A-...>`. Say which query or page an
  answer came from, and if the server is not there, say that instead of guessing.
+ A missing server here almost always means the Cloudfarer session lapsed, which
+ only he can fix with `kraken cloudfarer login`, so put it in `gaps`.
 - **"What's the status of X"** &mdash; answer from the ticket's block, and follow
   the `threads` links if the answer is not there. Say plainly when the file is
   stale rather than guessing.

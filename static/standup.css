@@ -143,3 +143,63 @@ margin-right:6px}
 border-left:3px solid var(--line);font-style:italic}
 .st-push .mine{margin-top:7px;padding-left:11px;border-left:3px solid var(--accent-line)}
 .st-push .mine .jp{font-size:17px}
+
+/* Also today: the other rooms he speaks in the same span, deliberately small so
+   the session he is rehearsing keeps the screen. Muted, not the house accent,
+   because it is the second thing to read and closed until he asks for it. */
+.also{background:#fbfcfe;border:1px solid var(--line);border-left:4px solid var(--soft);
+border-radius:13px;margin-bottom:18px;overflow:hidden}
+.also>summary{cursor:pointer;list-style:none;display:flex;gap:11px;align-items:center;
+flex-wrap:wrap;padding:11px 16px}
+.also>summary::-webkit-details-marker{display:none}
+.also>summary::before{display:none}
+.also[open]>summary{border-bottom:1px solid var(--line);background:#fff}
+.also-tag{flex:none;font:750 9.5px/1 inherit;text-transform:uppercase;
+letter-spacing:.09em;color:var(--soft);background:var(--card);border:1px solid var(--line);
+padding:4px 7px;border-radius:5px}
+.also-sum{flex:1;min-width:0;font-size:12.5px;font-weight:600;color:var(--soft)}
+.also-in{padding:13px 16px 15px}
+.also-sess+.also-sess{margin-top:14px;padding-top:14px;border-top:1px solid var(--hair)}
+.also-when{margin:0 0 7px;font-size:13px;font-weight:700;letter-spacing:-.01em}
+.also-focus{margin:0 0 10px;font-size:13px;line-height:1.55;color:var(--mut)}
+.also-notes{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:11px}
+.also-notes>li{display:flex;gap:9px;align-items:flex-start}
+.also-notes .tag{flex:none;font-size:12px;padding:2px 8px}
+.also-notes a.tag{text-decoration:none}
+.also-notes a.tag:hover{color:var(--accent)}
+.also-b{flex:1;min-width:0}
+.also-think{margin:0;font-size:13.5px;line-height:1.6;color:var(--ink)}
+.also-say{margin:8px 0 0;padding-left:11px;border-left:3px solid var(--accent-line)}
+.also-say .jp{font-size:16px}
+.also-none{margin:0;font-size:13px;color:var(--soft)}
+
+/* The X-Workstream rollup, pinned at the top and shut until he wants it. Unlike
+   Also today it carries the house accent, because it is the imminent room and
+   the button is the whole point: only the biggest billing items surface here, so
+   most weeks it is one glance and shut again. */
+.xws{background:#fff;border:1px solid var(--line);border-left:4px solid var(--accent);
+border-radius:13px;margin-bottom:18px;overflow:hidden}
+.xws>summary{cursor:pointer;list-style:none;display:flex;gap:11px;align-items:center;
+flex-wrap:wrap;padding:11px 16px}
+.xws>summary::-webkit-details-marker{display:none}
+.xws>summary::before{display:none}
+.xws[open]>summary{border-bottom:1px solid var(--line);background:var(--card)}
+.xws-tag{flex:none;font:750 9.5px/1 inherit;text-transform:uppercase;
+letter-spacing:.09em;color:var(--accent);background:var(--accent-line);
+border:1px solid var(--accent-line);padding:4px 7px;border-radius:5px}
+.xws-sum{flex:1;min-width:0;font-size:12.5px;font-weight:600;color:var(--soft)}
+.xws-in{padding:13px 16px 15px}
+.xws-lead{margin:0 0 12px;font-size:14px;line-height:1.55;font-weight:650;color:var(--ink)}
+.xws-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:14px}
+.xws-list>li{display:flex;gap:9px;align-items:flex-start}
+.xws-list>li+li{padding-top:14px;border-top:1px solid var(--hair)}
+.xws-list .tag{flex:none;font-size:12px;padding:2px 8px}
+.xws-list a.tag{text-decoration:none}
+.xws-list a.tag:hover{color:var(--accent)}
+.xws-b{flex:1;min-width:0}
+.xws-why{margin:0;font-size:13.5px;line-height:1.6;color:var(--mut)}
+.xws-say{margin:8px 0 0;padding-left:11px;border-left:3px solid var(--accent-line)}
+.xws-say+.xws-say{margin-top:10px}
+.xws-say .jp{font-size:16px;margin:0}
+.xws-say .en{margin:3px 0 0;font-size:12.5px;color:var(--soft)}
+.xws-none{margin:0;font-size:13px;color:var(--soft)}

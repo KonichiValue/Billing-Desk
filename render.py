@@ -198,6 +198,7 @@ GLOSS_BLOCKS = {
     "other_notes",
     "agenda",
     "unanswered",
+    "raised",
 }
 # The order the page reads a card, so the gloss lands on the first mention he
 # actually sees rather than on one inside a shut fold.
@@ -345,7 +346,7 @@ def apply_glossary(board: dict) -> dict:
         return board
     for ticket in board.get("tickets", []):
         gloss_tree(ticket, glossary, set())
-    for key in ("news", "sessions", "other_notes", "script", "meeting_note"):
+    for key in ("news", "sessions", "other_notes", "script", "meeting_note", "xws", "huddle"):
         if board.get(key):
             gloss_tree(board[key], glossary, set())
     return board
@@ -480,6 +481,12 @@ KINDS = {
         "tab": "Onsite",
         "at": "",
         "what": "a day in the room with TG",
+    },
+    "weekly": {
+        "name": "Billing weekly",
+        "tab": "Weekly",
+        "at": "13:00",
+        "what": "the hour where deferred and Other-priority tickets get discussed",
     },
     "workshop": {
         "name": "Workshop",

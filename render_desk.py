@@ -352,8 +352,12 @@ def render_draft(d: dict, st: dict | None = None) -> str:
     # body_en is the translation shown beneath it. An English draft (to a Kraken
     # colleague) keeps its text in body_en and has no body_ruby. Reading body_ruby
     # for both rendered every English draft blank -- the text was saved, never shown.
+    # Both branches fall back through the other body keys, so a draft whose text
+    # landed under body_ja or a bare body still renders instead of showing an empty
+    # box: furi() passes plain text through untouched, so the worst case is no ruby,
+    # never a blank card. board.check() refuses a draft with no body at all.
     if is_ja:
-        body = d.get("body_ruby", "")
+        body = d.get("body_ruby") or d.get("body_ja") or d.get("body", "")
         rendered = furi(body)
         trans = (
             f'<p class="draft-en">{esc(d.get("body_en"))}</p>'

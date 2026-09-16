@@ -1,12 +1,10 @@
 {
   "mcpServers": {
-    "databricks-tg": {
-      "type": "http",
-      "url": "https://tokyogas-prod.cloud.databricks.com/api/2.0/mcp/sql"
-    },
-    "databricks-tg-genie": {
-      "type": "http",
-      "url": "https://tokyogas-prod.cloud.databricks.com/api/2.0/mcp/genie"
+    "ktdb-tg-krakencore": {
+      "command": "/Users/rei.samuelsson/.local/bin/ktdb-mcp",
+      "env": {
+        "KTDB_CONN": "tokyogas-prod.krakencore"
+      }
     }
   }
 }
