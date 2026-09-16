@@ -28,7 +28,7 @@
     "model": "auto"
   },
   "prep": {
-    "model": "claude-opus-4-8"
+    "model": "auto"
   },
   "slack": {
     "search_scope": "all",
