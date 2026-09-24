@@ -28,10 +28,11 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import NamedTuple
+from typing import Callable, NamedTuple
 
 import agent
 import keep
@@ -244,6 +245,36 @@ def set_job(state: str, message: str = "", url: str = "") -> None:
         job.update(
             state=state, message=message, url=url, at=datetime.now().strftime("%H:%M")
         )
+
+
+def guarded(work: Callable[[], None], what: str) -> Callable[[], None]:
+    """Run a worker so that a crash in it reaches the page.
+
+    The button sets "running" before the thread starts, so anything that escapes
+    the worker leaves the spinner turning for ever: the page has been told work
+    began and will never be told otherwise. That is exactly what happened to a
+    server left running across this change, where `blockers()` raised
+    `TimeoutExpired` on a `cursor-agent status` that never answered and Refresh
+    read "Starting" until it was restarted. A stuck spinner is worse than a
+    failure, because a failure says what to do next.
+    """
+
+    def run() -> None:
+        try:
+            work()
+        except Exception:
+            detail = traceback.format_exc()
+            try:
+                (ROOT / "logs").mkdir(exist_ok=True)
+                with (ROOT / "logs" / "serve.log").open("a", encoding="utf-8") as fh:
+                    fh.write(f"\n=== {datetime.now():%H:%M:%S} {what} crashed ===\n{detail}\n")
+            except OSError:
+                pass
+            set_job("failed",
+                    f"the {what} could not start, which is a fault in the desk rather "
+                    f"than in your work. Nothing was changed. See logs/serve.log")
+
+    return run
 
 
 ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
@@ -1334,7 +1365,9 @@ class Handler(BaseHTTPRequestHandler):
                     return
             kind = path.rsplit("/", 1)[1]
             set_job("running", "Starting")
-            threading.Thread(target=run_agent, args=(kind,), daemon=True).start()
+            threading.Thread(
+                target=guarded(lambda: run_agent(kind), kind), daemon=True
+            ).start()
             self.json_out(202, {"state": "running"})
             return
         if path == "/api/ask":
@@ -1403,7 +1436,9 @@ class Handler(BaseHTTPRequestHandler):
             self.json_out(200, {"forgot": gone})
             return
         if path == "/api/login":
-            threading.Thread(target=start_login, daemon=True).start()
+            threading.Thread(
+                target=guarded(start_login, "sign-in"), daemon=True
+            ).start()
             self.json_out(202, {"state": "needs_login"})
             return
         self.json_out(404, {"error": "not here"})
