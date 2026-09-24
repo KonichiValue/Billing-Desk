@@ -51,14 +51,20 @@ Agent log: $DIR/$AGENT_LOG" "$HTML"
   exit 1
 }
 
-command -v cursor-agent >/dev/null 2>&1 || fail "cursor-agent is not on PATH"
+# Which CLI, on which model, comes from agent.py, so a post on a schedule runs
+# the same agent as a refresh the user pressed. It exits 3 when nothing is
+# installed, and prints the command one word per line.
+AGENT_CMD=("${(@f)$(python3 -c '
+import sys
+import agent
+kind = agent.pick()
+if kind is None:
+    sys.exit(3)
+model = sys.argv[1] or agent.model_for("post")
+print("\n".join(kind.command(model)))
+' "${POST_MODEL:-}")}") || fail "no agent CLI is installed. Install Claude Code."
 
-if cursor-agent status 2>&1 | grep -qi "not logged in"; then
-  fail "cursor-agent is not logged in. Run: cursor-agent login"
-fi
-
-MODEL_ARG=()
-[[ -n "${POST_MODEL:-}" ]] && MODEL_ARG=(--model "$POST_MODEL")
+AGENT_BIN="${AGENT_CMD[1]}"
 
 # The board has one writer at a time. A prep or a refresh the user is watching
 # takes state/refresh.lock (see serve.py and bin/tg), and post must take the same
@@ -130,14 +136,9 @@ while true; do
   # A copy of the board before the agent touches it. state/ is not in git.
   python3 keep.py post >>"$LOG" 2>&1 || true
 
-  cursor-agent \
-    --print \
-    --force \
-    --approve-mcps \
-    --trust \
-    --workspace "$DIR" \
-    "${MODEL_ARG[@]}" \
-    "$(cat prompt-post.md)" >"$AGENT_LOG" 2>&1 &
+  # The prompt goes in on stdin: prompt-post.md is 48KB, which is no business of
+  # the command line.
+  "${AGENT_CMD[@]}" <prompt-post.md >"$AGENT_LOG" 2>&1 &
   AGENT_PID=$!
 
   # Kill only if the pid is still our agent. A bare `kill -9 $AGENT_PID` will land
@@ -145,7 +146,7 @@ while true; do
   # watchdog ends up killing an unrelated prep. The lock already stops the two
   # running together; this is the belt to that braces.
   ( sleep "$TIMEOUT_SECS"
-    if kill -0 "$AGENT_PID" 2>/dev/null && ps -p "$AGENT_PID" -o command= 2>/dev/null | grep -q cursor-agent; then
+    if kill -0 "$AGENT_PID" 2>/dev/null && ps -p "$AGENT_PID" -o command= 2>/dev/null | grep -q "$AGENT_BIN"; then
       kill -9 "$AGENT_PID" 2>/dev/null
     fi ) &
   WATCHDOG=$!
@@ -179,7 +180,7 @@ if ! python3 render_desk.py "$BOARD" "$HTML" >>"$LOG" 2>&1; then
   fail "could not render $BOARD into HTML. See $LOG"
 fi
 
-# The markdown is the version a Cursor chat reads when handing work back.
+# The markdown is the version a chat reads when handing work back.
 if ! python3 render_desk_md.py "$BOARD" "output/desk.md" >>"$LOG" 2>&1; then
   log "WARNING: markdown render failed, HTML page is still fine"
 fi

@@ -12,9 +12,9 @@ informed and specific, out loud, without rehearsing.
 You need the Asana and Slack tools. If they are missing, or answer with an
 authentication error, **stop immediately**, change nothing, and reply with one
 line naming what is missing. Never call those HTTP APIs yourself with `curl`,
-never invent an API token, and never start another agent (`cursor-agent`,
-`tg prep`, a subagent that runs either). A source you could not read is a source
-you do not write about.
+never invent an API token, and never start another agent: not the `Task` tool,
+not `claude`, not `cursor-agent`, not `tg prep`. A source you could not read is a
+source you do not write about.
 
 ## Half one: bring the board up to date
 

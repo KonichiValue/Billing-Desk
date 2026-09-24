@@ -58,7 +58,7 @@ view is for preparing. Replies, investigation and ticket updates wait for the
 work view afterwards.
 
 The desk is written twice: `output/desk.html` to read, `output/desk.md` to hand
-work back from. Open a Cursor chat in this repo and say "draft the reply to
+work back from. Open a chat in this repo and say "draft the reply to
 Nakayama-san" or "check the codebase for X", and `AGENTS.md` points the agent at
 the markdown so it starts with the full picture.
 
@@ -139,12 +139,13 @@ the header work: the button asks the server, the server runs the agent, the page
 reports progress and reloads itself when the work lands. Both take the same lock,
 so a terminal run and a button press can never write the board at once.
 
-Before spending anything, the server checks that `cursor-agent` is signed in and
-that the Asana and Slack connections are authorised. When they are not, the page
-says which one and the **Log in** button walks them one browser approval at a
-time. That check exists because an agent with no tools does not stop, it
-improvises. Opening the HTML file directly still works and simply has no buttons,
-since a `file://` page has nothing to send a click to.
+Before spending anything, the server checks that an agent CLI is installed and
+signed in and that the Asana and Slack connections are authorised. When they are
+not, the page says which one: **Log in** walks a grant that has merely lapsed,
+one browser approval at a time, and a server that was never added sends you to
+`./setup-mcp.sh`. That check exists because an agent with no tools does not stop,
+it improvises. Opening the HTML file directly still works and simply has no
+buttons, since a `file://` page has nothing to send a click to.
 
 ```
 tg              open the desk, print where everything sits
@@ -154,12 +155,13 @@ tg 2 -w Kevin   sent, now sitting with Kevin
 tg 2 --mine     he replied, it is yours again
 tg refresh      sweep every open ticket and thread, rebuild, open
 tg prep         sweep, then write the script for the next session
-tg chat         open the folder in Cursor to hand work over
+tg chat         open a chat on this folder to hand work over
+tg mcp          say where the Asana and Slack connections stand
 tg build        re-render the page from the board, no agent
 tg post         fold today's Notion meeting note in again
 ```
 
-`refresh` also works as a single word typed into a Cursor chat on this folder.
+`refresh` also works as a single word typed into a chat on this folder.
 Both routes run `prompt-refresh.md`, so the answer does not depend on which one
 you used: it sweeps every ticket still open in Asana, reads the threads behind
 your open items, adds what it finds to each ticket's timeline, and moves the
@@ -217,15 +219,15 @@ is gone by tomorrow; why a draft says what it says is worth having next to the
 draft, and `output/desk.md` carries the same questions so a later chat does not
 contradict an answer he is reading.
 
-**An answer takes about a minute, and most of that is not the model.**
-`cursor-agent` spends 15 to 40 seconds starting a session, signing in and
-bringing up the MCP servers before it reads a word, so no ask is ever instant.
-Asks run on Auto like every other run here, because half of what comes out of
-this box is read by Tokyo Gas and the answer is worth the wait. `config.json`
-under `ask` pins a faster model if that trade ever stops being worth it, and
-`TG_ASK_MODEL` does it for one question. Either way `logs/ask-<date>.log` records
-which model answered, how many seconds it took and how many steps it needed, so
-the question is settled with numbers.
+**An answer takes a minute or two, and much of that is not the model.** The CLI
+spends 15 to 40 seconds starting a session, authenticating and bringing up the
+MCP servers before it reads a word, and a cold start on a slow gateway is longer
+still, so no ask is ever instant. Asks run on the same heavy model as everything
+else here, because half of what comes out of this box is read by Tokyo Gas and the
+answer is worth the wait. `config.json` under `ask` pins a faster model if that
+trade ever stops being worth it, and `TG_ASK_MODEL` does it for one question.
+Either way `logs/ask-<date>.log` records which model answered, how many seconds it
+took and how many steps it needed, so the question is settled with numbers.
 
 While it is thinking, the card says what it is actually doing: the CLI is asked
 for its event stream rather than its prose, so every file it opens and every
@@ -429,7 +431,9 @@ nothing and flags it, since a missing warning beats a wrong one.
 | `prompt-prep.md` | The script: the sweep, then what goes in `prep`, standup or onsite. |
 | `prompt-post.md` | How the standup gets folded into the board. |
 | `prompt-ask.md` | One question about one job: what it may answer, what it may change, what it must never do. |
-| `AGENTS.md` | How a Cursor chat in this repo picks up the list and acts on it. |
+| `AGENTS.md` | How a chat in this repo picks up the list and acts on it. |
+| `agent.py` | Which CLI runs a job, on which model, and how to read what it says back. The one place `serve.py`, `bin/tg` and `run_post.sh` all ask. |
+| `setup-mcp.sh` | Adds the MCP servers an agent run needs and walks their logins. `--check` only reports. |
 | `config.json` | Project GIDs, user GIDs, meeting time, Slack channel hints. |
 | `render.py` | Shared styling, furigana, item lifecycle and the common blocks. No network, no LLM. |
 | `render_desk.py` | The board into `output/desk.html`, both views in one file. |
@@ -475,8 +479,10 @@ in `~/Library/LaunchAgents/`, then `launchctl bootout` and `bootstrap` it.
 
 ## Requirements
 
-- `cursor-agent` on the PATH and logged in (`cursor-agent login`).
-- The Slack, Asana and Notion plugins installed under Tools &amp; MCP and signed in.
+- Claude Code on the PATH and able to reach a model. `cursor-agent` works as a
+  fallback if it is installed and logged in; `agent.py` takes whichever is there.
+- `./setup-mcp.sh` run once, and the Asana and Slack grants approved in the
+  browser it opens. `./setup-mcp.sh --check` or `tg mcp` says where they stand.
 - `python3`. No third-party packages.
 
 ## What an agent opened on this folder can reach
@@ -485,24 +491,25 @@ The work needs five things it cannot get from the filesystem: the Slack threads,
 the two Asana projects, the Notion meeting notes, the Miro billing diagrams and
 TG's production data.
 
-Four of those five come from marketplace plugins, installed once per person
-under Tools & MCP: **Slack, Asana, Notion, Miro.** They carry their own sign-in,
-their own client identifiers and their own skills, so they are the supported way
-in and this repo does not restate them.
+Four of those five are HTTP servers on Kraken's AI Hub, at
+`https://hub.ai.ktl.net/mcp/<name>`: **Slack, Asana, Notion, Miro.** They carry
+their own OAuth sign-in, so this repo points at them rather than restating any
+credential. `./setup-mcp.sh` adds them at user scope and then walks
+`claude mcp login` over whatever still needs approving. In Cursor the same four
+come from marketplace plugins under Tools & MCP instead.
 
-`.cursor/mcp.json` here declares only what no plugin covers:
+The database is the one that needs declaring, and `./setup-mcp.sh` adds it too:
 
 | Server | For | Sign-in |
 | --- | --- | --- |
 | `ktdb-tg-krakencore` | **The database.** The `krakencore` Postgres analytics replica on TG's production account, served over `kraken db proxy`. Same tables TG's own patrol queries, so a hold list or an account's charges can be checked rather than asked about. Read-only, and only this one database: `consumption`, `messaging` and `voice` live on a services replica this account has no grant for. | Nothing to click. It rides on the Cloudfarer session, so `kraken cloudfarer login` when it lapses |
 
-**Never name a server here that a plugin already provides.** A project entry of
-the same name shadows the plugin and inherits none of its setup, so signing in
-under Tools & MCP can fix a server the chat is not the one using. This file
-briefly carried `notion` and `miro`, copied without the plugin's own headers,
-which is why a sign-in on 27 August did not change what the panel showed. Both
-are gone from it. `ktdb-tg-krakencore` is safe because nothing else claims that
-name.
+**Never declare a server a plugin or a host app already provides.** An entry of
+the same name shadows it and inherits none of its setup, so a sign-in can fix a
+server the chat is not the one using. A Cursor `mcp.json` here briefly carried
+`notion` and `miro`, copied without the plugin's own headers, which is why a
+sign-in on 27 August did not change what the panel showed. Both are gone from it.
+`ktdb-tg-krakencore` is safe because nothing else claims that name.
 
 **This file named Databricks until 8 September 2026, and that was wrong.** The
 managed endpoints do exist on `tokyogas-prod.cloud.databricks.com`, but two
@@ -518,35 +525,36 @@ as untested. None of it was ever the point. The data the desk needs was in
 Postgres the whole time, behind credentials that were already working in
 DataGrip.
 
-Three things follow from how Cursor loads all this.
+Four things follow from how an agent loads all this.
 
-**A sign-in only reaches windows opened after it.** MCP state is read when a chat
-starts, so an existing chat keeps whatever it had. After approving OAuth, reload
-the window, or just start a new chat, and check with a real call rather than the
-dot in the panel.
+**A desktop app's own servers are not the CLI's.** Claude Desktop injects a rich
+set of MCP servers into a chat you open in it, and a headless `claude -p` started
+by `serve.py` sees none of them: it reads the user and project config only. So a
+chat window having Asana is no evidence that Refresh does. `tg mcp` asks the CLI
+itself, which is the only answer that counts.
+
+**A sign-in only reaches sessions started after it.** MCP state is read when a
+session starts, so an existing one keeps whatever it had. After approving OAuth,
+start a new chat, and check with a real call rather than a dot in a panel.
 
 **A terminal agent cannot sign itself in.** `tg refresh`, `tg prep`, the fold-in
-and the Ask box all run through `cursor-agent`, which reads the same files but
-cannot open an OAuth window. When a token lapses, that server simply is not
-there, and the run says so in `gaps` rather than failing. Sign in once in the
-desktop app under Tools & MCP and the terminal runs pick it up again.
+and the Ask box all run a CLI with no browser. `agent.py` refuses the run instead
+of letting it improvise, and the page says which connection needs you.
+`./setup-mcp.sh` is what opens the browser, and only you can approve what it
+opens.
 
-**The database is the one server a terminal run can reach on its own**, which is
-new since 8 September 2026 and the real gain from dropping Databricks. There is
+**The database is the one server a terminal run can reach on its own.** There is
 no OAuth window to open, because `ktdb-tg-krakencore` is a local command
-authenticating with this laptop's AWS credentials. Every `cursor-agent` call
-here already passes `--approve-mcps --trust`, so it loads without anyone
-approving anything, and nothing needed adding to make the page able to query.
-The one thing it cannot do for itself is renew the Cloudfarer session. When that
-lapses the queries fail, and the run should put `kraken cloudfarer login` in
-`gaps` for him rather than reporting the data as empty.
+authenticating with this laptop's AWS credentials. Agent runs here bypass the
+permission prompt, so it loads without anyone approving anything. The one thing
+it cannot do for itself is renew the Cloudfarer session. When that lapses the
+queries fail, and the run should put `kraken cloudfarer login` in `gaps` for him
+rather than reporting the data as empty.
 
-**Cloud agents and the phone read none of this.** They never see a local
-`mcp.json` and they do not have the plugins. Add the servers under the MCP
-dropdown at [cursor.com/agents](https://cursor.com/agents), then choose them per
-run on mobile. That works for the four plugin servers, which are HTTP, the
-transport cloud agents accept, with one catch: the Slack hub sits on the Kraken
-network and is only reachable from a cloud VM if it is exposed publicly.
+**Cloud agents and the phone read none of this.** They never see this laptop's
+config. The four hub servers are HTTP, the transport a cloud VM accepts, with one
+catch: the hub sits on the Kraken network and is only reachable from outside it if
+it is exposed publicly.
 
 **The database is the exception, and it cannot follow.**
 `ktdb-tg-krakencore` is a local command, not a URL. It starts a proxy on this
@@ -557,25 +565,23 @@ database, and should say so in `gaps` rather than guessing at numbers.
 ## Any model, any assistant
 
 Nothing here is tied to one model. `config.json` names a default per job, so it
-is one file rather than an environment variable somebody has to remember to set:
-`refresh` and `prep` both run on Claude Sonnet, one tier down from the
-account's heaviest, because a sweep and a script are still text a CE or Tokyo
-Gas will read or hear and neither one gets a second draft once he has said it in
-the room. Prep thinks harder than the sweep does: reading a thread and deciding
-where an item stands is mechanical, while the words for the room are not. The
-fold-in has no entry, so it stays on Auto until one is added.
-`TG_MODEL` or `POST_MODEL` override any of it for a single run:
+is one file rather than an environment variable somebody has to remember to set.
+All four jobs run on Opus 5.5 today, because everything this desk produces is
+read by a CE or heard by Tokyo Gas and none of it gets a second draft once he has
+said it in the room. `TG_<JOB>_MODEL` pins one job, `TG_MODEL` all of them, and
+`POST_MODEL` the fold-in:
 
 ```sh
-TG_MODEL=gpt-5.6-sol-high tg prep
-POST_MODEL=gpt-5.6-sol-high ./run_post.sh --force
+TG_PREP_MODEL=claude-sonnet-5 tg prep
+POST_MODEL=claude-sonnet-5 ./run_post.sh --force
 ```
 
-Asks work the same way, under `config.json`'s `ask`, on Auto for now because half
-of what comes out of that box is read by Tokyo Gas; `TG_ASK_MODEL` pins one for
-a single question. Every refresh, prep and ask logs which model ran, how long it
-took and how many steps it needed, in `logs/<kind>-<date>.log`.
-`cursor-agent --list-models` says what this account can use.
+`agent.py` resolves the name, so the page, a terminal and launchd cannot disagree
+about which model a job uses. Every refresh, prep and ask logs which CLI and model
+ran, how long it took and how many steps it needed, in `logs/<kind>-<date>.log`.
+A sweep is the expensive run here: it reads a lot of thread before it writes
+anything, so it costs dollars rather than cents, and `tg` on its own answers
+"where am I" for nothing.
 
 The prompts name the Asana, Slack and Notion tools as those MCP servers expose
 them today, and both say to use the equivalent if a toolset names them
@@ -590,9 +596,9 @@ looks for its own filename finds the same instructions.
 
 The page still opens, since it renders from the board and the board is only
 written by a run that finished. Most likely causes, in order: the Asana or Slack
-connection needing re-auth, `cursor-agent` signed out, or an agent writing
-malformed JSON. The first two are what the Log in button is for. For the last,
-run it again.
+connection needing re-auth, no agent CLI signed in, or an agent writing malformed
+JSON. For the first, the Log in button, or `./setup-mcp.sh` when the server was
+never added. For the last, run it again.
 
 ```sh
 tail -f logs/refresh-$(date +%F).log

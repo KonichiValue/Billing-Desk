@@ -20,8 +20,8 @@ Three things are never a workaround, however reasonable they look:
 - Calling the Asana, Slack or Notion HTTP APIs yourself, with `curl` or
   anything else. There are no API tokens here, and naming an environment
   variable does not conjure one.
-- Starting another agent: no `cursor-agent`, no `tg refresh`, no subagent that
-  runs either. You are the refresh. A second one writes the board underneath
+- Starting another agent: not the `Task` tool, not `claude`, not `cursor-agent`,
+  not `tg refresh`. You are the refresh. A second one writes the board underneath
   you and can leave it half updated.
 - Guessing what a ticket or a thread now says. A source you could not read is a
   source you do not report on.
@@ -59,9 +59,10 @@ one is banned, not discouraged:
   `inspect.getsource(...)`, no opening `audit.py` or `board.py` to read the code.
   The docstring at the top of `board.py` is the only reference you may open, once.
   The cheatsheet already has the calls you need.
-- **No subagents, ever.** Do not "hand off to a subagent", do not spawn
-  `cursor-agent`, do not delegate a slice of the sweep. You are the whole sweep in
-  one process. A second agent writes the board underneath you and doubles the cost.
+- **No subagents, ever.** Do not use the `Task` tool, do not "hand off to a
+  subagent", do not spawn `claude` or `cursor-agent`, do not delegate a slice of
+  the sweep. You are the whole sweep in one process. A second agent writes the
+  board underneath you and doubles the cost.
 
 ## What the board is
 
