@@ -48,6 +48,15 @@ NEEDED_MCPS = ("asana", "slack")
 # rather than a denial nobody is at the keyboard to clear.
 MCP_ALLOW = ("asana", "slack", "google", "ktdb-tg-krakencore")
 
+# The built-ins a sweep uses: read the repo, write the board, run ./tick.py.
+# They are only listed because naming an MCP tool turns the allow list
+# exhaustive, and then a tool nobody named is a tool nobody has. Task is absent
+# on purpose: prompt-refresh.md forbids handing a sweep to a subagent, because
+# the subagent comes back with a summary and the board loses the detail.
+BUILTIN_TOOLS = (
+    "Bash", "Read", "Write", "Edit", "Glob", "Grep", "TodoWrite", "NotebookEdit",
+)
+
 
 class Kind:
     """One agent CLI, and the vocabulary it happens to use."""
@@ -68,25 +77,35 @@ class Claude(Kind):
     binary = "claude"
 
     def command(self, model: str, prompt_is_stdin: bool = False) -> list[str]:
-        # `--permission-mode bypassPermissions` is the headless equivalent of
-        # Cursor's `--force --approve-mcps --trust`: the run is unattended, so a
-        # permission prompt is a hang nobody is watching. The blast radius is
-        # this folder, which is what `--add-dir` pins.
+        # The run is unattended, so a permission prompt is a hang nobody is
+        # watching, and `--add-dir` is what keeps the blast radius to this folder.
+        #
+        # `acceptEdits` rather than `bypassPermissions`, which is the opposite of
+        # what it sounds like. On this machine bypassPermissions is refused and
+        # quietly downgraded, so a sweep under it could not write a single file:
+        # the one that ran on 24 Sep read every ticket and then lost all nine
+        # findings. acceptEdits grants the file tools outright, and it is measured
+        # rather than assumed, so re-measure before changing it.
         cmd = [
             self.binary,
             "--print",
-            "--permission-mode", "bypassPermissions",
+            "--permission-mode", "acceptEdits",
             "--add-dir", str(ROOT),
         ]
-        # bypassPermissions does not carry the MCP servers, which cost a day to
-        # learn: every Asana call came back "you haven't granted it yet" under
-        # both bypassPermissions and --dangerously-skip-permissions. An allow rule
-        # is what settles it, and the anchored `mcp__<server>__*` form is the only
-        # one that works. A bare `mcp__*` is skipped with a warning, and the
+        # No permission mode carries the MCP servers, which cost a day to learn:
+        # every Asana call came back "you haven't granted it yet" under both
+        # bypassPermissions and --dangerously-skip-permissions. An allow rule is
+        # what settles it, and the anchored `mcp__<server>__*` form is the only one
+        # that works. A bare `mcp__*` is skipped with a warning, and the
         # server-only `mcp__asana` clears the denial without granting the tool,
         # which reads like success until nothing comes back.
-        for server in MCP_ALLOW:
-            cmd += ["--allowedTools", f"mcp__{server}__*"]
+        #
+        # Naming any tool makes the list exhaustive, so the built-ins have to be
+        # named back in beside them. Leaving them out is what broke that same
+        # sweep: Bash survived on remembered rules in settings.local.json, Write
+        # had none, and `./tick.py` never ran.
+        for tool in (*(f"mcp__{s}__*" for s in MCP_ALLOW), *BUILTIN_TOOLS):
+            cmd += ["--allowedTools", tool]
         if model != "auto":
             cmd += ["--model", model]
         return cmd

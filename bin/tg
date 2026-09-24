@@ -181,6 +181,30 @@ print("\n".join(kind.command(agent.model_for(sys.argv[1]))))
     return 1
   }
 
+  # And the environment, which is agent.py's business for the same reason the
+  # flags are. Typed in a terminal inside a Claude Code session, this shell holds
+  # variables saying a parent app is attending the run, and a sweep that inherits
+  # them sends every permission decision to something that is not listening. It
+  # reads the tickets and then cannot write a single one. `agent.env()` is what
+  # drops them and adds the MCP startup wait, so the sweep behaves the same typed
+  # here as pressed on the page.
+  # Only the difference is carried across, as `env -u NAME` to drop and `K=V` to
+  # set. Handing over all 67 variables line by line would work until the day one
+  # of them holds a newline, and several of them hold JSON.
+  local -a agent_env
+  agent_env=("${(@f)$(python3 -c '
+import os
+import agent
+kind = agent.pick()
+want = kind.env() if kind else dict(os.environ)
+for name in os.environ:
+    if name not in want:
+        print(f"-u\n{name}")
+for name, value in want.items():
+    if os.environ.get(name) != value:
+        print(f"{name}={value}")
+')}")
+
   # One agent at a time. Two of them writing the board is how it ends up half
   # updated, and the buttons on the page take the same lock.
   if [[ -f "$LOCK" ]] && kill -0 "$(cut -d' ' -f1 "$LOCK")" 2>/dev/null; then
@@ -195,7 +219,7 @@ print("\n".join(kind.command(agent.model_for(sys.argv[1]))))
   print -r -- "$2"
   # No stream-json here: a terminal wants the report, not the event log. The
   # prompt goes in on stdin, which keeps a 30KB sweep prompt off the command line.
-  "${agent_cmd[@]}" <"$1"
+  env "${agent_env[@]}" "${agent_cmd[@]}" <"$1"
 }
 
 case "${1:-}" in
