@@ -22,6 +22,7 @@ import json
 import os
 import re
 import subprocess
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -40,6 +41,12 @@ DEFAULT_MODEL = "claude-low-carbon-apac-opus-5-5"
 # it improvises, which is the failure this list exists to prevent. ktdb is not
 # here: reading the replica is something some jobs do and no job requires.
 NEEDED_MCPS = ("asana", "slack")
+
+# The servers a run is allowed to call without being asked. Wider than
+# NEEDED_MCPS on purpose: a sweep that reaches for the calendar to date a room,
+# or the replica to see how many accounts a hold covers, should get an answer
+# rather than a denial nobody is at the keyboard to clear.
+MCP_ALLOW = ("asana", "slack", "google", "ktdb-tg-krakencore")
 
 
 class Kind:
@@ -71,6 +78,15 @@ class Claude(Kind):
             "--permission-mode", "bypassPermissions",
             "--add-dir", str(ROOT),
         ]
+        # bypassPermissions does not carry the MCP servers, which cost a day to
+        # learn: every Asana call came back "you haven't granted it yet" under
+        # both bypassPermissions and --dangerously-skip-permissions. An allow rule
+        # is what settles it, and the anchored `mcp__<server>__*` form is the only
+        # one that works. A bare `mcp__*` is skipped with a warning, and the
+        # server-only `mcp__asana` clears the denial without granting the tool,
+        # which reads like success until nothing comes back.
+        for server in MCP_ALLOW:
+            cmd += ["--allowedTools", f"mcp__{server}__*"]
         if model != "auto":
             cmd += ["--model", model]
         return cmd
@@ -102,9 +118,39 @@ class Claude(Kind):
             "CLAUDECODE",
             "CLAUDE_CODE_SSE_PORT",
             "ANTHROPIC_AUTH_TOKEN",
+            # A child of an attended session is told so, and then routes its
+            # permission decisions back to a parent that is not listening for
+            # them. Every MCP call comes back "you haven't granted it yet".
+            "CLAUDE_CODE_CHILD_SESSION",
+            "CLAUDE_CODE_SESSION_ATTENDED",
+            "CLAUDE_CODE_EXECPATH",
+            "CLAUDE_CODE_DIAGNOSTICS_FILE",
+            "CLAUDE_PID",
+            "CLAUDE_EFFORT",
         ):
             env.pop(var, None)
+        env.update(self.mcp_env)
         return env
+
+    # The one thing that makes a sweep possible, and it took a day of failed runs
+    # to find. By default a headless run does not wait for its MCP servers: the
+    # init event lists the three HTTP ones as `pending`, the first turn starts
+    # with none of their tools in context, and every Asana call comes back as a
+    # permission denial that no `--permission-mode` affects, because the tool was
+    # never registered to be permitted. `claude mcp list` says "Connected"
+    # throughout, which is what makes it so misleading.
+    #
+    # NONBLOCKING=0 makes startup wait for the handshake instead, and 5s is not
+    # enough for four OAuth servers behind the hub. With both set, asana reports
+    # 31 tools and slack 16 rather than nought.
+    #
+    # Claude Code 2.1.274 adds CLAUDE_CODE_MCP_STARTUP_WAIT_MS, which is the
+    # purpose-built version of this; 2.1.207 is what is installed, so this is the
+    # pair that works here. Setting it is harmless on a newer build.
+    mcp_env = {
+        "MCP_CONNECTION_NONBLOCKING": "0",
+        "MCP_CONNECT_TIMEOUT_MS": "20000",
+    }
 
     def signed_in(self) -> bool:
         """Whether a run would reach a model at all.
@@ -131,6 +177,13 @@ class Claude(Kind):
         Parsed from `claude mcp list`, which health-checks as it goes. The line
         ends in a tick for connected and says so in words when it needs
         authorising, so the test is on the words rather than on the glyph.
+
+        **This answers a different question from the one a sweep needs.** It is an
+        interactive health check: it reported all four Connected for a whole day
+        while every headless run saw them `pending` and had no Asana tool at all.
+        It is the right test for "has Rei approved this grant", which is what the
+        Log in button and `setup-mcp.sh` ask. For "can the run about to spend
+        money actually call Asana", use `tools_ready()`.
         """
         out = subprocess.run(
             [self.binary, "mcp", "list"],
@@ -329,6 +382,70 @@ def model_for(job: str) -> str:
     return conf.get("model") or DEFAULT_MODEL
 
 
+def tools_ready(kind: Kind, timeout: int = 180) -> tuple[bool, str]:
+    """Whether a run starting now would actually have the tools, not just grants.
+
+    The difference is the whole lesson of this file. `claude mcp list` health-checks
+    interactively and said "Connected" for four servers while every headless run
+    began with nought Asana tools, so a sweep spent real money reporting gaps that
+    were only its own missing tools. This starts a run the way a sweep starts one,
+    reads the `init` event it prints before the first turn, and counts the tools
+    actually registered.
+
+    It is cheap on purpose: the process is killed the moment `init` arrives, so no
+    prompt is ever sent and no model is billed.
+    """
+    if not isinstance(kind, Claude):
+        return True, ""        # only the claude path has this failure mode
+    cmd = kind.command(model_for("refresh")) + kind.stream
+    proc = subprocess.Popen(
+        cmd, cwd=ROOT, env=kind.env(), text=True, bufsize=1,
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+    )
+    deadline = time.time() + timeout
+    try:
+        while time.time() < deadline:
+            line = proc.stdout.readline() if proc.stdout else ""
+            if not line:
+                break
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if event.get("type") != "system" or event.get("subtype") != "init":
+                continue
+            tools = event.get("tools") or []
+            short = [
+                name for name in NEEDED_MCPS
+                if not any(t.startswith(f"mcp__{name}__") for t in tools)
+            ]
+            if not short:
+                return True, ""
+            pending = {
+                s.get("name"): s.get("status")
+                for s in event.get("mcp_servers") or []
+                if s.get("name") in short
+            }
+            return False, (
+                f"{human(short)} answered the health check but brought no tools into "
+                f"the run ({pending}). A sweep would read nothing and report gaps that "
+                "are not there, so it has not been started."
+            )
+        return True, ""        # said nothing useful; let the run report for itself
+    finally:
+        proc.kill()
+        proc.wait(timeout=10)
+
+
+def human(names: list[str]) -> str:
+    """"asana" and "slack" as "Asana and Slack", for a sentence on the page."""
+    pretty = [n.replace("ktdb-tg-krakencore", "the database").title()
+              if n != "ktdb-tg-krakencore" else "the database" for n in names]
+    if len(pretty) <= 1:
+        return "".join(pretty)
+    return ", ".join(pretty[:-1]) + " and " + pretty[-1]
+
+
 def missing_mcps(kind: Kind) -> list[str]:
     """Which of the servers a sweep needs are not usable.
 
@@ -374,4 +491,10 @@ def blockers(kind: Kind | None) -> tuple[list[str], str]:
                 f"./setup-mcp.sh"
             )
         return missing, f"{names} {verb} authorising before a refresh can read anything."
+    # Grants are in order. Whether the tools reach the run is a separate question,
+    # and the expensive one to get wrong: a sweep with no Asana tool does not stop,
+    # it writes a board full of gaps that were never real.
+    ready, why = tools_ready(kind)
+    if not ready:
+        return ["tools"], why
     return [], ""
