@@ -479,6 +479,21 @@ def missing_mcps(kind: Kind) -> list[str]:
     return [n for n in NEEDED_MCPS if states.get(n) != "connected"]
 
 
+# A readiness answer is good for a few minutes, and the check costs about 16
+# seconds of Rei watching a spinner. Nothing it looks at changes on its own: a
+# grant lapses in hours, not between two presses of Ask. So the good answer is
+# remembered and the bad one is not, because a bad one is what he is actively
+# fixing, and a cached "Slack needs authorising" would survive the login that
+# fixed it.
+_ready_cache: dict[str, float] = {}
+READY_FOR_SECS = 240
+
+
+def forget_readiness() -> None:
+    """Drop the cached answer, after a login or a `./setup-mcp.sh`."""
+    _ready_cache.clear()
+
+
 def blockers(kind: Kind | None) -> tuple[list[str], str]:
     """Everything standing between the button and a real run, in one look."""
     if kind is None:
@@ -493,12 +508,25 @@ def blockers(kind: Kind | None) -> tuple[list[str], str]:
                 "~/.claude/settings.json."
             )
         return ["account"], f"{kind.name} is signed out."
-    missing = missing_mcps(kind)
+    fresh = _ready_cache.get(kind.name, 0)
+    if time.time() - fresh < READY_FOR_SECS:
+        return [], ""
+    # `tools_ready` first, because it is both stricter and cheaper. It asks the
+    # only question that decides whether a sweep works, and a run that has the
+    # tools cannot have a lapsed grant, so the health check below is only ever
+    # reached to explain a failure. Asking it first cost 8s on every press.
+    ready, why = tools_ready(kind)
+    if ready:
+        _ready_cache[kind.name] = time.time()
+        return [], ""
+    missing = missing_mcps(kind) or ["tools"]
     if missing:
         try:
             states = kind.mcp_states()
         except (OSError, subprocess.SubprocessError):
             states = {}
+        if missing == ["tools"]:
+            return ["tools"], why
         absent = [n for n in missing if n not in states]
         names = " and ".join(n.title() for n in missing)
         verb = "needs" if len(missing) == 1 else "need"
@@ -510,10 +538,4 @@ def blockers(kind: Kind | None) -> tuple[list[str], str]:
                 f"./setup-mcp.sh"
             )
         return missing, f"{names} {verb} authorising before a refresh can read anything."
-    # Grants are in order. Whether the tools reach the run is a separate question,
-    # and the expensive one to get wrong: a sweep with no Asana tool does not stop,
-    # it writes a board full of gaps that were never real.
-    ready, why = tools_ready(kind)
-    if not ready:
-        return ["tools"], why
-    return [], ""
+    return ["tools"], why

@@ -585,6 +585,10 @@ def start_login() -> None:
             f"the {name.title()} connection",
             lambda n=name: kind.mcp_states().get(n) == "connected",
         )
+    # A grant has just changed, so any remembered readiness answer is about the
+    # world before the login. Ask again from scratch, or the page reports the
+    # problem he has this second finished fixing.
+    agent.forget_readiness()
     left, message = blockers()
     set_job("needs_login", message) if left else set_job("idle", "Connected. Press Refresh.")
 
