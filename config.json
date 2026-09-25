@@ -22,13 +22,16 @@
     "days": ["Mon", "Wed"]
   },
   "ask": {
-    "model": "claude-opus-4-8"
+    "model": "claude-low-carbon-apac-opus-5-5"
   },
   "refresh": {
-    "model": "auto"
+    "model": "claude-low-carbon-apac-opus-5-5"
   },
   "prep": {
-    "model": "auto"
+    "model": "claude-low-carbon-apac-opus-5-5"
+  },
+  "post": {
+    "model": "claude-low-carbon-apac-opus-5-5"
   },
   "slack": {
     "search_scope": "all",

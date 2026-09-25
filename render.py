@@ -579,17 +579,27 @@ def when_words(iso: str, at: str = "") -> str:
 
 
 def short_when(iso: str, at: str = "") -> str:
-    """The same day in as few characters as a tab can spare: "Wed 10:30"."""
+    """The same day in as few characters as a tab can spare: "Wed 10:30".
+
+    A bare weekday only means one thing inside the current week. Said on a Friday
+    about the Wednesday after, "Chase Wed" reads as the Wednesday just gone and he
+    treats it as overdue, or as this week and he leaves it. Six days is inside the
+    old rolling window and still the wrong week, so the week is what decides:
+    within it the weekday is enough, past it the date comes too, "Wed (9/30)".
+    """
     if not iso:
         return ""
     try:
         day = date.fromisoformat(iso)
     except ValueError:
         return iso
-    left = (day - date.today()).days
+    today = date.today()
+    left = (day - today).days
     words = {0: "today", 1: "tomorrow"}.get(left, day.strftime("%a"))
     if left > 6 or left < 0:
         words = day.strftime("%-d %b")
+    elif left > 1 and day.isocalendar()[:2] != today.isocalendar()[:2]:
+        words = f"{words} ({day.month}/{day.day})"
     return f"{words} {at}".strip()
 
 
@@ -616,7 +626,9 @@ def due_words(iso: str) -> str:
         return f"Chase was due {when}, {late} day{'s' if late > 1 else ''} ago."
     if late == 0:
         return "Chase today."
-    return f"Chase on {when}."
+    # The weekday is what he plans around, and the date is what stops it being
+    # read as this week. Both, because this line has the room the chip does not.
+    return f"Chase on {day.strftime('%a')} {when}."
 
 
 def day_words(iso: str) -> str:

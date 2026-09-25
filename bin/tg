@@ -12,7 +12,8 @@
 #   tg ask desk "..."   about the day rather than one job, answered in numbers
 #   tg refresh          sweep every open ticket and thread, rebuild, open
 #   tg prep             sweep, then write today's standup script
-#   tg chat             open the folder in Cursor to hand work over
+#   tg chat             open a Claude Code chat on this folder to hand work over
+#   tg mcp              check the Asana and Slack connections a sweep needs
 #   tg build            rebuild the page from the board, no agent
 #   tg post             fold today's Notion meeting note into the board
 #   tg phone [mins]     open this page to the wifi for an hour, for a phone
@@ -158,27 +159,52 @@ PY
   print -r -- "$out"
 }
 
-agent_model() {
-  # $1 is refresh or prep, matching the key in config.json. A sweep is not
-  # words read out to Tokyo Gas, so it does not need the account's heaviest
-  # model; TG_MODEL still overrides for one run.
-  [[ -n "${TG_MODEL:-}" ]] && { print -r -- "$TG_MODEL"; return; }
-  python3 -c "
-import json, sys
-try:
-    m = json.load(open('config.json', encoding='utf-8')).get(sys.argv[1], {}).get('model')
-except Exception:
-    m = None
-print(m or 'auto')
-" "$1"
-}
-
 run_agent() {
   # $1 is the prompt file, $2 is what to print while it works.
-  if ! command -v cursor-agent >/dev/null 2>&1; then
-    print -u2 "cursor-agent is not installed. Type 'refresh' in a Cursor chat on this folder instead."
+  local job="${1:t:r}"   # prompt-refresh.md -> refresh, matching config.json
+  job="${job#prompt-}"
+
+  # Which CLI runs this, on which model, and with which flags, is agent.py's
+  # business. The page and this script have to agree about it, and two copies of
+  # that knowledge is how they stop agreeing. It prints the command one word per
+  # line, so a path with a space in it survives.
+  local -a agent_cmd
+  agent_cmd=("${(@f)$(python3 -c '
+import sys
+import agent
+kind = agent.pick()
+if kind is None:
+    sys.exit(3)
+print("\n".join(kind.command(agent.model_for(sys.argv[1]))))
+' "$job")}") || {
+    print -u2 "No agent is installed. Install Claude Code, or type 'refresh' in a chat on this folder instead."
     return 1
-  fi
+  }
+
+  # And the environment, which is agent.py's business for the same reason the
+  # flags are. Typed in a terminal inside a Claude Code session, this shell holds
+  # variables saying a parent app is attending the run, and a sweep that inherits
+  # them sends every permission decision to something that is not listening. It
+  # reads the tickets and then cannot write a single one. `agent.env()` is what
+  # drops them and adds the MCP startup wait, so the sweep behaves the same typed
+  # here as pressed on the page.
+  # Only the difference is carried across, as `env -u NAME` to drop and `K=V` to
+  # set. Handing over all 67 variables line by line would work until the day one
+  # of them holds a newline, and several of them hold JSON.
+  local -a agent_env
+  agent_env=("${(@f)$(python3 -c '
+import os
+import agent
+kind = agent.pick()
+want = kind.env() if kind else dict(os.environ)
+for name in os.environ:
+    if name not in want:
+        print(f"-u\n{name}")
+for name, value in want.items():
+    if os.environ.get(name) != value:
+        print(f"{name}={value}")
+')}")
+
   # One agent at a time. Two of them writing the board is how it ends up half
   # updated, and the buttons on the page take the same lock.
   if [[ -f "$LOCK" ]] && kill -0 "$(cut -d' ' -f1 "$LOCK")" 2>/dev/null; then
@@ -189,16 +215,11 @@ run_agent() {
   print -r -- "$$ terminal $(date +%H:%M)" >"$LOCK"
   trap 'rm -f "$LOCK"' EXIT INT TERM
   # A copy of the board before the agent touches it. state/ is not in git.
-  python3 keep.py "${1:t:r}" >/dev/null 2>&1 || true
+  python3 keep.py "$job" >/dev/null 2>&1 || true
   print -r -- "$2"
-  local kind="${1:t:r}"  # prompt-refresh.md -> refresh, matching config.json
-  kind="${kind#prompt-}"
-  local model="$(agent_model "$kind")"
-  local -a model_arg=()
-  [[ "$model" != "auto" ]] && model_arg=(--model "$model")
-  cursor-agent --print --force --approve-mcps --trust \
-    --workspace "$REPO" "${model_arg[@]}" \
-    "$(cat "$1")"
+  # No stream-json here: a terminal wants the report, not the event log. The
+  # prompt goes in on stdin, which keeps a 30KB sweep prompt off the command line.
+  env "${agent_env[@]}" "${agent_cmd[@]}" <"$1"
 }
 
 case "${1:-}" in
@@ -211,7 +232,16 @@ case "${1:-}" in
     run_agent prompt-prep.md "Sweeping everything, then writing today's script..." || exit 1
     page ;;
   ask|a)         shift; ask "$@" ;;
-  chat)          open -a Cursor "$REPO" ;;
+  chat)
+    # An interactive Claude Code session, where AGENTS.md is read on startup and
+    # "do 3" means what the page says it means. Falls back to opening Cursor on
+    # the folder when claude is not installed.
+    if command -v claude >/dev/null 2>&1; then
+      claude
+    else
+      open -a Cursor "$REPO"
+    fi ;;
+  mcp)           shift; ./setup-mcp.sh "${@:---check}" ;;
   phone)         phone_url "$@" ;;
   stop)          stop_server ;;
   build)
@@ -219,6 +249,6 @@ case "${1:-}" in
     python3 render_desk_md.py "$BOARD" output/desk.md ;;
   post)          ./run_post.sh --force ;;
   open)          page ;;
-  -h|--help|help) sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//' ;;
+  -h|--help|help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' ;;
   *)             python3 tick.py "$@" ;;
 esac

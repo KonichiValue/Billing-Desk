@@ -49,8 +49,8 @@ because the context is in the file:
  `~/Projects/kraken-core`, not here. Read `~/Projects/kraken-core/AGENTS.md`
  before touching it, and never run `./src/manage.py` directly.
 - **"What does the data say"** &mdash; the production data this desk can reach is
- the `krakencore` Postgres analytics replica, and `.cursor/mcp.json` declares it
- as `ktdb-tg-krakencore`. Not Databricks, whatever an older note may say. Read
+ the `krakencore` Postgres analytics replica, declared as `ktdb-tg-krakencore`
+ by `./setup-mcp.sh`. Not Databricks, whatever an older note may say. Read
  only: a `SELECT` to see how many accounts a hold covers or what a charge
  actually did is the point, and nothing here ever writes to it. Only
  `krakencore` is readable; `consumption`, `messaging` and `voice` sit on a
@@ -229,6 +229,27 @@ It holds the reload back for one thing only: something half-written in a
 composer, where taking the words away would be worse than the staleness. Then it
 shows the amber Board changed button and waits. `tests/reload.js` is what keeps
 that true, and `./check.py` runs it.
+
+## Which agent runs a button
+
+`agent.py` is the only place that knows which CLI runs a job, on which model, and
+how to read what it says back. `serve.py`, `bin/tg` and `run_post.sh` all ask it
+rather than hard-coding a binary, so a refresh pressed on the page, typed in a
+terminal or fired by launchd is the same run. Claude Code is first choice,
+`cursor-agent` is the fallback behind it, and `TG_AGENT=cursor-agent` forces one.
+Models come from `config.json` per job, overridable with `TG_REFRESH_MODEL` and
+friends. Prompts go in on stdin, because `prompt-post.md` is 48KB and that is no
+business of the command line.
+
+A sweep is worth nothing without Asana and Slack, so `agent.blockers()` refuses
+one that cannot reach them and the page says which. `./setup-mcp.sh` adds the
+servers and walks the logins, `./setup-mcp.sh --check` and `tg mcp` report where
+they stand. Only Rei can approve a grant in a browser, so a lapsed one goes in
+`gaps` rather than being worked around.
+
+Headless Claude Code has a real `Task` tool, which `cursor-agent` did not, and a
+sweep that hands itself to a subagent loses the board. `prompt-refresh.md` and
+`prompt-prep.md` forbid it by name; keep that wording if you touch them.
 
 ## Before you say you are done
 

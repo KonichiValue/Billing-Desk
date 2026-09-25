@@ -1432,139 +1432,118 @@ def finder(tickets: list[dict], refs: dict[str, str]) -> str:
 def help_dialog() -> str:
     """How to work the thing, one keystroke away from every view.
 
-    Three places do three different things, and the old version of this dialog
-    listed chat phrases without ever saying how to get a chat, which is the one
-    thing somebody reading it does not know.
+    Written to be read standing up, thirty seconds before a standup. Every
+    section answers "what do I press" first; the reason it works that way comes
+    after, in one line, or not at all. The long version of any of this is in
+    README.md, which is where it belongs.
     """
     ticks = [
-        ("tg", "Prints where everything is. No tokens."),
-        ("tg 4", "Job 4 is finished and nothing comes back."),
-        ("tg 2 -w Kevin", "Sent. Parks it with him, so it stops looking like yours."),
-        ("tg 2 --mine", "He answered. It is yours again."),
-        ("tg 5 --dropped", "It went away. Add <code>-n</code> and a reason."),
+        ("tg", "Where everything is. Free, instant."),
+        ("tg 4", "Job 4 is finished, nothing comes back."),
+        ("tg 2 -w Kevin", "Sent. Now sitting with Kevin, not you."),
+        ("tg 2 --mine", "He replied. Yours again."),
+        ("tg 5 --dropped", "It went away. Add <code>-n</code> and why."),
         ("tg 1 --undo", "Forget that state entirely."),
     ]
     said = "".join(
         f'<li><span class="said">{esc(a)}</span><span class="does">{b}</span></li>'
         for a, b in ticks
     )
+    asks = [
+        ("what do you mean by 稼働確認?", "Answers on the card and stays there."),
+        ("rewrite this with the latest from the refinement thread",
+         "Reads the thread, rewrites the draft, says what changed."),
+        ("is that true about refinement?",
+         "Checks it. Says so when it cannot find the source."),
+        ("this is done, close it", "Moves the job, same as <code>tg 29</code>."),
+        ("I have sent this, it is with Ryan now", "Parks it with him."),
+    ]
+    ask_rows = "".join(
+        f'<li><span class="said">{esc(a)}</span><span class="does">{b}</span></li>'
+        for a, b in asks
+    )
     return f"""
 <dialog class="help" id="help">
   <div class="help-in">
     <button class="help-close" type="button">Close</button>
     <h2>How to use this</h2>
-    <p class="lead">Two tabs. <b>TG my work</b> is what you do, in one numbered
-    list. <b>TG what I say</b> is the words for the next meeting. Both read the
-    same file, so they can never disagree.</p>
+    <p class="lead">Two tabs off one file. <b>TG my work</b> is what you do.
+    <b>TG what I say</b> is the words for the next meeting.</p>
 
-    <h3>Asking, and asking for changes</h3>
-    <p>Every job has <b>Ask or change</b> at the foot of its card, every ticket
-    has one under its threads, and every draft has <b>Rewrite or ask</b> in its
-    header. It is a chat box: type, press <kbd>enter</kbd>, and it answers on the
-    card in a minute or two. Both halves of the same conversation go in it, the
-    question and the instruction:</p>
+    <h3>The three buttons</h3>
     <ul class="say-list">
-      <li><span class="said">what do you mean by 稼働確認?</span><span class="does">Answers on the card, and the answer stays there.</span></li>
-      <li><span class="said">rewrite this with the latest from the refinement thread, and tell Tanaka-san we are still checking</span><span class="does">Reads the thread, rewrites that draft in the ticket, says what it changed.</span></li>
-      <li><span class="said">is that true about refinement?</span><span class="does">Checks it and tells you when it cannot find the source.</span></li>
-      <li><span class="said">this is done, close it</span><span class="does">Moves the job, the same as <code>tg 29</code>, and says what it moved.</span></li>
-      <li><span class="said">I have sent this, it is with Ryan now</span><span class="does">Parks it with him, so it stops reading as yours.</span></li>
+      <li><span class="said">Refresh</span><span class="does">Re-reads Asana and
+      every thread behind your open work, then rewrites this tab: what moved,
+      what closed, which drafts the threads have overtaken. Two to three
+      minutes.</span></li>
+      <li><span class="said">Update prep</span><span class="does">On <b>what I
+      say</b>. Same sweep, then writes the script on top. Refresh plus the
+      words, never less.</span></li>
+      <li><span class="said">Ask or change</span><span class="does">On every job,
+      ticket and draft. Asks a question or makes a change to that one
+      thing.</span></li>
     </ul>
-    <p>You never say which draft or which ticket you mean, because the question
-    goes off with the job attached: its draft, its prepared work, its threads and
-    everything you have already asked about it. That is the whole point of asking
-    from the card.</p>
-    <p><b>It moves a job only when you tell it to.</b> Deciding for itself that
-    something looks finished is the one thing it will not do, so a question that
-    happens to turn up "that looks done" gets told to you and left alone. And it
-    never sends a word to anybody, whatever you ask.</p>
-    <p>Several questions at once is fine. They queue and answer on their own
-    cards, one at a time, because an answer that rewrites a draft rewrites the
-    whole board. <b>Cancel</b> stops one that is running.</p>
-    <p>From a terminal it is the same ask, and the answer lands on the same card:
-    <code>tg ask 8 "is that true about refinement?"</code>, or a ticket tag
-    instead of a number.</p>
-    <p>The box above the tickets is the same thing for the questions that belong
-    to no card: what to start on, whether tomorrow is covered, what you are
-    forgetting. That one gets every open job at once and answers in job numbers.</p>
-    <p><b>Every answer takes another question.</b> <b>Ask about this answer</b> at
-    the foot of one opens a box inside it, and what you asked and what it said go
-    with the follow-up, so <span class="said">why?</span> is a whole question
-    there. The digging stays nested under the answer it is about. Answers shut to
-    one line each, newest open, and the <b>&times;</b> in the corner forgets one
-    for good.</p>
+    <p>Refresh leaves the script alone on purpose, so a sweep at 17:00 cannot
+    throw away the wording you fixed at 16:00. When the script is older than the
+    board, both tabs say so in amber.</p>
 
-    <h3>When a card is longer than you want</h3>
-    <p>Everything a card knows is on it, and most of it is shut. The words on a
-    fold say what is behind it, so <b>Timeline, 10 moves today</b> already
-    answers the only question you had. What is open is what needs you: where the
-    ticket stands, and the jobs. Press a fold and the page remembers it, on this
-    card only, until you press it again.</p>
+    <h3>Ask or change</h3>
+    <p>Type, press <kbd>enter</kbd>, get an answer on the card in a minute or
+    two. Questions and instructions both go in the same box:</p>
+    <ul class="say-list">{ask_rows}</ul>
+    <p>You never say which job you mean. The card sends its own draft, threads
+    and earlier answers along with the question.</p>
+    <p><b>Two things it will not do:</b> send anything to anybody, and decide by
+    itself that a job is finished. It tells you it looks done and leaves it.</p>
+    <p>Ask several at once, they queue. <b>Cancel</b> stops one.
+    <b>Ask about this answer</b> digs into an answer, carrying the exchange with
+    it, so <span class="said">why?</span> is a whole question there. <b>&times;</b>
+    forgets one for good.</p>
+    <p>The box above the tickets is for the day rather than one job: what to
+    start on, whether tomorrow is covered. It answers in job numbers.</p>
+    <p>Same thing from a terminal: <code>tg ask 8 "..."</code>, and the answer
+    lands on the same card.</p>
 
     <h3>Finishing something</h3>
-    <p>Not from the page. The page is a window on the board, so a tick on it
-    would be a lie, and an answer to a question is not a job done either. In a
-    terminal, instant and free:</p>
+    <p>In a terminal, never on the page. The page only shows the board; a tick on
+    it would be a lie.</p>
     <ul class="say-list">{said}</ul>
     <p><b>Sending a message is not finishing.</b> If a reply is coming, use
-    <code>-w</code> and the name, so the card sits with them rather than
-    pretending it is closed.</p>
-
-    <h3>When you want a real conversation</h3>
-    <p><code>tg chat</code> opens Cursor on this folder, and that is for the long
-    ones: work spanning three jobs, something you want to argue about, anything
-    where you will be reading code together. Same board, same rules, so
-    &ldquo;do 3&rdquo; or &ldquo;draft the reply to Kevin&rdquo; work there with
-    nothing else said. <b>Copy for a chat</b> on any ask box hands the job and
-    your words over for exactly that, and it is what <kbd>enter</kbd> does on a
-    page opened from disk, where there is no server to answer.</p>
+    <code>-w</code> and the name.</p>
 
     <h3>The numbers</h3>
-    <p>The number to the left of a job is its own for life: job 3 is job 3 until
-    it closes, tomorrow and next week. That is why &ldquo;do 3&rdquo; needs
-    nothing else said, and why the list runs 3, 5, 2, 7 with gaps where closed
-    work used to be. On <b>TG what I say</b> the numbers are different: those are
-    each card's place on TG's own board, in the order the meeting works down
-    them.</p>
+    <p>A job keeps its number until it closes, which is why &ldquo;do 3&rdquo;
+    needs nothing else said, and why the list runs 3, 5, 2, 7 with gaps. The
+    numbers on <b>what I say</b> are different: those are TG's own running order.</p>
 
-    <h3>The buttons</h3>
-    <p><b>Refresh</b> is the only button this tab needs. It re-reads Asana and
-    every thread behind your open work, then rewrites everything here: what
-    moved, which jobs that changes, what is closed, and the drafts. A draft the
-    thread has overtaken gets rewritten, and one nobody needs to send any more is
-    deleted, so what is on this tab is what to do as of the last sweep. Two or
-    three minutes.</p>
-    <p><b>Update prep</b> lives on <b>TG what I say</b>, because the only thing
-    it adds is the words: what you say per ticket and what you need out of the
-    room. It does the same sweep first, so it is Refresh plus the script, never
-    less.</p>
-    <p><b>Why the words are a separate button.</b> They are written for one room
-    on one day, and some of them you have already read, cut or rehearsed. If
-    every sweep rewrote them, a refresh at 17:00 would throw away the script you
-    fixed at 16:00. So a refresh moves the work and leaves the script alone, then
-    says plainly that the script is older than the board: amber at the top of
-    <b>TG what I say</b>, and <b>Prep is older than the board</b> next to the
-    room on this one.</p>
-    <p><b>Meeting note</b> opens the last standup's Notion note.
-    <b>Japanese only</b> strips the prep tab back to the lines you read aloud,
-    and keeps <b>Rewrite or ask</b> on each of them, because reading a line out
-    is when you notice it is wrong.</p>
+    <h3>Cards, and what is folded</h3>
+    <p>Open is what needs you. Everything else is folded, and the fold says what
+    is behind it, so <b>Timeline, 10 moves today</b> has already answered you.
+    The page remembers what you opened, per card.</p>
 
-    <h3>Where this page actually lives</h3>
-    <p>On this laptop, and nowhere else. It is a small server on
-    <code>127.0.0.1</code>, which is an address only this machine can reach, and
-    the URL carries a random key on top of that. Nothing is hosted, so there is
-    no address anyone else can type. The private GitHub repo holds the code and
-    the prompts, never <code>state/</code> or <code>output/</code>, so your
-    tickets, threads and drafts have never left the machine.</p>
+    <h3>A longer conversation</h3>
+    <p><code>tg chat</code> opens a Claude Code chat on this folder: for work
+    across three jobs, something you want to argue about, anything where you are
+    reading code together. Same board, same rules, so &ldquo;do 3&rdquo; works
+    with nothing else said. <b>Copy for a chat</b> on any ask box hands the job
+    and your words over, and it is what <kbd>enter</kbd> does on a page opened
+    from disk with no server behind it.</p>
 
-    <h3>On your phone</h3>
-    <p><code>tg phone</code> opens the page to your current wifi for an hour and
-    prints the address, then puts it back to laptop-only on its own. During that
-    hour anything on the same network needs the key to see anything, and the
-    laptop has to be awake. <code>tg phone 15</code> for a shorter window,
-    <code>tg stop</code> to end it now. On cafe or office wifi, prefer the short
-    window.</p>
+    <h3>If a button says it cannot read anything</h3>
+    <p>The sweep needs Asana and Slack. <code>tg mcp</code> says where those
+    connections stand, and <code>./setup-mcp.sh</code> fixes them: it adds
+    anything missing, then opens a browser tab per approval. <b>Log in</b> on the
+    page does the same for a grant that has merely lapsed.</p>
+
+    <h3>Where this page lives</h3>
+    <p>This laptop only. A small server on <code>127.0.0.1</code>, which nothing
+    else can reach, and the URL carries a random key as well. The private repo
+    holds the code and the prompts, never <code>state/</code> or
+    <code>output/</code>, so your tickets and drafts have never left the
+    machine.</p>
+    <p><code>tg phone</code> opens it to your wifi for an hour, then closes it
+    again by itself. <code>tg phone 15</code> for less, <code>tg stop</code> to
+    end it now. The key still applies, and the laptop has to be awake.</p>
 
     <h3>Keys</h3>
     <p><kbd>1</kbd> your work, <kbd>2</kbd> what you say, <kbd>/</kbd> find

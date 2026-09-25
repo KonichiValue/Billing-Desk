@@ -28,11 +28,13 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import NamedTuple
+from typing import Callable, NamedTuple
 
+import agent
 import keep
 import render
 
@@ -45,11 +47,17 @@ KEY = secrets.token_urlsafe(16)
 TIMEOUT_SECS = 900
 PREP_TIMEOUT_SECS = 1200
 # A launched agent that streams nothing for this long is a dead session (a lapsed
-# cursor-agent login, the MCP servers down), not slow work: a real sweep emits a
-# tool call within seconds and keeps emitting. Stop it here with a re-auth message
-# rather than making him watch the full timeout for a run that was never going to
-# do anything. "0 tool calls in 900s" is the exact failure this catches.
+# login, the MCP servers down), not slow work: a real sweep emits a tool call
+# within seconds and keeps emitting. Stop it here with a re-auth message rather
+# than making him watch the full timeout for a run that was never going to do
+# anything. "0 tool calls in 900s" is the exact failure this catches.
+#
+# Claude Code takes its time coming up, though: a cold start spent 160 seconds
+# before its first token on this gateway, and killing a run that was only still
+# connecting is the worse mistake. So the clock does not start until the agent
+# says something, and STARTUP_GRACE_SECS is how long it has to say anything.
 STALL_SECS = 150
+STARTUP_GRACE_SECS = 300
 
 job = {"state": "idle", "message": "", "url": "", "at": ""}
 job_lock = threading.Lock()
@@ -239,6 +247,36 @@ def set_job(state: str, message: str = "", url: str = "") -> None:
         )
 
 
+def guarded(work: Callable[[], None], what: str) -> Callable[[], None]:
+    """Run a worker so that a crash in it reaches the page.
+
+    The button sets "running" before the thread starts, so anything that escapes
+    the worker leaves the spinner turning for ever: the page has been told work
+    began and will never be told otherwise. That is exactly what happened to a
+    server left running across this change, where `blockers()` raised
+    `TimeoutExpired` on a `cursor-agent status` that never answered and Refresh
+    read "Starting" until it was restarted. A stuck spinner is worse than a
+    failure, because a failure says what to do next.
+    """
+
+    def run() -> None:
+        try:
+            work()
+        except Exception:
+            detail = traceback.format_exc()
+            try:
+                (ROOT / "logs").mkdir(exist_ok=True)
+                with (ROOT / "logs" / "serve.log").open("a", encoding="utf-8") as fh:
+                    fh.write(f"\n=== {datetime.now():%H:%M:%S} {what} crashed ===\n{detail}\n")
+            except OSError:
+                pass
+            set_job("failed",
+                    f"the {what} could not start, which is a fault in the desk rather "
+                    f"than in your work. Nothing was changed. See logs/serve.log")
+
+    return run
+
+
 ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 URL_IN = re.compile(r"https://\S+")
 
@@ -246,26 +284,9 @@ URL_IN = re.compile(r"https://\S+")
 # The CLI holds its prose to the end in text mode, so a sweep printed nothing
 # for as long as it ran and the page had a fixed sentence to show. Asking for
 # events instead means every tool call arrives the moment it starts, which is
-# what the wait actually consists of.
-STREAM = ["--output-format", "stream-json", "--stream-partial-output"]
-
-VERBS = {
-    "shell": "Running",
-    "read": "Reading",
-    "write": "Writing",
-    "edit": "Editing",
-    "delete": "Deleting",
-    "ls": "Listing",
-    "grep": "Searching",
-    "glob": "Looking for",
-    "webSearch": "Searching the web",
-    "fetch": "Fetching",
-    "readLints": "Checking",
-    "todoWrite": "Planning",
-    "task": "Handing off to a subagent",
-}
-HINTS = ("command", "path", "file_path", "target_file", "relative_workspace_path",
-         "pattern", "glob_pattern", "query", "search_term", "url", "toolName", "name")
+# what the wait actually consists of. Which flags turn streaming on, and how to
+# read what comes back, is what the two CLIs disagree about most, so `agent.py`
+# owns both and this file only ever sees ("call" | "said" | "result", text).
 
 # The same step, said in the words he would use. The log keeps the raw phrase,
 # because that is what a slow run is diagnosed from, but the line under the
@@ -308,43 +329,24 @@ def plain_phrase(phrase: str) -> str:
     return phrase[:70]
 
 
-def tool_phrase(call: dict) -> str:
-    """One line saying what the agent has just gone off to do.
-
-    The event names the tool in a key like `shellToolCall` and puts its arguments
-    under it, so the shape carries what is worth showing without a table of
-    every tool the CLI has.
-    """
-    key = next(iter(call), "")
-    kind = key[: -len("ToolCall")] if key.endswith("ToolCall") else key
-    args = (call.get(key) or {}).get("args") or {}
-    hint = ""
-    for name in HINTS:
-        value = args.get(name)
-        if isinstance(value, str) and value.strip():
-            hint = value.strip()
-            break
-    if kind == "mcp":
-        where = args.get("serverName") or args.get("server") or "Tool"
-        return f"{where}: {args.get('toolName') or hint or 'call'}"[:120]
-    hint = hint.replace(f"{ROOT}/", "").replace(str(ROOT), "the repo")
-    verb = VERBS.get(kind) or kind or "Working"
-    return (f"{verb} {hint}" if hint else verb)[:120]
-
-
 def mmss(secs: float) -> str:
     return f"{int(secs) // 60:d}:{int(secs) % 60:02d}"
 
 
 def read_events(stream, said: list[str], noise: list[str], calls: list[str],
-                began: float, beat: list[float], fh=None) -> None:
+                began: float, beat: list[float], fh=None,
+                kind: agent.Kind | None = None) -> None:
     """Turn the agent's event stream into progress, and into a readable log.
 
     Three things come out of one pass: the final message, whatever the CLI said
     that was not an event (reconnect notices, warnings), and a timed list of the
     tool calls. The last of those is how a slow sweep is diagnosed later: the log
     shows where the minutes went rather than only what it concluded.
+
+    Which events mean what is the CLI's business, so `kind.event` answers that
+    and this only has to know the three things it can be told.
     """
+    reader = kind or agent.KINDS[0]
     try:
         for raw in stream:
             clean = ANSI.sub("", raw).strip()
@@ -363,29 +365,23 @@ def read_events(stream, said: list[str], noise: list[str], calls: list[str],
             except ValueError:
                 noise.append(clean)
                 continue
-            kind = event.get("type")
-            if kind == "assistant":
-                for part in (event.get("message") or {}).get("content") or []:
-                    text = part.get("text") or ""
-                    if text:
-                        said.append(text)
-                        set_live(add=len(text))
+            what, text = reader.event(event)
+            if what == "said":
+                said.append(text)
+                set_live(add=len(text))
                 tail = "".join(said)[-200:].replace("\n", " ").strip()
                 if tail:
                     set_live(last=tail)
-            elif kind == "tool_call" and event.get("subtype") == "started":
-                phrase = tool_phrase(event.get("tool_call") or {})
-                calls.append(phrase)
-                set_live(last=plain_phrase(phrase))
+            elif what == "call":
+                calls.append(text)
+                set_live(last=plain_phrase(text))
                 if fh is not None:
-                    fh.write(f"  [{mmss(time.time() - began)}] {phrase}\n")
+                    fh.write(f"  [{mmss(time.time() - began)}] {text}\n")
                     fh.flush()
-            elif kind == "result":
+            elif what == "result":
                 # The whole final message, which is cleaner than the deltas: it
                 # is the report without the narration between tool calls.
-                whole = event.get("result")
-                if isinstance(whole, str) and whole.strip():
-                    said[:] = [whole]
+                said[:] = [text]
     except (OSError, ValueError):
         pass
     finally:
@@ -404,30 +400,46 @@ class Ran(NamedTuple):
     stalled: bool = False  # killed for producing nothing, not for running long
 
 
-def run_stream(cmd: list[str], payload: str, timeout: int, fh=None, key: str = "sweep") -> Ran:
+def run_stream(cmd: list[str], payload: str, timeout: int, fh=None, key: str = "sweep",
+               kind: agent.Kind | None = None) -> Ran:
     """One agent run, reported as it goes."""
+    runner = kind or agent.KINDS[0]
     began = time.time()
     set_live(start=True)
     # The CLI takes some seconds to come up before it says anything, and a blank
     # progress line in that gap reads as a hang.
     set_live(last="Starting the agent")
+    # The prompt goes in on stdin rather than as an argument. A refresh prompt is
+    # 30KB and a prep prompt 25KB, which is a large fraction of the shell's
+    # argument limit and pointless to spend when the CLI reads stdin.
     proc = subprocess.Popen(
-        cmd + STREAM + [payload],
+        cmd + runner.stream,
         cwd=ROOT,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        stdin=subprocess.DEVNULL,
+        stdin=subprocess.PIPE,
         text=True,
         bufsize=1,
+        env=runner.env(),
     )
     with cancel_lock:
         procs[key] = proc
+    # Written and closed before the reader starts, so the agent sees end-of-input
+    # and begins. A CLI still waiting on stdin never emits, which the stall check
+    # would then report as a lapsed session.
+    try:
+        proc.stdin.write(payload)
+        proc.stdin.close()
+    except OSError:
+        pass
     said: list[str] = []
     noise: list[str] = []
     calls: list[str] = []
     beat = [began]   # last time the agent emitted anything; read_events bumps it
     reader = threading.Thread(
-        target=read_events, args=(proc.stdout, said, noise, calls, began, beat, fh), daemon=True
+        target=read_events,
+        args=(proc.stdout, said, noise, calls, began, beat, fh, runner),
+        daemon=True,
     )
     reader.start()
     # Poll rather than one long wait, so a dead session (no output at all) is
@@ -441,7 +453,12 @@ def run_stream(cmd: list[str], payload: str, timeout: int, fh=None, key: str = "
             break
         except subprocess.TimeoutExpired:
             now = time.time()
-            stalled = now - beat[0] >= STALL_SECS
+            # Before the first word, the grace period applies: a cold start on
+            # this gateway has taken over two minutes to its first token, and
+            # killing a run that was only still connecting is the worse error.
+            quiet = now - beat[0]
+            silent_start = not said and not calls
+            stalled = quiet >= (STARTUP_GRACE_SECS if silent_start else STALL_SECS)
             if stalled or now - began >= timeout:
                 proc.kill()
                 try:
@@ -456,50 +473,17 @@ def run_stream(cmd: list[str], payload: str, timeout: int, fh=None, key: str = "
                round(time.time() - began), len(calls), stalled)
 
 
-def cli(*args: str, timeout: int = 60) -> str:
-    out = subprocess.run(
-        ["cursor-agent", *args],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=timeout,
-        stdin=subprocess.DEVNULL,
-    )
-    return ANSI.sub("", out.stdout + out.stderr)
-
-
-def logged_in() -> bool:
-    return "not logged in" not in cli("status").lower()
-
-
-def unauthorised_mcps() -> list[str]:
-    """Which configured MCP servers the agent cannot actually use.
-
-    Without these a refresh has no Asana and no Slack. An agent with no tools
-    does not stop: it improvises with curl and invented tokens, or starts
-    another agent. Better to refuse the run and name what is missing.
-    """
-    missing = []
-    for line in cli("mcp", "list").splitlines():
-        name, _, state = line.partition(":")
-        if state.strip() and "requires_authentication" in state:
-            missing.append(name.strip())
-    return missing
-
-
 def blockers() -> tuple[list[str], str]:
-    """Everything standing between the button and a real run, in one look."""
-    if not logged_in():
-        return ["account"], "cursor-agent is signed out."
-    missing = unauthorised_mcps()
-    if missing:
-        names = " and ".join(n.title() for n in missing)
-        verb = "needs" if len(missing) == 1 else "need"
-        return missing, f"{names} {verb} authorising before a refresh can read anything."
-    return [], ""
+    """Everything standing between the button and a real run, in one look.
+
+    Which CLI is answering is decided here rather than held open, because it can
+    change between one press and the next: a `claude` whose MCP grants lapse
+    should fall through to Cursor without the server being restarted.
+    """
+    return agent.blockers(agent.pick())
 
 
-def connect_one(args: list[str], label: str, done) -> bool:
+def connect_one(kind: agent.Kind, args: list[str], label: str, done) -> bool:
     """Run one auth command, show the link it prints, wait for it to land.
 
     Driving Terminal through AppleScript needs an automation permission this
@@ -508,13 +492,14 @@ def connect_one(args: list[str], label: str, done) -> bool:
     """
     try:
         proc = subprocess.Popen(
-            ["cursor-agent", *args],
+            [kind.binary, *args],
             cwd=ROOT,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
+            env=kind.env(),
         )
     except OSError as exc:
         set_job("needs_login", f"could not start {label}: {exc}")
@@ -540,7 +525,7 @@ def connect_one(args: list[str], label: str, done) -> bool:
     set_job(
         "needs_login",
         f"Approve {label} in your browser." if url else
-        f"{label} printed no link. In a Terminal run: cursor-agent {' '.join(args)}",
+        f"{label} printed no link. In a Terminal run: {kind.binary} {' '.join(args)}",
         url,
     )
 
@@ -560,15 +545,50 @@ def start_login() -> None:
 
     The account sign-in is only half of it. Asana and Slack are separate grants,
     and a refresh without them reads nothing at all.
+
+    A server nobody has configured cannot be logged in to, so that case is sent
+    to `setup-mcp.sh` rather than attempted: `claude mcp login asana` on a
+    machine with no Asana server would fail in a way that reads like a lapsed
+    grant when it is really a missing one.
     """
-    if not logged_in() and not connect_one(["login"], "the Cursor sign-in", logged_in):
+    kind = agent.pick()
+    if kind is None:
+        set_job("needs_login", "No agent is installed, so there is nothing to sign in to.")
         return
-    for name in unauthorised_mcps():
+    if not kind.signed_in():
+        if kind.name == "claude":
+            # The credential comes from apiKeyHelper, not a browser flow, so
+            # there is no link this could open.
+            set_job("needs_login", agent.blockers(kind)[1])
+            return
+        if not connect_one(kind, kind.login_args("account"),
+                           f"the {kind.name} sign-in", kind.signed_in):
+            return
+    try:
+        states = kind.mcp_states()
+    except (OSError, subprocess.SubprocessError) as exc:
+        set_job("needs_login", f"could not read the connections: {exc}")
+        return
+    absent = [n for n in agent.NEEDED_MCPS if n not in states]
+    if absent:
+        names = " and ".join(n.title() for n in absent)
+        set_job("needs_login",
+                f"{names} {'is' if len(absent) == 1 else 'are'} not set up on this "
+                f"machine yet. In a Terminal run: ./setup-mcp.sh")
+        return
+    for name, state in states.items():
+        if state != "needs-auth":
+            continue
         connect_one(
-            ["mcp", "login", name],
+            kind,
+            kind.login_args(name),
             f"the {name.title()} connection",
-            lambda n=name: n not in unauthorised_mcps(),
+            lambda n=name: kind.mcp_states().get(n) == "connected",
         )
+    # A grant has just changed, so any remembered readiness answer is about the
+    # world before the login. Ask again from scratch, or the page reports the
+    # problem he has this second finished fixing.
+    agent.forget_readiness()
     left, message = blockers()
     set_job("needs_login", message) if left else set_job("idle", "Connected. Press Refresh.")
 
@@ -620,9 +640,9 @@ SWEEP_WAIT_SECS = 180
 def ask_model() -> str:
     """Which model answers a question from a card.
 
-    Auto, like every other run here. A question and a change arrive through the
-    same box and half of what comes out of it is read by Tokyo Gas, so the answer
-    is worth the wait.
+    Opus 5.5, like every other run here. A question and a change arrive through
+    the same box and half of what comes out of it is read by Tokyo Gas, so the
+    answer is worth the wait.
 
     The wait divides in two, and the logs say where: an ask that only answers
     comes back in 11 to 34 seconds, and one that rewrites a draft takes 100 to
@@ -637,14 +657,7 @@ def ask_model() -> str:
     `config.json` under `ask` pins one when speed matters more than the wording,
     and `TG_ASK_MODEL` does it for a single question.
     """
-    for var in ("TG_ASK_MODEL", "TG_MODEL"):
-        if os.environ.get(var):
-            return os.environ[var]
-    try:
-        conf = json.loads(CONFIG.read_text(encoding="utf-8")).get("ask", {})
-    except (ValueError, OSError):
-        conf = {}
-    return conf.get("model") or "auto"
+    return agent.model_for("ask")
 
 
 def load_asks() -> list[dict]:
@@ -1036,10 +1049,15 @@ def run_ask(ask_id: str, ref: str, question: str, parent: str = "") -> None:
     which = ref.replace("item:", "job ").replace("ticket:", "")
     set_job("running", f"Thinking about {which}")
     model = ask_model()
-    cmd = ["cursor-agent", "--print", "--force", "--approve-mcps", "--trust",
-           "--workspace", str(ROOT)]
-    if model != "auto":
-        cmd += ["--model", model]
+    kind = agent.pick()
+    if kind is None:
+        row.update(state="failed", answer="No agent is installed to answer with.")
+        save_ask(row)
+        set_job("failed", "no agent is installed")
+        with cancel_lock:
+            asks_running -= 1
+        return
+    cmd = kind.command(model)
     log = ROOT / "logs" / f"ask-{datetime.now():%Y-%m-%d}.log"
     log.parent.mkdir(exist_ok=True)
     try:
@@ -1051,6 +1069,7 @@ def run_ask(ask_id: str, ref: str, question: str, parent: str = "") -> None:
             prompt.read_text(encoding="utf-8") + ask_context(ref, question, parent),
             ASK_TIMEOUT_SECS,
             key=ask_id,
+            kind=kind,
         )
         with cancel_lock:
             called_off = ask_id in cancelled
@@ -1077,8 +1096,8 @@ def run_ask(ask_id: str, ref: str, question: str, parent: str = "") -> None:
         # slow" is a number that can be compared rather than a feeling.
         with log.open("a", encoding="utf-8") as fh:
             fh.write(
-                f"\n=== {datetime.now():%H:%M:%S} {ref} on {model}, {took}s, "
-                f"{ran.calls} tool calls ===\n{question}\n\n{answer}\n"
+                f"\n=== {datetime.now():%H:%M:%S} {ref} on {kind.name}/{model}, "
+                f"{took}s, {ran.calls} tool calls ===\n{question}\n\n{answer}\n"
             )
         if ran.code != 0 or not answer:
             row.update(
@@ -1111,19 +1130,13 @@ def run_ask(ask_id: str, ref: str, question: str, parent: str = "") -> None:
 def agent_model(kind: str) -> str:
     """Which model a refresh or a prep runs on.
 
-    A sweep reads threads and decides where an item stands; it is not writing
-    words Tokyo Gas will hear, so it does not need the heaviest model on the
-    account. `config.json` names one per kind, `TG_MODEL` overrides either for a
-    single run, and leaving both unset falls back to whatever `cursor-agent`
-    calls Auto.
+    Opus 5.5 by default, the same as everything else here: a sweep decides where
+    every item stands and which drafts the threads have overtaken, and being
+    wrong about that is expensive in a way a cheaper model does not repay.
+    `config.json` names one per kind, `TG_MODEL` overrides either for a single
+    run, and `TG_REFRESH_MODEL` or `TG_PREP_MODEL` does it for one of them.
     """
-    if os.environ.get("TG_MODEL"):
-        return os.environ["TG_MODEL"]
-    try:
-        conf = json.loads(CONFIG.read_text(encoding="utf-8")).get(kind, {})
-    except (ValueError, OSError):
-        conf = {}
-    return conf.get("model") or "auto"
+    return agent.model_for(kind)
 
 
 def run_agent(kind: str) -> None:
@@ -1133,9 +1146,11 @@ def run_agent(kind: str) -> None:
     if not prompt.exists():
         set_job("failed", f"{prompt_name} is missing")
         return
-    agent = subprocess.run(["which", "cursor-agent"], capture_output=True, text=True)
-    if agent.returncode != 0:
-        set_job("failed", "cursor-agent is not installed. Type 'refresh' in a Cursor chat instead.")
+    runner = agent.pick()
+    if runner is None:
+        set_job("failed",
+                "No agent is installed. Install Claude Code, or type 'refresh' in "
+                "a chat on this folder instead.")
         return
     if lock_held():
         set_job("failed", "a refresh or prep is already running. Let it finish.")
@@ -1151,10 +1166,7 @@ def run_agent(kind: str) -> None:
     log = ROOT / "logs" / f"{kind}-{datetime.now():%Y-%m-%d}.log"
     log.parent.mkdir(exist_ok=True)
     model = agent_model(kind)
-    cmd = ["cursor-agent", "--print", "--force", "--approve-mcps", "--trust",
-           "--workspace", str(ROOT)]
-    if model != "auto":
-        cmd += ["--model", model]
+    cmd = runner.command(model)
     LOCK.write_text(f"{os.getpid()} desk-server {kind} {datetime.now():%H:%M}\n")
 
     # The board is ours alone for a sweep. The lock is set now, so new questions
@@ -1178,9 +1190,13 @@ def run_agent(kind: str) -> None:
     try:
         for attempt in (1, 2):
             with log.open("a", encoding="utf-8") as fh:
-                fh.write(f"\n=== {datetime.now():%H:%M:%S} {kind} on {model} ===\n")
+                fh.write(
+                    f"\n=== {datetime.now():%H:%M:%S} {kind} on "
+                    f"{runner.name}/{model} ===\n"
+                )
                 fh.flush()
-                ran = run_stream(cmd, prompt.read_text(encoding="utf-8"), timeout, fh)
+                ran = run_stream(cmd, prompt.read_text(encoding="utf-8"), timeout, fh,
+                                 kind=runner)
                 fh.write(
                     f"\n{ran.text}\n"
                     f"=== {kind} ended after {ran.took}s, {ran.calls} tool calls, "
@@ -1189,10 +1205,10 @@ def run_agent(kind: str) -> None:
             if ran.code is None:
                 if ran.stalled:
                     set_job("failed",
-                            f"the {kind} started but produced nothing for "
-                            f"{STALL_SECS // 60} minutes and was stopped, so the agent "
-                            "session has most likely lapsed. Press Log in to "
-                            "re-authenticate, then try again.")
+                            f"the {kind} went quiet and was stopped, so the agent "
+                            "session has most likely lapsed or a connection is down. "
+                            f"Check ./setup-mcp.sh --check, then try again. "
+                            f"See {log.name}")
                 else:
                     set_job("failed", f"the {kind} ran past {timeout // 60} minutes and was stopped")
                 return
@@ -1228,7 +1244,8 @@ def failure_note(kind: str, ran: Ran, log_name: str) -> str:
     if not ran.text and not ran.calls:
         return (
             "the connection to the agent dropped twice before it started, so nothing "
-            "was read or changed. Press Refresh again, or type refresh in a Cursor chat."
+            "was read or changed. Press Refresh again, or type refresh in a chat on "
+            "this folder."
         )
     if not ran.text:
         return (
@@ -1352,7 +1369,9 @@ class Handler(BaseHTTPRequestHandler):
                     return
             kind = path.rsplit("/", 1)[1]
             set_job("running", "Starting")
-            threading.Thread(target=run_agent, args=(kind,), daemon=True).start()
+            threading.Thread(
+                target=guarded(lambda: run_agent(kind), kind), daemon=True
+            ).start()
             self.json_out(202, {"state": "running"})
             return
         if path == "/api/ask":
@@ -1421,7 +1440,9 @@ class Handler(BaseHTTPRequestHandler):
             self.json_out(200, {"forgot": gone})
             return
         if path == "/api/login":
-            threading.Thread(target=start_login, daemon=True).start()
+            threading.Thread(
+                target=guarded(start_login, "sign-in"), daemon=True
+            ).start()
             self.json_out(202, {"state": "needs_login"})
             return
         self.json_out(404, {"error": "not here"})

@@ -2,9 +2,9 @@
 """Render the board into markdown.
 
 The HTML page is for reading. This markdown file is for working: it is what a
-Cursor chat in this repo reads when Rei says "draft the reply to Nakayama-san"
-or "check the codebase for X". Keep it dense, keep every link, and keep the
-ticket grouping so a single block is enough context to act on.
+chat in this repo reads when Rei says "draft the reply to Nakayama-san" or
+"check the codebase for X". Keep it dense, keep every link, and keep the ticket
+grouping so a single block is enough context to act on.
 
 Usage:
     python3 render_desk_md.py state/board.json output/desk.md
