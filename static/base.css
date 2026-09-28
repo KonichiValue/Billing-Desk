@@ -56,53 +56,100 @@ font:15.5px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans",
 "Noto Sans JP",sans-serif;-webkit-font-smoothing:antialiased}
 
 /* ── Themes ──────────────────────────────────────────────────────────────────
-   Personalisation, on the same terms as Slack's: the background changes and
-   nothing else does. No theme is allowed to touch a semantic colour, a text
-   colour or a size, so red still means his and the type stays exactly as
-   legible on every one of them. A theme is a wash behind the cards, which is
-   why each is a single `body:before` and nothing more.
+   Personalisation on Slack's terms: the surfaces change, the meaning does not.
+
+   The first attempt at this failed and it is worth saying why, because it is an
+   obvious trap. It tinted only a wash *behind* the cards, at 7% opacity, and
+   the cards themselves stayed pure white. Since cards cover most of the
+   viewport, picking a theme changed almost nothing you could see.
+
+   So a theme now moves four things: `--page` behind everything, `--card` for
+   the surface itself, `--line` and `--hair` so the rules agree with the paper
+   they are drawn on, and the header. That is enough to read as a different room
+   from across the desk.
+
+   What a theme may never touch: `--ink`, `--mut` and `--soft` (the text), or any
+   semantic colour. Red still means his work on every theme, and the type is
+   exactly as legible, because this page gets read an hour before he speaks to
+   Tokyo Gas. `check.py` has a test that holds me to it.
 
    `data-theme` on the body, kept in localStorage, chosen in Settings. Plain is
-   the default and draws nothing at all. */
+   the default and changes nothing. */
 body:before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
 transition:opacity var(--t-slow) var(--ease)}
 /* Everything real sits above the wash. */
 header.top,.wrap,.pal,dialog,.nami{position:relative;z-index:1}
 header.top{z-index:30}
 
-/* 浮世絵. Two wide pigment washes and the fibre grain of 和紙, all under 6%,
-   so the page reads as paper rather than as a screen. */
+/* 浮世絵 ukiyo-e. Warm 和紙 paper: a cream card on a darker cream page, with
+   indigo and safflower pigment pooling in the corners and the fibre grain of
+   the paper running across it. The most distinctive of the set. */
+body[data-theme="ukiyoe"]{--page:#e8e0d2;--card:#fdfaf3;--line:#ddd3c0;
+--hair:#f3ede0;--head:#20242e;--head-2:#33302c}
 body[data-theme="ukiyoe"]:before{background:
-radial-gradient(1200px 620px at 12% -8%,rgba(18,83,158,.075),transparent 60%),
-radial-gradient(1000px 560px at 100% 4%,rgba(179,38,30,.045),transparent 62%),
-repeating-linear-gradient(94deg,rgba(23,27,38,.018) 0 1px,transparent 1px 4px)}
+radial-gradient(1100px 580px at 8% -10%,rgba(18,83,158,.20),transparent 62%),
+radial-gradient(900px 520px at 102% 2%,rgba(179,38,30,.16),transparent 64%),
+radial-gradient(700px 460px at 50% 108%,rgba(167,93,10,.13),transparent 62%),
+repeating-linear-gradient(93deg,rgba(80,60,30,.045) 0 1px,transparent 1px 5px),
+repeating-linear-gradient(3deg,rgba(80,60,30,.03) 0 1px,transparent 1px 7px)}
+body[data-theme="ukiyoe"][data-view="standup"]{--page:#ecdfe4;--card:#fdf8f9;
+--line:#e2ccd4;--hair:#f7ecf0}
 body[data-theme="ukiyoe"][data-view="standup"]:before{background:
-radial-gradient(1100px 600px at 8% -6%,rgba(156,27,133,.075),transparent 60%),
-radial-gradient(900px 520px at 100% 2%,rgba(167,93,10,.05),transparent 62%),
-repeating-linear-gradient(94deg,rgba(23,27,38,.018) 0 1px,transparent 1px 4px)}
+radial-gradient(1000px 560px at 6% -8%,rgba(156,27,133,.20),transparent 62%),
+radial-gradient(860px 500px at 102% 2%,rgba(167,93,10,.15),transparent 64%),
+repeating-linear-gradient(93deg,rgba(80,40,60,.045) 0 1px,transparent 1px 5px)}
 
-/* 藍 indigo. One colour, deepest at the top, like a dipped cloth. */
-body[data-theme="ai"]{--page:#eef2f9}
+/* 藍 ai, indigo. A dipped cloth: deepest at the top, the card a cool off-white
+   so the blue reads as the room rather than as a tint on the paper. */
+body[data-theme="ai"]{--page:#d9e2ef;--card:#fbfcfe;--line:#c6d4e6;
+--hair:#eaf0f8;--head:#0a1f3c;--head-2:#123f6e}
 body[data-theme="ai"]:before{background:
-linear-gradient(180deg,rgba(18,83,158,.10),rgba(18,83,158,.02) 46%,transparent 70%)}
+linear-gradient(180deg,rgba(18,83,158,.34),rgba(18,83,158,.10) 44%,
+rgba(18,83,158,.03) 72%,transparent)}
 
-/* 桜 cherry. The warmest one, for the speaking view especially. */
-body[data-theme="sakura"]{--page:#fbf5f7}
+/* 桜 sakura. The warmest, and the easiest of them on a long read. */
+body[data-theme="sakura"]{--page:#f4dfe6;--card:#fffafc;--line:#e9cdd7;
+--hair:#fbeef3;--head:#2a1620;--head-2:#46202f}
 body[data-theme="sakura"]:before{background:
-radial-gradient(900px 520px at 88% -6%,rgba(200,90,130,.10),transparent 62%),
-radial-gradient(760px 420px at 4% 8%,rgba(167,93,10,.035),transparent 60%)}
+radial-gradient(900px 520px at 88% -8%,rgba(200,90,130,.30),transparent 64%),
+radial-gradient(760px 460px at 2% 10%,rgba(167,93,10,.13),transparent 62%),
+radial-gradient(600px 400px at 60% 106%,rgba(200,90,130,.12),transparent 60%)}
 
-/* 苔 moss. The quietest of the coloured ones. */
-body[data-theme="koke"]{--page:#f1f6f2}
+/* 苔 koke, moss. Quiet green, for a long afternoon on one ticket. */
+body[data-theme="koke"]{--page:#dde8e0;--card:#fbfdfb;--line:#c8dbcf;
+--hair:#ecf4ee;--head:#0c1f18;--head-2:#17362a}
 body[data-theme="koke"]:before{background:
-radial-gradient(1000px 560px at 6% -8%,rgba(10,107,74,.085),transparent 60%),
-radial-gradient(820px 460px at 96% 6%,rgba(18,83,158,.03),transparent 62%)}
+radial-gradient(1000px 560px at 4% -8%,rgba(10,107,74,.28),transparent 62%),
+radial-gradient(820px 480px at 100% 6%,rgba(18,83,158,.10),transparent 62%),
+radial-gradient(640px 420px at 48% 106%,rgba(10,107,74,.10),transparent 60%)}
 
-/* 墨 sumi. Near-monochrome, for when the colour is in the way. */
-body[data-theme="sumi"]{--page:#f2f3f5}
+/* 墨 sumi. Near-monochrome with the grain of an inkstone, for when the colour
+   is in the way and only the words matter. */
+body[data-theme="sumi"]{--page:#dcdee3;--card:#fcfcfd;--line:#c8ccd4;
+--hair:#eceef2;--head:#14161c;--head-2:#282c36}
 body[data-theme="sumi"]:before{background:
-linear-gradient(180deg,rgba(23,27,38,.06),transparent 55%),
-repeating-linear-gradient(94deg,rgba(23,27,38,.02) 0 1px,transparent 1px 5px)}
+linear-gradient(180deg,rgba(23,27,38,.26),rgba(23,27,38,.07) 48%,transparent 78%),
+repeating-linear-gradient(93deg,rgba(23,27,38,.05) 0 1px,transparent 1px 6px)}
+
+/* 夜 yoru, night. A real dark theme, because half of this work happens after
+   the Tokyo evening and a white page at 21:00 is the complaint nobody makes out
+   loud. The text ramp inverts here, which is the one place a theme is allowed
+   to touch it: on a dark page the same near-black ink would be unreadable, so
+   it is the *contrast* that is preserved rather than the literal value. */
+body[data-theme="yoru"]{--ink:#eef1f7;--mut:#b3bccd;--soft:#8b95a8;
+--page:#0e1118;--card:#171b24;--line:#2a3040;--hair:#1f242f;
+--head:#0a0d13;--head-2:#141924;
+--accent:#6aa5f0;--accent-bg:#17233a;--accent-line:#2f4a70;--accent-ink:#bcd6fb;
+--red:#f58a80;--red-bg:#2e1a1a;--red-line:#5c2b28;
+--amber:#e0a94e;--amber-bg:#2b2114;--amber-line:#57411f;--amber-ink:#f2cd8a;
+--green:#5fcf9e;--green-bg:#12271f;--green-line:#26543d;
+--blue:#7fb0f4;--blue-bg:#16233a;--blue-line:#2e4a72;
+--plum:#b191f5;--plum-bg:#211a35;--plum-line:#3f3163;--plum-ink:#d7c8fb;
+--shadow:0 1px 2px rgba(0,0,0,.5),0 1px 3px rgba(0,0,0,.4);
+--lift:0 2px 6px rgba(0,0,0,.5),0 12px 28px rgba(0,0,0,.45)}
+body[data-theme="yoru"]:before{background:
+radial-gradient(1100px 600px at 10% -10%,rgba(60,110,190,.20),transparent 62%),
+radial-gradient(900px 520px at 100% 4%,rgba(120,60,150,.14),transparent 64%)}
 .wrap{max-width:920px;margin:0 auto;padding:22px 20px 90px}
 /* The script is read out loud, so it gets a narrower column than the desk. */
 body[data-view="standup"] .wrap{max-width:840px}
@@ -164,7 +211,10 @@ text-align:left;white-space:nowrap}
 background-color var(--t-fast) var(--ease),transform var(--t-fast) var(--ease)}
 .views button:hover{color:#fff;background:rgba(255,255,255,.07)}
 .views button:active{transform:scale(.97);transition-duration:60ms}
-.views button[aria-selected="true"]{background:#fff;color:#0d1524;
+/* The selected tab is the card surface lifted out of the dark bar, so its text
+   has to be the ink that belongs on that surface rather than a fixed near-black:
+   on the night theme the card is dark and #0d1524 on it was unreadable. */
+.views button[aria-selected="true"]{background:var(--card);color:var(--ink);
 box-shadow:0 1px 3px rgba(9,14,26,.4)}
 .views .lbl{font-size:13px;font-weight:650;letter-spacing:-.005em}
 /* The room this script is for, alongside the label rather than under it, so the
@@ -173,7 +223,7 @@ box-shadow:0 1px 3px rgba(9,14,26,.4)}
 .views .sub{font-size:11.5px;font-weight:550;opacity:.62;padding-left:8px}
 .views .k{flex:none;font:700 10px/14px inherit;min-width:14px;text-align:center;
 border-radius:4px;background:rgba(255,255,255,.13);color:#c2cee3}
-.views button[aria-selected="true"] .k{background:#eef1f6;color:#6b7789}
+.views button[aria-selected="true"] .k{background:var(--hair);color:var(--soft)}
 .views .badge{flex:none;min-width:17px;padding:0 5px;border-radius:9px;
 background:#e0483b;color:#fff;font:700 10.5px/17px inherit;text-align:center}
 .views button[aria-selected="true"] .badge{background:var(--red);color:#fff}
@@ -207,7 +257,7 @@ color:var(--soft);margin:28px 0 11px;font-weight:700}
 .pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;
 border-radius:20px;border:1px solid;letter-spacing:.01em;white-space:nowrap}
 .btn{font-size:12.5px;text-decoration:none;color:var(--accent);
-border:1px solid var(--line);background:#fff;padding:4px 10px;border-radius:7px;
+border:1px solid var(--line);background:var(--card);padding:4px 10px;border-radius:7px;
 white-space:nowrap;font-weight:550;
 transition:border-color var(--t-fast) var(--ease),
 background-color var(--t-fast) var(--ease),transform var(--t-fast) var(--ease),
@@ -289,7 +339,7 @@ details.sub>summary:hover .fold-hint{color:var(--accent);border-color:var(--acce
    anything behind it, which is how a folded section reads as an empty one. */
 .fold-hint{flex:none;margin-left:auto;font:650 9.5px/1 inherit;
 text-transform:uppercase;letter-spacing:.06em;color:var(--soft);
-border:1px solid var(--line);border-radius:4px;padding:3px 5px;background:#fff}
+border:1px solid var(--line);border-radius:4px;padding:3px 5px;background:var(--card)}
 .fold-hint:after{content:"Show"}
 details[open]>summary .fold-hint:after{content:"Hide"}
 .status,.st-stands{margin:0;font-size:15px;color:var(--ink)}
@@ -298,9 +348,9 @@ border:1px solid var(--accent-line);border-radius:8px;font-size:14px;
 color:var(--accent-ink)}
 .cons-list{margin:0;display:grid;gap:1px;background:var(--line);
 border:1px solid var(--line);border-radius:10px;overflow:hidden}
-.cons-row{display:flex;background:#fff;align-items:baseline}
+.cons-row{display:flex;background:var(--card);align-items:baseline}
 .cons-row dt{flex:none;width:152px;padding:9px 13px;font-size:11.5px;
-font-weight:700;color:var(--soft);background:#fbfcfe;text-transform:uppercase;
+font-weight:700;color:var(--soft);background:var(--hair);text-transform:uppercase;
 letter-spacing:.04em}
 .cons-row dd{flex:1;min-width:0;margin:0;padding:9px 13px;font-size:14px}
 .cons-row:last-child dd{color:var(--amber);font-weight:550}
@@ -313,7 +363,7 @@ padding-bottom:5px;border-bottom:1px solid var(--accent-line)}
 .jp-h-ja{font-size:15px;font-weight:700;color:var(--accent-ink)}
 .jp-h-en{font-size:11.5px;color:var(--soft);text-transform:uppercase;
 letter-spacing:.06em;font-weight:600}
-.copy{margin-left:auto;font:600 11px/1 inherit;color:var(--soft);background:#fff;
+.copy{margin-left:auto;font:600 11px/1 inherit;color:var(--soft);background:var(--card);
 border:1px solid var(--line);border-radius:6px;padding:4px 8px;cursor:pointer}
 .copy:hover{color:var(--accent);border-color:var(--accent-line)}
 .jp-line{margin-bottom:10px;padding-left:12px;border-left:3px solid var(--accent-line)}
@@ -331,7 +381,7 @@ flex-wrap:wrap}
 .draft{border:1px solid var(--line);border-radius:10px;margin-bottom:11px;
 overflow:hidden}
 .draft-head{display:flex;gap:9px;align-items:center;padding:8px 12px;
-background:#fbfcfe;border-bottom:1px solid var(--line);font-size:12.5px;
+background:var(--hair);border-bottom:1px solid var(--line);font-size:12.5px;
 color:var(--mut);font-weight:550}
 .draft-body{padding:13px;white-space:pre-wrap;font-size:14.5px;line-height:1.6}
 .draft-body.ja{font-size:15px;line-height:1.9}
@@ -356,7 +406,7 @@ color:var(--soft);margin:0;display:inline-block;font-weight:700}
    never anything to see through it. */
 .jump{position:sticky;top:42px;z-index:20;display:flex;gap:6px;align-items:center;
 flex-wrap:wrap;margin:0 0 16px;padding:7px 11px;border:1px solid var(--line);
-border-radius:11px;background:#fbfcfe;box-shadow:var(--shadow);
+border-radius:11px;background:var(--hair);box-shadow:var(--shadow);
 transform:translateZ(0);will-change:transform;backface-visibility:hidden}
 .jump .lab{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;
 color:var(--soft);font-weight:700;padding-right:2px}
@@ -368,7 +418,7 @@ border-color:var(--accent-line)}
 .jump a .c{font-size:10.5px;font-weight:700;color:var(--red);margin-left:5px}
 .jump a .ord{font-size:10.5px;font-weight:600;color:var(--soft);margin-left:6px}
 .jump .find{margin-left:auto;font:600 11.5px/1 inherit;color:var(--soft);
-background:#fff;border:1px solid var(--line);border-radius:7px;padding:5px 9px;
+background:var(--card);border:1px solid var(--line);border-radius:7px;padding:5px 9px;
 cursor:pointer;display:flex;gap:6px;align-items:center}
 .jump .find:hover{color:var(--accent);border-color:var(--accent-line)}
 kbd{font:700 10.5px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
@@ -378,7 +428,7 @@ border-radius:4px;padding:3px 5px;color:var(--mut)}
 /* The finder. Type a ticket, a number or a word and land on it. */
 .pal{position:fixed;inset:0;z-index:60;background:rgba(9,14,26,.44);
 display:flex;align-items:flex-start;justify-content:center;padding:11vh 16px 16px}
-.pal-box{width:min(640px,100%);background:#fff;border-radius:15px;
+.pal-box{width:min(640px,100%);background:var(--card);border-radius:15px;
 box-shadow:0 24px 60px rgba(9,14,26,.35);overflow:hidden;display:flex;
 flex-direction:column;max-height:74vh}
 .pal input{border:0;border-bottom:1px solid var(--line);padding:16px 19px;
@@ -394,7 +444,7 @@ border-radius:5px}
 text-overflow:ellipsis}
 .pal .p-s{flex:none;font-size:11.5px;color:var(--soft)}
 .pal .p-none{padding:16px 19px;color:var(--soft);font-size:14px;font-style:italic}
-.pal-foot{padding:9px 14px;border-top:1px solid var(--line);background:#fbfcfe;
+.pal-foot{padding:9px 14px;border-top:1px solid var(--line);background:var(--hair);
 font-size:11.5px;color:var(--soft);display:flex;gap:14px}
 
 /* How to work this thing. Reachable from the header on every view, because the
@@ -416,13 +466,13 @@ color:var(--accent-ink)}
 .say-list{list-style:none;margin:0;padding:0;display:grid;gap:1px;
 background:var(--line);border:1px solid var(--line);border-radius:10px;
 overflow:hidden}
-.say-list li{background:#fff;padding:8px 12px;display:flex;gap:12px;
+.say-list li{background:var(--card);padding:8px 12px;display:flex;gap:12px;
 align-items:baseline;font-size:13.5px}
 .say-list .said{flex:none;min-width:186px;font-weight:650;color:var(--accent-ink);
 font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px}
 .say-list .does{flex:1;min-width:0;color:var(--mut)}
 .help-close{position:absolute;top:14px;right:16px;font:700 13px/1 inherit;
-background:#fff;border:1px solid var(--line);border-radius:7px;padding:6px 10px;
+background:var(--card);border:1px solid var(--line);border-radius:7px;padding:6px 10px;
 cursor:pointer;color:var(--mut)}
 .help-close:hover{color:var(--ink);border-color:var(--soft)}
 
@@ -433,9 +483,9 @@ background:rgba(255,255,255,.6);font-size:13px;color:var(--mut)}
 .howto b{color:var(--ink);font-weight:650}
 .howto>span{flex:1;min-width:300px}
 .howto code{font:600 12px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
-background:#fff;border:1px solid var(--line);border-radius:5px;padding:2px 6px;
+background:var(--card);border:1px solid var(--line);border-radius:5px;padding:2px 6px;
 color:var(--accent-ink);white-space:nowrap}
-.howto .more{margin-left:auto;font:650 12px/1 inherit;background:#fff;
+.howto .more{margin-left:auto;font:650 12px/1 inherit;background:var(--card);
 border:1px solid var(--line);border-radius:7px;padding:6px 11px;cursor:pointer;
 color:var(--accent)}
 .howto .more:hover{border-color:var(--accent-line);background:var(--accent-bg)}
@@ -459,7 +509,7 @@ body.script-only .en{font-size:13.5px}
 body.script-only .st-tk{padding:18px 22px}
 .err{background:var(--red-bg);border:1px solid var(--red-line);border-radius:12px;
 padding:22px;color:var(--red)}
-.err pre{white-space:pre-wrap;font-size:13px;background:#fff;padding:13px;
+.err pre{white-space:pre-wrap;font-size:13px;background:var(--card);padding:13px;
 border-radius:8px;margin:13px 0 0;color:var(--ink)}
 /* A window narrower than the desk it was drawn for. The header is navigation and
    it wraps, so the way to keep it short is to drop what is written elsewhere on
@@ -544,7 +594,7 @@ font:800 30px/1 "Hiragino Sans","Noto Sans JP",serif;
 box-shadow:0 4px 14px rgba(192,54,43,.45);
 animation:nami-seal .5s var(--spring) .82s both}
 .nami-said{position:absolute;bottom:-6px;white-space:nowrap;
-font:700 12.5px/1 inherit;color:var(--accent-ink);background:#fff;
+font:700 12.5px/1 inherit;color:var(--accent-ink);background:var(--card);
 border:1px solid var(--accent-line);border-radius:20px;padding:5px 13px;
 box-shadow:var(--shadow);animation:nami-said .4s var(--ease) 1s both}
 @keyframes nami-draw{from{stroke-dashoffset:620}to{stroke-dashoffset:0}}
@@ -582,7 +632,7 @@ body[data-motion="off"] .nami{display:none}
 gap:8px;margin:10px 0 4px}
 .thm{display:flex;gap:10px;align-items:center;text-align:left;font:inherit;
 cursor:pointer;padding:9px 11px;border:1px solid var(--line);border-radius:10px;
-background:#fff;color:var(--ink);
+background:var(--card);color:var(--ink);
 transition:border-color var(--t-fast) var(--ease),
 box-shadow var(--t-fast) var(--ease),transform var(--t-fast) var(--ease)}
 .thm:hover{border-color:var(--accent-line);transform:translateY(-1px);
@@ -602,17 +652,13 @@ border:1px solid var(--accent-line);border-radius:4px;padding:3px 5px}
 .thm.wide{padding:11px 13px}
 /* The swatches, each the wash of the theme it names. */
 .thm-plain{background:#f3f5fa}
-.thm-ukiyoe{background:
-radial-gradient(22px 18px at 22% 10%,rgba(18,83,158,.55),transparent 62%),
-radial-gradient(20px 16px at 92% 22%,rgba(179,38,30,.42),transparent 64%),
-repeating-linear-gradient(94deg,rgba(23,27,38,.10) 0 1px,transparent 1px 4px),
-#f7f4ee}
-.thm-ai{background:linear-gradient(180deg,#12539e,#cddff2)}
-.thm-sakura{background:
-radial-gradient(26px 20px at 78% 14%,rgba(200,90,130,.62),transparent 66%),#fbf1f4}
-.thm-koke{background:
-radial-gradient(26px 20px at 24% 14%,rgba(10,107,74,.58),transparent 66%),#eff6f1}
+.thm-ukiyoe{background:radial-gradient(20px 16px at 20% 14%,rgba(18,83,158,.85),transparent 66%),radial-gradient(18px 14px at 86% 26%,rgba(179,38,30,.7),transparent 68%),repeating-linear-gradient(93deg,rgba(80,60,30,.16) 0 1px,transparent 1px 4px),#e8e0d2}
+.thm-ai{background:linear-gradient(180deg,#12539e,#d9e2ef 86%)}
+.thm-sakura{background:radial-gradient(24px 18px at 76% 16%,rgba(200,90,130,.85),transparent 68%),#f4dfe6}
+.thm-koke{background:radial-gradient(24px 18px at 22% 16%,rgba(10,107,74,.8),transparent 68%),#dde8e0}
 .thm-sumi{background:linear-gradient(180deg,#3b4250,#eceef2)}
+.thm-yoru{background:linear-gradient(150deg,#0e1118 42%,#2a3752),
+radial-gradient(18px 14px at 76% 22%,rgba(106,165,240,.7),transparent 70%)}
 
 /* Test connections. Three separate questions with three separate answers, so
    the panel is a list of rows rather than one green tick: on 28 September the
@@ -625,7 +671,7 @@ radial-gradient(26px 20px at 24% 14%,rgba(10,107,74,.58),transparent 66%),#eff6f
 background:var(--line);border:1px solid var(--line);border-radius:10px;
 overflow:hidden}
 .chk-rows:empty{display:none}
-.chk{background:#fff;display:flex;gap:10px;align-items:baseline;padding:9px 12px;
+.chk{background:var(--card);display:flex;gap:10px;align-items:baseline;padding:9px 12px;
 animation:fold-in var(--t-mid) var(--ease) both}
 .chk-m{flex:none;width:17px;height:17px;border-radius:50%;display:grid;
 place-items:center;font:800 9.5px/1 inherit;color:#fff;align-self:center}
@@ -639,5 +685,5 @@ margin-top:2px}
 .chk-note{margin:9px 0 0;font-size:12.5px;font-weight:600;color:var(--mut)}
 .chk-note:empty{display:none}
 @media print{header.top,.btn,.copy,.toggle,.views,.jump,.howto{display:none}
-body{background:#fff}.tk,.st-tk{break-inside:avoid;border-color:#ccc;box-shadow:none}
+body{background:var(--card)}.tk,.st-tk{break-inside:avoid;border-color:#ccc;box-shadow:none}
 details{display:block}details>summary{display:none}}

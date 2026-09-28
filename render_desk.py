@@ -22,6 +22,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import render_standup
+import render_week
 from render import (
     stamp,
     asset,
@@ -1375,103 +1376,6 @@ def opening_view(board: dict, has_script: bool) -> str:
     return "standup" if (now.hour, now.minute) < (hour, minute) else "desk"
 
 
-def week_strip(data: dict, tickets: list[dict], refs: dict[str, str]) -> str:
-    """The next seven days, with every room he speaks in and everything due.
-
-    The board already knew all of this and never drew it. `sessions` is every
-    room, soonest first; `waits_on.chase_on` is the day a reply stops being late
-    and starts being his problem again. Both were words on a card, which means
-    "is Wednesday covered" was a question he had to answer by reading ten cards.
-
-    Seven days, because the horizon that matters is this week and the next
-    session. Anything overdue is pulled onto today rather than left off the left
-    edge, since a chase that slipped is more urgent than one that has not come
-    up, not less.
-    """
-    today = date.today()
-    days: list[dict] = []
-    for n in range(7):
-        d = today + timedelta(days=n)
-        days.append({"d": d, "iso": d.isoformat(), "sess": [], "due": []})
-    by_iso = {x["iso"]: x for x in days}
-
-    for s in data.get("sessions") or []:
-        slot = by_iso.get(s.get("date", ""))
-        if slot:
-            slot["sess"].append(s)
-
-    overdue = 0
-    for t in tickets:
-        for i in t.get("items", []):
-            st = state_of(i)
-            if st["closed"]:
-                continue
-            when = (i.get("waits_on") or {}).get("chase_on") or ""
-            # `chase_on` is sometimes a sentence ("Only if he raises it again"),
-            # so anything that is not a date is not a date.
-            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", when or ""):
-                continue
-            row = {"item": i, "ref": t.get("ref", ""), "href": refs.get(t.get("ref", ""), "")}
-            if when < today.isoformat():
-                overdue += 1
-                days[0]["due"].append({**row, "late": True})
-            elif when in by_iso:
-                by_iso[when]["due"].append({**row, "late": False})
-
-    cells = []
-    for n, slot in enumerate(days):
-        d = slot["d"]
-        weekend = d.weekday() >= 5
-        marks = "".join(
-            f'<span class="wk-sess" title="{esc(s.get("label") or s.get("kind", ""))}">'
-            f'{esc(s.get("at", ""))} {esc((s.get("kind") or "session").title())}</span>'
-            for s in slot["sess"]
-        )
-        due = "".join(
-            f'<a class="wk-due{" late" if r["late"] else ""}" '
-            f'href="#{esc(r["href"])}" '
-            f'title="{esc(r["item"].get("title", ""))}">'
-            f'<b>{esc(r["item"].get("id", ""))}</b>{esc(r["ref"])}</a>'
-            for r in slot["due"]
-        )
-        klass = " ".join(
-            filter(
-                None,
-                [
-                    "wk-day",
-                    "today" if n == 0 else "",
-                    "weekend" if weekend else "",
-                    "has" if (marks or due) else "",
-                ],
-            )
-        )
-        cells.append(f"""
-        <li class="{klass}">
-          <span class="wk-h"><b>{esc(d.strftime("%a"))}</b>
-            <i>{esc(d.strftime("%-d"))}</i></span>
-          {f'<span class="wk-marks">{marks}</span>' if marks else ""}
-          {f'<span class="wk-dues">{due}</span>' if due else ""}
-        </li>""")
-
-    nxt = next_live(data)
-    lead = ""
-    if nxt.get("date"):
-        when = "today" if nxt["date"] == today.isoformat() else day_words(nxt["date"])
-        lead = f'{nxt.get("name") or nxt.get("kind", "session")}, {when}'
-        if nxt.get("at"):
-            lead += f' at {nxt["at"]}'
-    tail = f"{overdue} overdue" if overdue else ""
-    return f"""
-    <section class="wk" aria-label="The week ahead">
-      <div class="wk-top">
-        <h2>The week ahead</h2>
-        {f'<span class="wk-next">{esc(lead)}</span>' if lead else ""}
-        {f'<span class="wk-late">{esc(tail)}</span>' if tail else ""}
-      </div>
-      <ol class="wk-days">{"".join(cells)}</ol>
-    </section>"""
-
-
 def timetable(rows: list[dict]) -> str:
     """The running order of a day, when the session is a day rather than a slot.
 
@@ -1935,12 +1839,13 @@ def help_dialog() -> str:
 # semantic colour, a text colour or a size, so red still means his work and the
 # type is exactly as legible on all of them.
 THEMES = (
-    ("plain", "Plain", "No wash. What this page has always looked like."),
-    ("ukiyoe", "Ukiyo-e", "Indigo and safflower washes on 和紙 paper grain."),
-    ("ai", "Ai, indigo", "One deep blue, heaviest at the top, like dipped cloth."),
-    ("sakura", "Sakura", "Warm pink and ochre. Easiest on a long read."),
-    ("koke", "Koke, moss", "Quiet green. The calmest of the coloured ones."),
-    ("sumi", "Sumi", "Near monochrome, for when colour is in the way."),
+    ("plain", "Plain", "White cards on grey. What this page always looked like."),
+    ("ukiyoe", "Ukiyo-e 浮世絵", "Cream 和紙 paper, indigo and safflower, fibre grain."),
+    ("ai", "Ai 藍", "Indigo, deepest at the top, like a dipped cloth."),
+    ("sakura", "Sakura 桜", "Warm pink and ochre. Easiest on a long read."),
+    ("koke", "Koke 苔", "Quiet moss green, for an afternoon on one ticket."),
+    ("sumi", "Sumi 墨", "Near monochrome, for when colour is in the way."),
+    ("yoru", "Yoru 夜", "Dark. For the evening, when a white page is too much."),
 )
 
 
@@ -2206,7 +2111,7 @@ def render(data: dict) -> str:
   <div id="view-desk" role="tabpanel">
     {jump_bar(tickets, refs, True)}
     {need_to_know(data, has_script, news, tickets, soon)}
-    {week_strip(data, tickets, refs)}
+    {render_week.render(data, tickets, refs)}
     {render_track(tickets, refs, soon)}
     <div class="howto">
       <span>{f"About <b>{total} min</b> of this is yours. " if total else ""}Every job takes questions and changes: <b>Ask or change</b> at the foot of its card, <kbd>enter</kbd> to send. Finishing one is the page's blind spot: run <code>tg 3</code> in a terminal.</span>

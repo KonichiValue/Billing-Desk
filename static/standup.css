@@ -5,7 +5,7 @@ align-items:center}
 background:var(--accent-line)}
 .run-h .q{font-weight:500;font-size:11.5px;color:var(--soft)}
 .st-run{list-style:none;margin:0;padding:0;overflow:hidden;
-border:1px solid var(--line);border-radius:11px;background:#fff}
+border:1px solid var(--line);border-radius:11px;background:var(--card)}
 .st-run li{display:flex;gap:12px;align-items:center;padding:10px 16px;
 border-bottom:1px solid var(--hair)}
 .st-run li:last-child{border-bottom:0}
@@ -103,7 +103,7 @@ border-radius:8px;display:flex;align-items:center;gap:10px}
 .agenda{list-style:none;margin:11px 0 0;padding:0;display:grid;gap:1px;
 background:var(--line);border:1px solid var(--line);border-radius:10px;
 overflow:hidden}
-.agenda li{background:#fff;padding:9px 13px;display:flex;gap:12px;
+.agenda li{background:var(--card);padding:9px 13px;display:flex;gap:12px;
 align-items:baseline;flex-wrap:wrap}
 .agenda .ag-t{flex:1;min-width:180px;font-size:14px;font-weight:600}
 .agenda .ag-w{flex:2;min-width:220px;font-size:13.5px;color:var(--mut)}
@@ -120,7 +120,7 @@ letter-spacing:.07em;color:var(--amber);margin-bottom:3px}
    with the same weight. */
 .needs{list-style:none;margin:0;padding:0}
 .need-row{display:flex;gap:13px;padding:11px 13px;border-radius:9px;
-margin-bottom:7px;border:1px solid var(--line);background:#fbfcfe}
+margin-bottom:7px;border:1px solid var(--line);background:var(--hair)}
 .need-row.settle{border-color:var(--amber-line);background:var(--amber-bg)}
 .need-row.ask{border-color:var(--accent-line);background:var(--accent-bg)}
 .need-k{flex:none;width:112px;font-size:10.5px;font-weight:750;
@@ -147,13 +147,13 @@ border-left:3px solid var(--line);font-style:italic}
 /* Also today: the other rooms he speaks in the same span, deliberately small so
    the session he is rehearsing keeps the screen. Muted, not the house accent,
    because it is the second thing to read and closed until he asks for it. */
-.also{background:#fbfcfe;border:1px solid var(--line);border-left:4px solid var(--soft);
+.also{background:var(--hair);border:1px solid var(--line);border-left:4px solid var(--soft);
 border-radius:13px;margin-bottom:18px;overflow:hidden}
 .also>summary{cursor:pointer;list-style:none;display:flex;gap:11px;align-items:center;
 flex-wrap:wrap;padding:11px 16px}
 .also>summary::-webkit-details-marker{display:none}
 .also>summary::before{display:none}
-.also[open]>summary{border-bottom:1px solid var(--line);background:#fff}
+.also[open]>summary{border-bottom:1px solid var(--line);background:var(--card)}
 .also-tag{flex:none;font:750 9.5px/1 inherit;text-transform:uppercase;
 letter-spacing:.09em;color:var(--soft);background:var(--card);border:1px solid var(--line);
 padding:4px 7px;border-radius:5px}
@@ -177,7 +177,7 @@ padding:4px 7px;border-radius:5px}
    Also today it carries the house accent, because it is the imminent room and
    the button is the whole point: only the biggest billing items surface here, so
    most weeks it is one glance and shut again. */
-.xws{background:#fff;border:1px solid var(--line);border-left:4px solid var(--accent);
+.xws{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--accent);
 border-radius:13px;margin-bottom:18px;overflow:hidden}
 .xws>summary{cursor:pointer;list-style:none;display:flex;gap:11px;align-items:center;
 flex-wrap:wrap;padding:11px 16px}
