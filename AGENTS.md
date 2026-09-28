@@ -207,6 +207,29 @@ question about one job. The shape in `board.py` is the
 contract the renderers expect, so if you add a field, update `render_desk.py`,
 `render_standup.py` and `render_desk_md.py` in the same change.
 
+The page is drawn by five modules, split so one job lives in one file:
+`render_desk.py` (the shell, the ticket card, the top of the page),
+`render_path.py` (the path to closing a ticket, its jobs, drafts and steps),
+`render_week.py` (the week strip), `render_dialogs.py` (help and settings) and
+`render_standup.py` (the speaking view). `render.py` holds what more than one of
+them needs. `render_desk.render()` is still the entry point everything calls.
+
+**Every job needs a day, or it is invisible on the week strip.** Two fields, and
+which one depends on who is holding the work:
+
+- His own work carries `urgency`, which is **exactly one of `today`,
+  `this-week`, `monitor`** — hyphen, never a space. The strip reads it as a day:
+  `today` is today, `this-week` is the next working day, `monitor` is off the
+  strip. So an actionable job marked `monitor` is one he will not see coming.
+- Work with somebody else carries `waits_on.chase_on`, an **ISO date and never a
+  sentence**. A condition ("only if he raises it again") goes in
+  `waits_on.what`; a sentence in `chase_on` is a job with no day.
+
+`board.save()` refuses anything else, so a wrong value is an exception where it
+was written rather than a job quietly missing from the page an hour later.
+`./check.py` also asserts that everything the desk labels **Do now** has a place
+on the strip.
+
 **How the page looks and behaves lives in `static/`, not in the Python.**
 `base.css` and `desk.css` and `standup.css` are the styles, `base.js` runs the
 buttons and the live status, `desk.js` runs the ask boxes. The renderers read

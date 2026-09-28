@@ -307,6 +307,17 @@ do not read the file back:
                                    "on": "2026-09-02", "source_url": "..."})
   board.save(b)
 
+EVERY JOB NEEDS A DAY, or it is invisible on the week strip he plans against:
+  urgency:  exactly one of  today | this-week | monitor   (hyphen, never a space)
+            his own work gets its day from this -- today lands on today,
+            this-week on the next working day, monitor is off the strip.
+            So an actionable job marked monitor is one he will not see coming.
+  waits_on: {"who": "...", "what": "what they owe", "chase_on": "2026-10-05"}
+            work with somebody else gets its day from chase_on, which is an
+            ISO date and never a sentence. A condition goes in "what".
+  board.save() refuses anything else, so a wrong value stops the sweep here
+  rather than quietly dropping a job off the page.
+
 REBUILD:  ./tick.py --rebuild   (once, at the end -- redraws both pages, moves nothing)
 SCHEMA:   the docstring at the top of board.py is the contract. Read it once if you must;
           never run help(board), and never dump state/board.json to see a current value."""
