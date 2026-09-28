@@ -1217,4 +1217,26 @@ def render_consequences(c: dict, ref: str = "") -> str:
     )
 
 
+def sub_line(st: dict, item: dict | None = None) -> str:
+    """The one line under a title saying what has already happened to it.
 
+    A held item says what it is held for right here. That used to be a separate
+    amber box above the list, which meant reading two lists to find out that one
+    of the four things in front of him was not his to send yet.
+    """
+    bits = []
+    if st["state"] == "waiting":
+        who = st.get("who", "them")
+        since = st.get("at", "")
+        bits.append(
+            f"sent {since}, with {who}" if st.get("sent") else f"with {who} since {since}"
+        )
+    elif st["state"] == "hold" and item:
+        hold = item.get("hold") or {}
+        if hold.get("until"):
+            bits.append(f"do not send yet, waiting for {hold['until']}")
+    elif st["closed"]:
+        bits.append(f"{st['label'].lower()} {st.get('at', '')}")
+    if st.get("note"):
+        bits.append(st["note"])
+    return " &middot; ".join(esc(b) for b in bits)

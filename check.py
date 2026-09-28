@@ -224,9 +224,9 @@ def themes_keep_the_text() -> list[str]:
     # The picker and the stylesheet have to agree, or a theme is offered that
     # does nothing, or exists and cannot be chosen.
     try:
-        import render_desk
+        import render_dialogs
 
-        offered = {k for k, _, _ in render_desk.THEMES} - {"plain"}
+        offered = {k for k, _, _ in render_dialogs.THEMES} - {"plain"}
     except Exception as exc:
         return bad + [f"could not read the theme list: {exc}"]
     for name in sorted(offered - seen):
