@@ -44,6 +44,9 @@ import render_desk
 
 ROOT = Path(__file__).resolve().parent
 KEY = secrets.token_urlsafe(16)
+# The port the desk itself answers on, and the only one that gets to write
+# state/serve.json. `tg`, the Dock icon and launchd all expect it here.
+DESK_PORT = 8787
 # A refresh is a sweep. A prep is that same sweep and then the script written on
 # top of it, so it needs longer before the timeout counts it dead: a lean sweep
 # that finishes in time only to have the script it set up killed is the worst
@@ -1626,7 +1629,13 @@ def lan_address() -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--port", type=int, default=8787)
+    parser.add_argument("--port", type=int, default=DESK_PORT)
+    parser.add_argument(
+        "--no-claim",
+        action="store_true",
+        help="do not write state/serve.json, so `tg open` keeps pointing at the "
+        "real desk. Implied on any port but the default.",
+    )
     parser.add_argument(
         "--lan",
         type=int,
@@ -1656,10 +1665,17 @@ def main() -> int:
         print("The desk is already being served. Open it with: tg open", file=sys.stderr)
         return 1
 
-    (ROOT / "state" / "serve.json").write_text(
-        json.dumps({"port": args.port, "key": KEY, "started": time.time()}) + "\n",
-        encoding="utf-8",
-    )
+    # `serve.json` is how `tg` and the Dock icon find the desk, so only the desk
+    # writes it. A second copy on another port (a preview while working on the
+    # page, two of them side by side) used to overwrite the file and point every
+    # `tg open` at itself, which outlives it: the file stays behind when the
+    # spare is stopped and `tg` then holds a key no running server accepts.
+    # `--no-claim` is for a spare that should be reachable but not findable.
+    if args.port == DESK_PORT and not args.no_claim:
+        (ROOT / "state" / "serve.json").write_text(
+            json.dumps({"port": args.port, "key": KEY, "started": time.time()}) + "\n",
+            encoding="utf-8",
+        )
     print(f"http://127.0.0.1:{args.port}/?k={KEY}", flush=True)
 
     minutes = max(0, args.lan)
