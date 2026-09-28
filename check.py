@@ -187,6 +187,55 @@ def pages_render() -> list[str]:
     return bad
 
 
+def themes_keep_the_text() -> list[str]:
+    """No theme may move the text ramp, and every theme must move a surface.
+
+    Both halves have already broken once. The first themes tinted only a wash
+    behind the cards and left `--card` white, so picking one changed almost
+    nothing you could see. The obvious overcorrection is a theme that recolours
+    the type, which on a page read an hour before he speaks to Tokyo Gas is the
+    worse bug of the two.
+
+    So: a theme block may not set `--ink`, `--mut` or `--soft`, and must set at
+    least one of `--page` or `--card`. `yoru` is the exception on the first half
+    and says so, because a dark page needs its own ink to keep the contrast.
+    """
+    css = (ROOT / "static" / "base.css").read_text(encoding="utf-8")
+    bad = []
+    # Every declaration block belonging to each theme, gathered by name, because
+    # a theme is allowed more than one (the standup view gets its own).
+    blocks: dict[str, str] = {}
+    for match in re.finditer(r'body\[data-theme="(\w+)"\][^{:]*\{([^}]*)\}', css):
+        blocks[match.group(1)] = blocks.get(match.group(1), "") + match.group(2)
+    for name, body in sorted(blocks.items()):
+        if name != "yoru":
+            for var in ("--ink", "--mut", "--soft"):
+                if f"{var}:" in body:
+                    bad.append(
+                        f"theme {name} sets {var}, which changes how readable "
+                        "the page is. A theme may only move surfaces."
+                    )
+        if "--page:" not in body and "--card:" not in body:
+            bad.append(
+                f"theme {name} sets neither --page nor --card, so choosing it "
+                "would not visibly change anything"
+            )
+    seen = set(blocks)
+    # The picker and the stylesheet have to agree, or a theme is offered that
+    # does nothing, or exists and cannot be chosen.
+    try:
+        import render_desk
+
+        offered = {k for k, _, _ in render_desk.THEMES} - {"plain"}
+    except Exception as exc:
+        return bad + [f"could not read the theme list: {exc}"]
+    for name in sorted(offered - seen):
+        bad.append(f"Settings offers {name}, but base.css does not style it")
+    for name in sorted(seen - offered):
+        bad.append(f"base.css styles {name}, but Settings never offers it")
+    return bad
+
+
 RUBY = re.compile(r"\{([^|{}]+)\|([^|{}]+)\}")
 KANJI_RUN = re.compile(r"[一-鿿]+")
 
@@ -282,6 +331,7 @@ CHECKS = (
     ("The board is the shape the renderers expect", board_shape),
     ("Spoken lines carry furigana", furigana_present),
     ("Both pages render", pages_render),
+    ("A theme moves the paper, never the ink", themes_keep_the_text),
     ("The board is up to date", board_freshness),
 )
 
