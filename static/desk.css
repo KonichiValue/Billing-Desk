@@ -159,6 +159,16 @@ width:44px;text-align:right}
 .tr.shut .tr-title{text-decoration:line-through;text-decoration-color:#a6afbe}
 .tr.shut{opacity:.62}
 
+/* The button that fetches the earlier days, and what it says if it cannot. */
+.ev-more{font:650 12px/1 inherit;cursor:pointer;color:var(--accent);
+background:#fff;border:1px dashed var(--accent-line);border-radius:8px;
+padding:8px 12px;margin:0 0 10px;width:100%;
+transition:background-color var(--t-fast) var(--ease),
+border-color var(--t-fast) var(--ease)}
+.ev-more:hover{background:var(--accent-bg);border-style:solid}
+.ev-more:disabled{opacity:.6;cursor:default}
+.ev-failed{display:block;font-size:12px;color:var(--amber-ink);margin:0 0 10px}
+
 /* The timeline, oldest first, one fold per day with the day as the handle. */
 .ev-fold{margin-bottom:8px}
 .ev-fold:last-child{margin-bottom:0}
@@ -216,6 +226,139 @@ color:var(--accent-ink)}
 .term-ja{display:block;margin-top:3px;font-size:14px;font-weight:600;
 color:var(--ink);line-height:1.7}
 .term-ja ruby rt{font-size:.5em}
+
+/* ── The week ahead ──────────────────────────────────────────────────────────
+   Seven days across. The board always knew which rooms he speaks in and which
+   replies come due when; this is the first thing that draws them, so "is
+   Wednesday covered" stops being a question he answers by reading ten cards. */
+.wk{background:var(--card);border:1px solid var(--line);border-radius:13px;
+box-shadow:var(--shadow);margin:0 0 16px;overflow:hidden}
+.wk-top{display:flex;gap:12px;align-items:baseline;padding:11px 16px 10px;
+border-bottom:1px solid var(--line);flex-wrap:wrap}
+.wk-top h2{margin:0;font-size:11.5px;text-transform:uppercase;
+letter-spacing:.09em;color:var(--soft);font-weight:700}
+.wk-next{font-size:12.5px;font-weight:650;color:var(--accent-ink)}
+.wk-late{margin-left:auto;font-size:11.5px;font-weight:700;color:var(--red);
+background:var(--red-bg);border:1px solid var(--red-line);border-radius:20px;
+padding:1px 9px}
+.wk-days{list-style:none;margin:0;padding:0;display:grid;
+grid-template-columns:repeat(7,1fr);gap:1px;background:var(--line)}
+.wk-day{background:#fff;min-height:62px;padding:6px 8px 7px;display:flex;
+flex-direction:column;gap:4px;transition:background-color var(--t-mid) var(--ease)}
+.wk-day.weekend{background:#fbfcfe}
+.wk-day.has:hover{background:var(--accent-bg)}
+/* Today. A tinted column and a heavier date, so the week has an anchor. */
+.wk-day.today{background:var(--accent-bg);box-shadow:inset 0 2px 0 var(--accent)}
+.wk-h{display:flex;gap:5px;align-items:baseline}
+.wk-h b{font-size:10px;font-weight:700;text-transform:uppercase;
+letter-spacing:.07em;color:var(--soft)}
+.wk-h i{font-style:normal;font-size:14px;font-weight:700;color:var(--mut);
+font-variant-numeric:tabular-nums}
+.wk-day.today .wk-h b{color:var(--accent)}
+.wk-day.today .wk-h i{color:var(--accent-ink)}
+/* A room he speaks in. The one thing on this strip he cannot move. */
+.wk-sess{display:block;font-size:10.5px;font-weight:700;color:#fff;
+background:var(--accent);border-radius:5px;padding:2px 6px;
+white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Capped, and it scrolls. One busy day (five chases all landing on the same
+   standup) otherwise sets the height of all seven, and a strip meant to be
+   glanced at becomes a third of the screen. */
+.wk-dues{display:flex;flex-direction:column;gap:3px;margin-top:auto;
+max-height:44px;overflow-y:auto;scrollbar-width:thin}
+.wk-dues::-webkit-scrollbar{width:4px}
+.wk-dues::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
+/* A reply that comes due. The number is the handle, because the numbers are how
+   he refers to his own work. */
+.wk-due{display:flex;gap:5px;align-items:center;font-size:10.5px;
+text-decoration:none;color:var(--mut);background:var(--hair);
+border:1px solid var(--line);border-radius:5px;padding:1px 5px;
+white-space:nowrap;overflow:hidden;
+transition:background-color var(--t-fast) var(--ease),
+border-color var(--t-fast) var(--ease),transform var(--t-fast) var(--ease)}
+.wk-due b{font-weight:800;color:var(--ink);font-variant-numeric:tabular-nums}
+.wk-due:hover{background:#fff;border-color:var(--accent-line);
+color:var(--accent-ink);transform:translateX(1px)}
+.wk-due.late{background:var(--red-bg);border-color:var(--red-line);
+color:var(--red)}
+.wk-due.late b{color:var(--red)}
+@media (max-width:640px){
+/* Seven columns on a phone is seven slivers. Two rows of four reads. */
+.wk-days{grid-template-columns:repeat(4,1fr)}
+.wk-day{min-height:62px}
+}
+
+/* ── The path ────────────────────────────────────────────────────────────────
+   One spine per ticket, where there used to be three sections saying
+   overlapping things about the same fact. A step is a gate; the work it is
+   waiting on hangs underneath it, indented off the same rail.
+
+   The rail is a real line down the left, because "the order they have to fall"
+   is the whole point of the section and a list of bullets does not say it. */
+.path{position:relative}
+.steps-list{list-style:none;margin:0;padding:0;position:relative}
+/* The rail. It stops short at both ends so it reads as a run between the first
+   and last marker rather than a border on the section. */
+.steps-list:before{content:"";position:absolute;left:8px;top:11px;bottom:11px;
+width:2px;background:linear-gradient(180deg,var(--line),var(--hair));
+border-radius:2px}
+.step{position:relative;padding:0 0 4px 30px;margin-bottom:10px}
+.step:last-child{margin-bottom:0}
+.step-head{display:flex;gap:11px;align-items:baseline;padding:7px 0 6px}
+/* The marker sits on the rail, not beside it. */
+.step .g-m{position:absolute;left:0;top:9px;width:18px;height:18px;flex:none;
+border-radius:50%;background:#fff;border:2px solid var(--line);
+display:grid;place-items:center;font-size:10px;font-weight:800;color:#fff;
+transition:transform .18s var(--ease),background-color .18s var(--ease),
+border-color .18s var(--ease)}
+.step.done .g-m{background:var(--green);border-color:var(--green)}
+.step.done .g-m:after{content:"\2713"}
+.step.next .g-m{border-color:#8fbcf7}
+.step.blocked .g-m{background:var(--amber);border-color:var(--amber)}
+/* The step he is actually on. A filled ring and a halo, so the eye lands on it
+   before it reads a word of the card. */
+.step.mine .g-m,.step.loose .g-m{background:var(--red);border-color:var(--red);
+box-shadow:0 0 0 4px var(--red-bg)}
+.step .g-w{flex:1;min-width:0;font-size:14.5px;color:var(--ink);line-height:1.45;
+font-weight:550}
+.step.done .g-w{color:var(--mut);font-weight:400}
+.step .g-n{display:block;font-size:12.5px;color:var(--soft);margin-top:2px;
+font-weight:400}
+.step .g-who{flex:none;font-size:11.5px;font-weight:650;color:var(--soft);
+text-align:right;white-space:nowrap}
+.step.mine .g-who{color:var(--red)}
+/* The work hanging off a gate. Indented once more, so "this job is how that
+   gate falls" is a shape rather than a sentence. */
+.step-work{padding-left:2px;margin-top:2px}
+.step-work .act{margin-bottom:8px}
+.step-work .act:last-child{margin-bottom:0}
+/* A job no gate names. It is a step in its own right, so it gets the rail and
+   the red marker but no gate line above it. */
+.step.loose{padding-top:2px}
+.step.loose>.act,.step.loose .act{margin-bottom:0}
+/* The stretch already behind him: one line, with the count doing the talking. */
+.step-past{margin:14px 0 0}
+.step-past>summary{cursor:pointer;list-style:none;display:flex;gap:9px;
+align-items:center;padding:8px 11px;background:var(--green-bg);
+border:1px solid var(--green-line);border-radius:9px;font-size:12.5px;
+font-weight:600;color:var(--green);transition:background-color .16s var(--ease)}
+.step-past>summary::-webkit-details-marker{display:none}
+.step-past>summary:hover{background:#e3f7ed}
+.step-past .sp-n{flex:none;min-width:19px;height:19px;border-radius:50%;
+background:var(--green);color:#fff;display:grid;place-items:center;
+font-size:10.5px;font-weight:800}
+.step-past .fold-hint{margin-left:auto;border-color:var(--green-line);
+color:var(--green)}
+.step-past[open]>summary{margin-bottom:12px;border-radius:9px 9px 0 0}
+.step-past .steps-list{padding-left:2px}
+
+/* Background: how it got here, the words, the threads. Three folds that were
+   three sections and are now one drawer. What is inside keeps its own shape,
+   so the nested sections lose their card padding and their rules. */
+.bg-drawer .bg-in{padding-top:2px}
+.bg-drawer .bg-in>.sub{padding:12px 0;border-bottom:1px solid var(--hair)}
+.bg-drawer .bg-in>.sub:last-child{border-bottom:0;padding-bottom:2px}
+.bg-drawer .bg-in>details.sub{padding-top:0}
+.bg-drawer .bg-in>details.sub>summary{padding:11px 8px;margin:0 -8px}
 
 /* An item, and the colour of its left edge is where it sits. */
 .act{border:1px solid var(--line);border-left:3px solid var(--line);
@@ -348,7 +491,12 @@ color:var(--soft)}
 .ask-bar{display:flex;gap:10px;align-items:center}
 .ask-open,.ask-copy,.ask-cancel,.ask-send,.qa-chip{font:inherit;cursor:pointer;
 border-radius:7px;border:1px solid var(--line);background:#fff;color:var(--mut);
-font-size:12px;font-weight:650;padding:5px 11px}
+font-size:12px;font-weight:650;padding:5px 11px;
+transition:border-color var(--t-fast) var(--ease),
+background-color var(--t-fast) var(--ease),transform var(--t-fast) var(--ease),
+box-shadow var(--t-fast) var(--ease),color var(--t-fast) var(--ease)}
+.ask-open:active,.ask-copy:active,.ask-cancel:active,.ask-send:active,
+.qa-chip:active{transform:scale(.97);transition-duration:60ms}
 /* The one button on a card that starts a conversation rather than opening a
    link, so it is the one with a mark on it and enough padding to look pressable
    from across the desk. */
@@ -358,9 +506,12 @@ border-color:var(--plum-line,#ddd6fe);background:var(--plum-bg,#f5f3ff)}
 .ask-open .ask-of{font-weight:550;color:var(--plum,#7c3aed);opacity:.85}
 .ask-open .spark{width:14px;height:14px;fill:currentColor;flex:none}
 .ask-open:hover{background:#fff;border-color:var(--plum,#7c3aed);
-box-shadow:0 1px 2px rgba(124,58,237,.14)}
-.ask-open:hover .spark{transform:scale(1.08)}
-.ask-open .spark{transition:transform .12s ease}
+box-shadow:0 2px 8px rgba(124,58,237,.16);transform:translateY(-1px)}
+/* The spark leans in and turns a little. It is the one ornamental thing on the
+   page and it is on the one button that starts a conversation, so it is worth
+   the 12 milliseconds. */
+.ask-open:hover .spark{transform:scale(1.14) rotate(-8deg)}
+.ask-open .spark{transition:transform var(--t-mid) var(--spring)}
 .qa-chip:hover,.ask-copy:hover,.ask-cancel:hover{border-color:#c9cfdb}
 /* Same mark, quieter, where the entry point sits in a heading. */
 .ask-here .spark{width:11px;height:11px;fill:currentColor;margin-right:4px;
@@ -372,9 +523,13 @@ color:#fff}
 .ask-box{margin:10px 0 0}
 .ask-box textarea{width:100%;box-sizing:border-box;font:inherit;font-size:13.5px;
 line-height:1.5;padding:9px 11px;border:1px solid var(--line);border-radius:9px;
-resize:vertical;color:var(--ink);background:#fff}
+resize:vertical;color:var(--ink);background:#fff;
+transition:border-color var(--t-fast) var(--ease),
+box-shadow var(--t-fast) var(--ease)}
 .ask-box textarea:focus{outline:2px solid var(--plum-line,#ddd6fe);
-border-color:var(--plum,#7c3aed)}
+border-color:var(--plum,#7c3aed);box-shadow:0 0 0 4px rgba(124,58,237,.06)}
+.ask-send:not(:disabled):hover{transform:translateY(-1px);
+box-shadow:0 3px 10px rgba(124,58,237,.28)}
 .ask-chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 0}
 .qa-chip{font-size:11.5px;font-weight:600;padding:4px 9px;color:var(--soft)}
 .ask-go{display:flex;gap:8px;align-items:center;margin:9px 0 0;flex-wrap:wrap}

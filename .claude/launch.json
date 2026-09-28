@@ -1,0 +1,15 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "desk",
+      "url": "http://localhost:8787"
+    },
+    {
+      "name": "desk-preview",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["serve.py", "--port", "8791"],
+      "port": 8791
+    }
+  ]
+}

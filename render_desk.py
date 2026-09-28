@@ -18,7 +18,7 @@ import json
 import os
 import re
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import render_standup
@@ -298,26 +298,18 @@ def event_li(r: dict, show_date: bool) -> str:
         </li>"""
 
 
-def render_events(rows: list[dict], ident: str = "") -> str:
-    """The timeline, one fold per day, oldest at the top so it reads forward.
+# How many days of timeline a card carries in the page itself. Everything older
+# is fetched from /api/events when he opens the fold.
+#
+# 323 events across ten tickets was 247KB of the markup, a quarter of the whole
+# page, every one of them inside a fold that is shut on load. That is the cost
+# of drawing history nobody asked to see. Six days covers "what moved since the
+# last standup", which is the only part of a timeline that gets read daily.
+TIMELINE_DAYS = 6
 
-    The day is the handle: press Yesterday and yesterday closes. The most recent
-    day is open because that is the one being asked about, and every other day
-    is a line saying how much is behind it.
 
-    The whole thing is shut to begin with. It was a quarter of the page, open on
-    every card, and it answers a question he asks once a week: how did this get
-    here. Its own summary line carries the only part he needs daily, which is
-    whether anything moved today, and the fold remembers being opened.
-    """
-    if not rows:
-        return ""
-    ordered = sorted(rows, key=lambda x: (x.get("on", ""), x.get("at", "")))
-    days: dict[str, list[dict]] = {}
-    for r in ordered:
-        days.setdefault(r.get("on", ""), []).append(r)
-    keys = list(days)
-
+def day_folds(days: dict[str, list[dict]], keys: list[str]) -> str:
+    """One fold per day, newest open, oldest at the top so it reads forward."""
     out = []
     for day in keys:
         moves = days[day]
@@ -331,10 +323,68 @@ def render_events(rows: list[dict], ident: str = "") -> str:
           <ol class="evs">{"".join(event_li(r, False) for r in moves)}</ol>
         </details>"""
         )
+    return "".join(out)
+
+
+def earlier_events(rows: list[dict]) -> str:
+    """Everything older than the days a card carries, for /api/events.
+
+    The same day folds the card draws, so what arrives looks like what was
+    already there rather than a different kind of list.
+    """
+    if not rows:
+        return ""
+    ordered = sorted(rows, key=lambda x: (x.get("on", ""), x.get("at", "")))
+    days: dict[str, list[dict]] = {}
+    for r in ordered:
+        days.setdefault(r.get("on", ""), []).append(r)
+    keys = list(days)
+    older = keys[: -TIMELINE_DAYS] if len(keys) > TIMELINE_DAYS else []
+    return day_folds(days, older) if older else ""
+
+
+def render_events(rows: list[dict], ident: str = "", ref: str = "") -> str:
+    """The timeline, one fold per day, oldest at the top so it reads forward.
+
+    The day is the handle: press Yesterday and yesterday closes. The most recent
+    day is open because that is the one being asked about, and every other day
+    is a line saying how much is behind it.
+
+    The whole thing is shut to begin with. It answers a question he asks once a
+    week, how did this get here, and its summary line carries the only part he
+    needs daily, which is whether anything moved today.
+
+    Only the last `TIMELINE_DAYS` days are in the page. Anything older is a
+    button that fetches the rest, because history nobody opened was a quarter of
+    a one-megabyte page. A card with no server behind it (a page opened from
+    disk) keeps everything inline instead, since there would be nothing to
+    fetch from.
+    """
+    if not rows:
+        return ""
+    ordered = sorted(rows, key=lambda x: (x.get("on", ""), x.get("at", "")))
+    days: dict[str, list[dict]] = {}
+    for r in ordered:
+        days.setdefault(r.get("on", ""), []).append(r)
+    keys = list(days)
+    shown = keys[-TIMELINE_DAYS:]
+    older = keys[: -len(shown)] if len(keys) > len(shown) else []
+
+    more = ""
+    if older:
+        n = sum(len(days[d]) for d in older)
+        more = (
+            f'<button type="button" class="ev-more" data-events="{esc(ref)}" '
+            f'data-ident="{esc(ident)}">Load the earlier '
+            f'{n} {"move" if n == 1 else "moves"}, '
+            f'{len(older)} {"day" if len(older) == 1 else "days"}</button>'
+            '<noscript><p class="empty">The earlier moves need JavaScript, or '
+            "read them in output/desk.md.</p></noscript>"
+        )
     latest = len(days[keys[-1]])
     return section(
         "Timeline",
-        "".join(out),
+        f'<div class="ev-in">{more}{day_folds(days, shown)}</div>',
         role="log",
         count=f"{latest} {'move' if latest == 1 else 'moves'} {day_words(keys[-1])}",
         hint=f"{len(keys)} {'day' if len(keys) == 1 else 'days'} in all",
@@ -549,6 +599,25 @@ def background(r: dict, quote: str) -> str:
             </details>"""
 
 
+def item_html(
+    r: dict,
+    raise_label: str = "Raise at standup",
+    sess: dict | None = None,
+    standup_href: str = "",
+    ticket_ref: str = "",
+    index: dict[str, dict] | None = None,
+) -> str:
+    """One job, as the row the spine hangs it on.
+
+    Split out of `render_items` so the same job renders identically whether it
+    sits under a gate on the path or on its own. The markup, the classes and the
+    ask box are the ones that were already here: only who calls it changed.
+    """
+    return render_items(
+        [r], raise_label, sess, standup_href, ticket_ref, index, bare=True
+    )
+
+
 def render_items(
     rows: list[dict],
     raise_label: str = "Raise at standup",
@@ -556,6 +625,7 @@ def render_items(
     standup_href: str = "",
     ticket_ref: str = "",
     index: dict[str, dict] | None = None,
+    bare: bool = False,
 ) -> str:
     if not rows:
         return section(
@@ -660,6 +730,8 @@ def render_items(
           </div>
         </{tag}>"""
         )
+    if bare:
+        return "".join(out)
     live = sum(1 for r in rows if not state_of(r)["closed"])
     done = len(rows) - live
     tally = f"{live} open" if live else "all done"
@@ -861,6 +933,205 @@ def render_closes(rows: list[dict], ident: str = "") -> str:
     )
 
 
+ITEM_REF = re.compile(r"\bitems?\s+(\d+)", re.I)
+
+
+def gate_items(gate: dict, live: dict[str, dict]) -> list[str]:
+    """Which of this ticket's items a gate names, in the order it names them.
+
+    The link is prose: a gate's note says "Item 4." or "item 32 confirms it with
+    Robert". There is no field for it, and adding one would mean a sweep
+    maintaining a join it currently gets right by writing a sentence. So the
+    sentence is read.
+
+    Only ids that are really items on this ticket count, so "item 37" on a
+    ticket whose 37 was dropped does not invent a row.
+    """
+    seen: list[str] = []
+    for num in ITEM_REF.findall(f'{gate.get("what", "")} {gate.get("note") or ""}'):
+        if num in live and num not in seen:
+            seen.append(num)
+    return seen
+
+
+def spine(t: dict, rows: list[dict], items: list[dict]) -> tuple[list[dict], int, int]:
+    """The one ordered path to closing this ticket: gates, with his work on them.
+
+    Three sections used to say overlapping things about the same fact. Item 4 on
+    保安閉栓 was a row in "To do", a gate in "What is left before this closes",
+    and two events in the timeline, so the card said the same thing three times
+    in three different voices and he had to read all three to be sure they
+    agreed.
+
+    This is the merge. A gate is a step on the path; the items that step is
+    waiting on hang under it. The gate says what "done" means and whose it is;
+    the item says what he actually types.
+
+    **An item that no gate names is still a row of its own.** Only 20 of the 67
+    gates on this board name an item, so attaching items to gates alone would
+    have hidden most of his open work, which is the one thing this page exists to
+    show. Orphans come first when they are his and last when they are not.
+    """
+    live = {str(i.get("id")): i for i in items}
+    claimed: set[str] = set()
+    out: list[dict] = []
+    for g in rows:
+        ids = gate_items(g, live)
+        claimed.update(ids)
+        out.append({"gate": g, "items": [live[i] for i in ids]})
+
+    loose = [i for i in items if str(i.get("id")) not in claimed]
+    mine, theirs = [], []
+    for i in loose:
+        st = state_of(i)
+        if st["closed"]:
+            theirs.append(i)
+        elif st["state"] == "todo":
+            mine.append(i)
+        else:
+            theirs.append(i)
+    lead = [{"gate": None, "items": [i]} for i in mine]
+    tail = [{"gate": None, "items": [i]} for i in theirs]
+
+    done = sum(1 for g in rows if g.get("state") == "done")
+    return lead + out + tail, done, len(rows)
+
+
+def background_drawer(t: dict, ident: str) -> str:
+    """How it got here, what the words mean, where it is discussed: one drawer.
+
+    Three folds that were three sections, and all three answer questions he asks
+    about once a week: how did this get here, what does 稼働確認 mean, which
+    thread was that in. Shut, they were still three rows of chrome on every card.
+    One drawer with a count is one row, and what is inside keeps its own shape.
+    """
+    inner = "".join(
+        [
+            render_events(t.get("events", []), ident, t.get("ref", "")),
+            render_terms(t.get("terms", [])),
+            render_threads(t.get("threads", [])),
+        ]
+    )
+    if not inner.strip():
+        return ""
+    bits = []
+    if t.get("events"):
+        n = len(t["events"])
+        bits.append(f"{n} move{'s' if n != 1 else ''}")
+    if t.get("terms"):
+        bits.append(f"{len(t['terms'])} terms")
+    if t.get("threads"):
+        n = len(t["threads"])
+        bits.append(f"{n} thread{'s' if n != 1 else ''}")
+    return f"""
+      <details class="sub ref bg-drawer" data-remember="bg-{esc(ident)}">
+        <summary><h3>Background{f'<span class="n">{esc(", ".join(bits))}</span>' if bits else ""}
+          <span class="hint">how it got here, the words, the threads</span></h3>
+          <span class="fold-hint"></span></summary>
+        <div class="bg-in">{inner}</div>
+      </details>"""
+
+
+def render_path(
+    t: dict,
+    ident: str,
+    raise_label: str,
+    sess: dict | None,
+    standup_href: str,
+    index: dict[str, dict] | None,
+) -> str:
+    """The path to closing this ticket: every gate, with his work hanging on it.
+
+    One section where there were three. The rows that are still live are drawn
+    open; the stretch that is already behind him folds into a single line,
+    because "5 of 8 done" is the fact and the five are the footnote.
+    """
+    items = t.get("items", [])
+    gates = t.get("closes_when", [])
+    rows, done, total = spine(t, gates, items)
+    ref = t.get("ref", "")
+
+    def is_settled(row: dict) -> bool:
+        if any(not state_of(i)["closed"] for i in row["items"]):
+            return False
+        g = row["gate"]
+        return (g or {}).get("state") == "done" if g else True
+
+    def row_html(row: dict) -> str:
+        g, kids = row["gate"], row["items"]
+        work = "".join(
+            item_html(i, raise_label, sess, standup_href, ref, index) for i in kids
+        )
+        if not g:
+            # An item no gate names. It is his work all the same, so it is a step
+            # on the path in its own right rather than a footnote to one. It
+            # still gets a marker, or it floats beside the rail rather than on
+            # it, and the column stops reading as one sequence.
+            solo = state_of(kids[0]) if kids else {"state": "", "closed": False}
+            dot = "done" if solo["closed"] else "mine" if solo["state"] == "todo" else "next"
+            return f'<li class="step loose {dot}"><span class="g-m"></span>{work}</li>'
+        state = g.get("state", "next")
+        mine = any(state_of(i)["state"] == "todo" for i in kids)
+        note = f'<span class="g-n">{esc(g.get("note"))}</span>' if g.get("note") else ""
+        who = esc(g.get("who", ""))
+        return f"""
+        <li class="step {esc(state)}{" has-work" if work else ""}{" mine" if mine else ""}">
+          <div class="step-head">
+            <span class="g-m"></span>
+            <span class="g-w">{esc(g.get("what"))}{note}</span>
+            {f'<span class="g-who">{who}</span>' if who else ""}
+          </div>
+          {f'<div class="step-work">{work}</div>' if work else ""}
+        </li>"""
+
+    live_rows = [r for r in rows if not is_settled(r)]
+    past = [r for r in rows if is_settled(r)]
+    live_html = "".join(row_html(r) for r in live_rows)
+    # What is still live comes first. The stretch behind him is a footnote under
+    # it, not a preamble to it: he opens this section to find the next move.
+    body = f'<ol class="steps-list">{live_html}</ol>' if live_html else (
+        '<p class="empty">Every gate on this one has fallen. It stays on the '
+        "page because Asana has not closed it.</p>"
+    )
+    if past:
+        body += f"""
+        <details class="step-past" data-remember="past-{esc(ident)}">
+          <summary><span class="sp-n">{len(past)}</span>
+            already behind you<span class="fold-hint"></span></summary>
+          <ol class="steps-list">{"".join(row_html(r) for r in past)}</ol>
+        </details>"""
+
+    nxt = next((r for r in live_rows if r["gate"]), None)
+    hint = ""
+    if nxt:
+        who = (nxt["gate"].get("who") or "").strip()
+        whose = (
+            "yours"
+            if who.lower() in {"you", "rei", "rei samuelsson"}
+            else f"with {who}"
+            if who
+            else ""
+        )
+        hint = f"Next: {nxt['gate'].get('what', '')}" + (f", {whose}" if whose else "")
+        if len(hint) > 78:
+            hint = hint[:77].rsplit(" ", 1)[0] + "…"
+    mine_n = sum(
+        1
+        for i in items
+        if state_of(i)["state"] == "todo" and not blocked_on(i, index or {})
+    )
+    count = f"{done} of {total} done" if total else ""
+    if mine_n:
+        count = (count + ", " if count else "") + f"{mine_n} with you"
+    return section(
+        "The path to closing this",
+        f'<div class="path">{body}</div>',
+        role="now",
+        count=count,
+        hint=hint,
+    )
+
+
 def internal_btn(internal: dict) -> str:
     """The Kraken-side ticket, named on hover rather than in the row.
 
@@ -945,19 +1216,16 @@ def render_ticket(
                role="key",
                hint="both sides" if internal.get("build") else "the short answer")}
 
-      {render_items(
-          t.get("items", []),
+      {render_path(
+          t,
+          ident,
           raise_label,
           sess,
           render_standup.anchor(ident),
-          t.get("ref", ""),
           index,
       )}
       {render_decisions(t.get("open_decisions", []))}
-      {render_closes(t.get("closes_when", []), ident)}
-      {render_events(t.get("events", []), ident)}
-      {render_terms(t.get("terms", []))}
-      {render_threads(t.get("threads", []))}
+      {background_drawer(t, ident)}
       {section("Ask or change on this ticket",
                ask_block(
                    f'ticket:{t.get("ref")}',
@@ -977,6 +1245,7 @@ def shell(
     view: str = "desk",
     meeting_iso: str = "",
     meeting_label: str = "",
+    closed: str = "",
 ) -> str:
     # The manifest and icon are what let Chrome install this as its own app, with
     # its own Dock tile. They 404 harmlessly when the page is opened from disk.
@@ -990,7 +1259,19 @@ def shell(
 <title>{esc(title)}</title>
 <style>{asset("base.css")}{asset("desk.css")}{asset("standup.css")}</style></head>
 <body data-view="{esc(view)}" data-meeting="{esc(meeting_iso)}"
-      data-meeting-label="{esc(meeting_label)}" data-stamp="{stamp()}">
+      data-meeting-label="{esc(meeting_label)}" data-stamp="{stamp()}"
+      data-closed="{esc(closed)}">
+<script>
+/* The theme, before anything is drawn. Read from localStorage here rather than
+   in base.js at the end of the body, because a page that paints plain and then
+   repaints indigo is a flash on every single load. Wrapped in try/catch: a
+   browser with storage denied gets the plain theme, not a broken page. */
+(function(){{try{{
+var t=localStorage.getItem('desk-theme');
+if(t&&t!=='plain')document.body.dataset.theme=t;
+if(localStorage.getItem('desk-motion')==='off')document.body.dataset.motion='off';
+}}catch(e){{}}}})();
+</script>
 {body}
 <script>{asset("base.js")}</script></body></html>"""
 
@@ -1092,6 +1373,103 @@ def opening_view(board: dict, has_script: bool) -> str:
         hour, minute = 10, 30
     now = datetime.now()
     return "standup" if (now.hour, now.minute) < (hour, minute) else "desk"
+
+
+def week_strip(data: dict, tickets: list[dict], refs: dict[str, str]) -> str:
+    """The next seven days, with every room he speaks in and everything due.
+
+    The board already knew all of this and never drew it. `sessions` is every
+    room, soonest first; `waits_on.chase_on` is the day a reply stops being late
+    and starts being his problem again. Both were words on a card, which means
+    "is Wednesday covered" was a question he had to answer by reading ten cards.
+
+    Seven days, because the horizon that matters is this week and the next
+    session. Anything overdue is pulled onto today rather than left off the left
+    edge, since a chase that slipped is more urgent than one that has not come
+    up, not less.
+    """
+    today = date.today()
+    days: list[dict] = []
+    for n in range(7):
+        d = today + timedelta(days=n)
+        days.append({"d": d, "iso": d.isoformat(), "sess": [], "due": []})
+    by_iso = {x["iso"]: x for x in days}
+
+    for s in data.get("sessions") or []:
+        slot = by_iso.get(s.get("date", ""))
+        if slot:
+            slot["sess"].append(s)
+
+    overdue = 0
+    for t in tickets:
+        for i in t.get("items", []):
+            st = state_of(i)
+            if st["closed"]:
+                continue
+            when = (i.get("waits_on") or {}).get("chase_on") or ""
+            # `chase_on` is sometimes a sentence ("Only if he raises it again"),
+            # so anything that is not a date is not a date.
+            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", when or ""):
+                continue
+            row = {"item": i, "ref": t.get("ref", ""), "href": refs.get(t.get("ref", ""), "")}
+            if when < today.isoformat():
+                overdue += 1
+                days[0]["due"].append({**row, "late": True})
+            elif when in by_iso:
+                by_iso[when]["due"].append({**row, "late": False})
+
+    cells = []
+    for n, slot in enumerate(days):
+        d = slot["d"]
+        weekend = d.weekday() >= 5
+        marks = "".join(
+            f'<span class="wk-sess" title="{esc(s.get("label") or s.get("kind", ""))}">'
+            f'{esc(s.get("at", ""))} {esc((s.get("kind") or "session").title())}</span>'
+            for s in slot["sess"]
+        )
+        due = "".join(
+            f'<a class="wk-due{" late" if r["late"] else ""}" '
+            f'href="#{esc(r["href"])}" '
+            f'title="{esc(r["item"].get("title", ""))}">'
+            f'<b>{esc(r["item"].get("id", ""))}</b>{esc(r["ref"])}</a>'
+            for r in slot["due"]
+        )
+        klass = " ".join(
+            filter(
+                None,
+                [
+                    "wk-day",
+                    "today" if n == 0 else "",
+                    "weekend" if weekend else "",
+                    "has" if (marks or due) else "",
+                ],
+            )
+        )
+        cells.append(f"""
+        <li class="{klass}">
+          <span class="wk-h"><b>{esc(d.strftime("%a"))}</b>
+            <i>{esc(d.strftime("%-d"))}</i></span>
+          {f'<span class="wk-marks">{marks}</span>' if marks else ""}
+          {f'<span class="wk-dues">{due}</span>' if due else ""}
+        </li>""")
+
+    nxt = next_live(data)
+    lead = ""
+    if nxt.get("date"):
+        when = "today" if nxt["date"] == today.isoformat() else day_words(nxt["date"])
+        lead = f'{nxt.get("name") or nxt.get("kind", "session")}, {when}'
+        if nxt.get("at"):
+            lead += f' at {nxt["at"]}'
+    tail = f"{overdue} overdue" if overdue else ""
+    return f"""
+    <section class="wk" aria-label="The week ahead">
+      <div class="wk-top">
+        <h2>The week ahead</h2>
+        {f'<span class="wk-next">{esc(lead)}</span>' if lead else ""}
+        {f'<span class="wk-late">{esc(tail)}</span>' if tail else ""}
+      </div>
+      <ol class="wk-days">{"".join(cells)}</ol>
+    </section>"""
 
 
 def timetable(rows: list[dict]) -> str:
@@ -1547,7 +1925,120 @@ def help_dialog() -> str:
 
     <h3>Keys</h3>
     <p><kbd>1</kbd> your work, <kbd>2</kbd> what you say, <kbd>/</kbd> find
-    anything, <kbd>s</kbd> Japanese only, <kbd>?</kbd> this.</p>
+    anything, <kbd>s</kbd> Japanese only, <kbd>,</kbd> settings,
+    <kbd>?</kbd> this.</p>
+  </div>
+</dialog>"""
+
+
+# Every theme is a wash behind the cards and nothing else: no theme touches a
+# semantic colour, a text colour or a size, so red still means his work and the
+# type is exactly as legible on all of them.
+THEMES = (
+    ("plain", "Plain", "No wash. What this page has always looked like."),
+    ("ukiyoe", "Ukiyo-e", "Indigo and safflower washes on 和紙 paper grain."),
+    ("ai", "Ai, indigo", "One deep blue, heaviest at the top, like dipped cloth."),
+    ("sakura", "Sakura", "Warm pink and ochre. Easiest on a long read."),
+    ("koke", "Koke, moss", "Quiet green. The calmest of the coloured ones."),
+    ("sumi", "Sumi", "Near monochrome, for when colour is in the way."),
+)
+
+
+def settings_dialog() -> str:
+    """Personalisation, on Slack's terms: the background, and nothing else.
+
+    A theme here is deliberately powerless. It sets one wash behind the cards
+    and cannot reach a semantic colour or a font size, because the page is read
+    sixty minutes before he speaks to Tokyo Gas and a theme that made 保安閉栓
+    a shade harder to read would be a bug with a settings entry.
+    """
+    swatches = "".join(
+        f"""
+      <button type="button" class="thm" data-theme-set="{esc(key)}"
+              aria-pressed="false">
+        <span class="thm-sw thm-{esc(key)}"></span>
+        <span class="thm-t"><b>{esc(name)}</b>{esc(why)}</span>
+        <span class="thm-on">Using this</span>
+      </button>"""
+        for key, name, why in THEMES
+    )
+    return f"""
+<dialog class="help set" id="settings">
+  <div class="help-in">
+    <button class="help-close" type="button">Close</button>
+    <h2>Settings</h2>
+    <p class="lead">Kept in this browser, on this machine. Nothing here changes
+    the board.</p>
+
+    <h3>Theme</h3>
+    <p>The background only. Every colour that means something &mdash; red is
+    yours, amber is blocked, blue is with someone else, green is closed &mdash;
+    and every text size stay exactly as they are.</p>
+    <div class="thms">{swatches}</div>
+
+    <h3>Motion</h3>
+    <p>Presses, folds and the wave when a job closes. Turn it off here, or
+    system-wide with Reduce Motion, which this page already follows.</p>
+    <div class="thms">
+      <button type="button" class="thm wide" data-motion-set="on"
+              aria-pressed="false">
+        <span class="thm-t"><b>On</b>Everything under a quarter of a
+        second.</span>
+        <span class="thm-on">Using this</span>
+      </button>
+      <button type="button" class="thm wide" data-motion-set="off"
+              aria-pressed="false">
+        <span class="thm-t"><b>Off</b>No transitions, no wave.</span>
+        <span class="thm-on">Using this</span>
+      </button>
+    </div>
+
+    <h3>Opening view</h3>
+    <p>Which half this page starts on. By default it decides by the clock:
+    the script before the session, your work after it.</p>
+    <div class="thms">
+      <button type="button" class="thm wide" data-open-set="auto"
+              aria-pressed="false">
+        <span class="thm-t"><b>By the clock</b>The script until the session
+        starts, then your work.</span>
+        <span class="thm-on">Using this</span>
+      </button>
+      <button type="button" class="thm wide" data-open-set="desk"
+              aria-pressed="false">
+        <span class="thm-t"><b>Always my work</b>Open on the tickets.</span>
+        <span class="thm-on">Using this</span>
+      </button>
+      <button type="button" class="thm wide" data-open-set="standup"
+              aria-pressed="false">
+        <span class="thm-t"><b>Always what I say</b>Open on the script.</span>
+        <span class="thm-on">Using this</span>
+      </button>
+    </div>
+
+    <h3>Connections</h3>
+    <p>A sweep needs a model credential and it needs Asana and Slack. These are
+    three separate things: on 28 September all four servers reported connected
+    while the prep died six minutes in, because the credential had lapsed and
+    nothing checked it. This checks all three, the way a sweep would.</p>
+    <div class="chk-bar">
+      <button type="button" class="btn chk-go" data-check>Test connections</button>
+      <span class="chk-when"></span>
+    </div>
+    <ul class="chk-rows"></ul>
+    <p class="chk-note"></p>
+    <p>Only you can approve a grant in a browser, so a lapsed one needs
+    <b>Log in</b> in the header, or <code>./setup-mcp.sh</code> in a terminal.
+    A credential that will not answer is usually a locked 1Password:
+    <code>op signin</code>.</p>
+
+    <h3>This page</h3>
+    <p>Reloads itself when the board moves, and holds the reload back only when
+    you are half way through typing in a composer. Folds, the open tab and your
+    place on the page are all remembered in this browser.</p>
+    <div class="chk-bar">
+      <button type="button" class="btn" data-forget-ui>Forget what I opened</button>
+      <span class="chk-when" data-forget-said></span>
+    </div>
   </div>
 </dialog>"""
 
@@ -1705,6 +2196,8 @@ def render(data: dict) -> str:
     {link_btn((data.get("meeting_note") or {}).get("url", ""), "Meeting note")}
     <button class="toggle" id="scriptonly">Japanese only</button>
     {controls(prep_label)}
+    <button class="toggle" data-settings type="button" aria-label="Settings"
+            title="Settings">&#9881;</button>
     <button class="toggle" data-help type="button" aria-label="How to use this"
             title="How to use this">?</button>
   </span>
@@ -1713,6 +2206,7 @@ def render(data: dict) -> str:
   <div id="view-desk" role="tabpanel">
     {jump_bar(tickets, refs, True)}
     {need_to_know(data, has_script, news, tickets, soon)}
+    {week_strip(data, tickets, refs)}
     {render_track(tickets, refs, soon)}
     <div class="howto">
       <span>{f"About <b>{total} min</b> of this is yours. " if total else ""}Every job takes questions and changes: <b>Ask or change</b> at the foot of its card, <kbd>enter</kbd> to send. Finishing one is the page's blind spot: run <code>tg 3</code> in a terminal.</span>
@@ -1730,9 +2224,26 @@ def render(data: dict) -> str:
   </div>
 </div>
 {finder(tickets, refs)}
-{help_dialog()}"""
+{help_dialog()}
+{settings_dialog()}"""
+    # Which items are closed right now. The page remembers this set, so when
+    # `./tick.py 45` in a terminal reloads it, the page can tell which number
+    # just fell rather than only that something did.
+    shut = ",".join(
+        sorted(
+            str(i.get("id"))
+            for t in tickets
+            for i in t.get("items", [])
+            if state_of(i)["closed"]
+        )
+    )
     return shell(
-        "Billing desk", body, opening_view(data, has_script), meeting, meeting_label
+        "Billing desk",
+        body,
+        opening_view(data, has_script),
+        meeting,
+        meeting_label,
+        shut,
     )
 
 

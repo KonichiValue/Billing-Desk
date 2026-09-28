@@ -18,6 +18,7 @@ generated at startup, so nothing else on the machine can start an agent run.
 from __future__ import annotations
 
 import argparse
+import gzip
 import json
 import os
 import queue
@@ -33,10 +34,13 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Callable, NamedTuple
+from urllib.parse import unquote
 
 import agent
+import board
 import keep
 import render
+import render_desk
 
 ROOT = Path(__file__).resolve().parent
 KEY = secrets.token_urlsafe(16)
@@ -481,6 +485,94 @@ def blockers() -> tuple[list[str], str]:
     should fall through to Cursor without the server being restarted.
     """
     return agent.blockers(agent.pick())
+
+
+# The last diagnostics run, for the Settings panel. Its own state rather than
+# `job`, because pressing Test connections must not look like a sweep starting:
+# the Refresh button stays live throughout and the board never moves.
+health: dict = {"state": "cold", "at": "", "rows": [], "note": ""}
+health_lock = threading.Lock()
+
+
+def run_check() -> None:
+    """Every connection a sweep needs, tested the way a sweep would test it.
+
+    Three separate questions, and 28 September is the day that proved they are
+    separate. All four MCP servers reported Connected while the prep died six
+    minutes in, because what had failed was the model credential, which nothing
+    on this page had ever checked.
+
+    So: the credential (can a run reach a model at all), the servers (has he
+    approved the grants), and the tools (would a run starting now actually have
+    Asana and Slack in context, which is the only one that predicts a working
+    sweep). `agent.tools_ready` is the expensive one and it goes last.
+    """
+    started = datetime.now().strftime("%H:%M")
+    with health_lock:
+        health.update(state="running", at=started, rows=[], note="")
+
+    rows: list[dict] = []
+
+    def add(name: str, ok: bool | None, said: str, fix: str = "") -> None:
+        rows.append({"name": name, "ok": ok, "said": said, "fix": fix})
+        with health_lock:
+            health["rows"] = list(rows)
+
+    kind = agent.pick()
+    if kind is None:
+        add("Agent", False, "No agent CLI is installed.", "Install Claude Code.")
+        with health_lock:
+            health.update(state="done", note="Nothing can run.")
+        return
+    add("Agent", True, f"{kind.name} is installed.")
+
+    cred = bool(kind.signed_in())
+    add(
+        "Model credential",
+        cred,
+        "Reachable." if cred else "apiKeyHelper gave nothing back.",
+        "" if cred else "Unlock 1Password, or run `op signin`, then try again.",
+    )
+
+    try:
+        states = kind.mcp_states()
+    except (OSError, subprocess.SubprocessError) as exc:
+        states = {}
+        add("MCP servers", None, f"Could not ask: {exc}")
+    for name in ("asana", "slack", "google", "ktdb-tg-krakencore"):
+        if name not in states:
+            add(name, None, "Not configured.", "Run ./setup-mcp.sh")
+            continue
+        state = states[name]
+        add(
+            name,
+            state == "connected",
+            {"connected": "Connected.", "needs-auth": "Needs authorising."}.get(
+                state, state.title() + "."
+            ),
+            "" if state == "connected" else "Press Log in, or run ./setup-mcp.sh",
+        )
+
+    if not cred:
+        with health_lock:
+            health.update(state="done", note="No credential, so the tool check was skipped.")
+        return
+    agent.forget_readiness()
+    ready, why = agent.tools_ready(kind)
+    add(
+        "Tools in a real run",
+        ready,
+        "Asana and Slack arrive with their tools." if ready else why,
+        "" if ready else "Run ./setup-mcp.sh, then test again.",
+    )
+    bad = [r for r in rows if r["ok"] is False]
+    with health_lock:
+        health.update(
+            state="done",
+            note="Everything a sweep needs is there."
+            if not bad
+            else f"{len(bad)} thing{'s' if len(bad) != 1 else ''} to fix before a sweep.",
+        )
 
 
 def connect_one(kind: agent.Kind, args: list[str], label: str, done) -> bool:
@@ -1272,6 +1364,34 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def send(self, code: int, body: bytes, ctype: str) -> None:
+        # The desk page is a megabyte of markup: ten tickets, both views, every
+        # fold and a hundred composers, all drawn on every load because that is
+        # what makes the page never stale. It compresses to about a fifth of
+        # that, and gzip costs 13ms against a 9ms render, which is worth it on
+        # anything but the loopback where it is free anyway. It matters most on
+        # `tg phone`, where the same page goes over the wifi.
+        #
+        # Only text, only above the size where the header costs more than the
+        # saving, and only when the browser said it would take it.
+        if (
+            len(body) > 1400
+            and ("text/" in ctype or "json" in ctype or "javascript" in ctype)
+            and "gzip" in (self.headers.get("Accept-Encoding") or "")
+        ):
+            # Level 1, not 6. On this page 6 spends 15ms to save 233KB and 1
+            # spends 5ms to save 293KB: the extra 10ms of latency buys 60KB
+            # that neither loopback nor a phone on the same wifi will notice.
+            packed = gzip.compress(body, 1)
+            if len(packed) < len(body):
+                self.send_response(code)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Encoding", "gzip")
+                self.send_header("Content-Length", str(len(packed)))
+                self.send_header("Vary", "Accept-Encoding")
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(packed)
+                return
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
@@ -1295,6 +1415,34 @@ class Handler(BaseHTTPRequestHandler):
             local = client in ("127.0.0.1", "::1", "::ffff:127.0.0.1")
             self.json_out(200, {"ok": True, **({"key": KEY} if local else {})})
             return
+        if path == "/api/events":
+            # The earlier half of one ticket's timeline, as HTML, for the button
+            # the card draws when there is more history than it carries. A GET
+            # with no key: it is the same board the page is already showing, it
+            # writes nothing, and keying it would mean handing the key to a
+            # page that may have been opened from disk.
+            query = self.path.split("?", 1)[1] if "?" in self.path else ""
+            want = ""
+            for bit in query.split("&"):
+                if bit.startswith("ref="):
+                    want = unquote(bit[4:])
+            try:
+                data = board.load()
+            except (OSError, ValueError) as exc:
+                self.json_out(500, {"error": str(exc)})
+                return
+            row = next(
+                (t for t in data.get("tickets", []) if t.get("ref") == want), None
+            )
+            if row is None:
+                self.json_out(404, {"error": "no such ticket"})
+                return
+            self.send(
+                200,
+                render_desk.earlier_events(row.get("events", [])).encode("utf-8"),
+                "text/html; charset=utf-8",
+            )
+            return
         if path == "/api/status":
             with job_lock:
                 state = dict(job)
@@ -1304,6 +1452,9 @@ class Handler(BaseHTTPRequestHandler):
                     state["last"] = live["last"]
                     state["written"] = live["chars"]
             state["asks"] = pending_asks()
+            with health_lock:
+                if health["state"] != "cold":
+                    state["health"] = dict(health, rows=list(health["rows"]))
             # What the board looks like now. The page holds the one it was drawn
             # from, so a `./tick.py 26` in a terminal reloads the browser rather
             # than sitting there being quietly wrong.
@@ -1444,6 +1595,15 @@ class Handler(BaseHTTPRequestHandler):
                 target=guarded(start_login, "sign-in"), daemon=True
             ).start()
             self.json_out(202, {"state": "needs_login"})
+            return
+        if path == "/api/check":
+            # What Settings shows when he presses Test connections. Started in a
+            # thread and collected from /api/status, because the real check
+            # spends about 16 seconds starting a headless run to count its
+            # tools, and holding the request open for that is how a page ends up
+            # looking hung.
+            threading.Thread(target=guarded(run_check, "check"), daemon=True).start()
+            self.json_out(202, {"state": "checking"})
             return
         self.json_out(404, {"error": "not here"})
 

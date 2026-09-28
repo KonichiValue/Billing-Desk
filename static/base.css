@@ -2,20 +2,47 @@
 /* One neutral ramp, one accent that changes with the view, and four semantic
    colours that only ever mean one thing: red is yours, amber is blocked, blue
    is with somebody else, green is closed. Nothing else gets to be coloured, so
-   colour on this page always carries information. */
+   colour on this page always carries information.
+
+   The hues are ukiyo-e pigments rather than the default UI-kit set, because
+   this is a desk for Japanese billing work and it may as well look like it:
+   藍 (ai, indigo) for the accent, 紅 (beni, safflower) for what is his, areas
+   of flat colour with a fine darker line around them, which is how those prints
+   are built. Every one is still checked for contrast on white: the meaning
+   comes first and the pigment is only which red it is. */
 :root{
---ink:#151a23;--mut:#4e5666;--soft:#79818f;--line:#e5e8ee;--hair:#f1f3f7;
---card:#fff;--page:#f4f6fa;--head:#0d1524;--head-2:#1a2740;
---accent:#0b5cd5;--accent-bg:#eff5ff;--accent-line:#c3daff;--accent-ink:#0a3d94;
---red:#b42318;--red-bg:#fef4f2;--red-line:#fbd2cd;
---amber:#b25309;--amber-bg:#fff9ed;--amber-line:#f9dda3;--amber-ink:#8a3d05;
---green:#046c46;--green-bg:#effaf4;--green-line:#a8e7c5;
---blue:#1257c9;--blue-bg:#f0f6ff;--blue-line:#bedaff;
+/* 墨 sumi, ink. Warmed a few degrees off blue-black, which is what stops the
+   page reading as cold grey. */
+--ink:#171b26;--mut:#4d5666;--soft:#767f90;--line:#e3e7ef;--hair:#f0f3f8;
+--card:#fff;--page:#f3f5fa;--head:#0d1626;--head-2:#1b2b47;
+/* 藍 ai, indigo. */
+--accent:#12539e;--accent-bg:#eef4fc;--accent-line:#bcd5ee;--accent-ink:#0d3d78;
+/* 紅 beni, safflower red: his work. */
+--red:#b3261e;--red-bg:#fef3f1;--red-line:#f8cfc9;
+/* 黄土 odo, yellow ochre: blocked. */
+--amber:#a75d0a;--amber-bg:#fff8ea;--amber-line:#f5dba2;--amber-ink:#834505;
+/* 緑青 rokusho, malachite: closed. */
+--green:#0a6b4a;--green-bg:#edf9f3;--green-line:#a4e3c4;
+--blue:#1a5bb8;--blue-bg:#eff5fd;--blue-line:#bcd7f5;
 /* Asking, and what came back. Its own colour, because an answer from the desk
-   is neither the work nor the words: it is the thing you did not know. */
---plum:#7c3aed;--plum-bg:#f7f5ff;--plum-line:#ddd6fe;--plum-ink:#5b21b6;
---shadow:0 1px 2px rgba(16,24,40,.05),0 1px 3px rgba(16,24,40,.06);
---lift:0 2px 4px rgba(16,24,40,.06),0 8px 20px rgba(16,24,40,.06)}
+   is neither the work nor the words: it is the thing you did not know.
+   紫 murasaki, the dye that was restricted to the court, which is as good a
+   reason as any for it to be the one colour that means "something new". */
+--plum:#6f36c9;--plum-bg:#f6f3fd;--plum-line:#d8ccf7;--plum-ink:#4c1d95;
+/* Shadows in two steps, both tinted with the ink rather than pure black, so a
+   lifted card reads as paper over paper instead of a cut-out. */
+--shadow:0 1px 2px rgba(20,26,40,.05),0 1px 3px rgba(20,26,40,.06);
+--lift:0 2px 4px rgba(20,26,40,.06),0 10px 24px rgba(20,26,40,.08);
+/* Motion. Three durations and two curves, named, so nothing on this page
+   invents its own timing. `ease` is the standard decelerate for anything that
+   moves on its own; `spring` overshoots very slightly and is only for something
+   the finger is on, because that tiny overshoot is what makes a button feel
+   like it pushed back. Nothing is allowed over 260ms: this page is read sixty
+   minutes before he speaks to Tokyo Gas, and a interface that makes him wait
+   for a flourish is a worse interface. */
+--ease:cubic-bezier(.2,.8,.2,1);
+--spring:cubic-bezier(.34,1.56,.64,1);
+--t-fast:110ms;--t-mid:180ms;--t-slow:260ms}
 /* The script view is a different room: warmer paper, plum accent. You can tell
    which view you are in from across the desk, without reading a tab. */
 body[data-view="standup"]{--accent:#9c1b85;--accent-bg:#fdf1fa;--accent-line:#f1c3e6;
@@ -27,6 +54,55 @@ body[data-view="standup"]{--accent:#9c1b85;--accent-bg:#fdf1fa;--accent-line:#f1
 body{margin:0;background:var(--page);color:var(--ink);
 font:15.5px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans",
 "Noto Sans JP",sans-serif;-webkit-font-smoothing:antialiased}
+
+/* ── Themes ──────────────────────────────────────────────────────────────────
+   Personalisation, on the same terms as Slack's: the background changes and
+   nothing else does. No theme is allowed to touch a semantic colour, a text
+   colour or a size, so red still means his and the type stays exactly as
+   legible on every one of them. A theme is a wash behind the cards, which is
+   why each is a single `body:before` and nothing more.
+
+   `data-theme` on the body, kept in localStorage, chosen in Settings. Plain is
+   the default and draws nothing at all. */
+body:before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+transition:opacity var(--t-slow) var(--ease)}
+/* Everything real sits above the wash. */
+header.top,.wrap,.pal,dialog,.nami{position:relative;z-index:1}
+header.top{z-index:30}
+
+/* 浮世絵. Two wide pigment washes and the fibre grain of 和紙, all under 6%,
+   so the page reads as paper rather than as a screen. */
+body[data-theme="ukiyoe"]:before{background:
+radial-gradient(1200px 620px at 12% -8%,rgba(18,83,158,.075),transparent 60%),
+radial-gradient(1000px 560px at 100% 4%,rgba(179,38,30,.045),transparent 62%),
+repeating-linear-gradient(94deg,rgba(23,27,38,.018) 0 1px,transparent 1px 4px)}
+body[data-theme="ukiyoe"][data-view="standup"]:before{background:
+radial-gradient(1100px 600px at 8% -6%,rgba(156,27,133,.075),transparent 60%),
+radial-gradient(900px 520px at 100% 2%,rgba(167,93,10,.05),transparent 62%),
+repeating-linear-gradient(94deg,rgba(23,27,38,.018) 0 1px,transparent 1px 4px)}
+
+/* 藍 indigo. One colour, deepest at the top, like a dipped cloth. */
+body[data-theme="ai"]{--page:#eef2f9}
+body[data-theme="ai"]:before{background:
+linear-gradient(180deg,rgba(18,83,158,.10),rgba(18,83,158,.02) 46%,transparent 70%)}
+
+/* 桜 cherry. The warmest one, for the speaking view especially. */
+body[data-theme="sakura"]{--page:#fbf5f7}
+body[data-theme="sakura"]:before{background:
+radial-gradient(900px 520px at 88% -6%,rgba(200,90,130,.10),transparent 62%),
+radial-gradient(760px 420px at 4% 8%,rgba(167,93,10,.035),transparent 60%)}
+
+/* 苔 moss. The quietest of the coloured ones. */
+body[data-theme="koke"]{--page:#f1f6f2}
+body[data-theme="koke"]:before{background:
+radial-gradient(1000px 560px at 6% -8%,rgba(10,107,74,.085),transparent 60%),
+radial-gradient(820px 460px at 96% 6%,rgba(18,83,158,.03),transparent 62%)}
+
+/* 墨 sumi. Near-monochrome, for when the colour is in the way. */
+body[data-theme="sumi"]{--page:#f2f3f5}
+body[data-theme="sumi"]:before{background:
+linear-gradient(180deg,rgba(23,27,38,.06),transparent 55%),
+repeating-linear-gradient(94deg,rgba(23,27,38,.02) 0 1px,transparent 1px 5px)}
 .wrap{max-width:920px;margin:0 auto;padding:22px 20px 90px}
 /* The script is read out loud, so it gets a narrower column than the desk. */
 body[data-view="standup"] .wrap{max-width:840px}
@@ -84,7 +160,10 @@ border:1px solid rgba(255,255,255,.10);border-radius:10px}
 .views button{gap:7px;font:inherit;padding:0 11px;
 border:0;border-radius:8px;background:none;color:#a9b8d2;cursor:pointer;
 text-align:left;white-space:nowrap}
+.views button{transition:color var(--t-fast) var(--ease),
+background-color var(--t-fast) var(--ease),transform var(--t-fast) var(--ease)}
 .views button:hover{color:#fff;background:rgba(255,255,255,.07)}
+.views button:active{transform:scale(.97);transition-duration:60ms}
 .views button[aria-selected="true"]{background:#fff;color:#0d1524;
 box-shadow:0 1px 3px rgba(9,14,26,.4)}
 .views .lbl{font-size:13px;font-weight:650;letter-spacing:-.005em}
@@ -100,10 +179,24 @@ background:#e0483b;color:#fff;font:700 10.5px/17px inherit;text-align:center}
 .views button[aria-selected="true"] .badge{background:var(--red);color:#fff}
 .views .badge.quiet{background:rgba(255,255,255,.16);color:#dbe4f2}
 body[data-view="desk"] #view-standup,body[data-view="standup"] #view-desk{display:none}
+/* Switching view. The two halves are one page and CSS does the swap, so the
+   arriving one is the only thing that can announce the change: it comes up and
+   settles rather than replacing the other between two frames. Cheap, because it
+   animates opacity and transform on one element and nothing reflows. */
+#view-desk,#view-standup{animation:view-in var(--t-slow) var(--ease) both}
+@keyframes view-in{from{opacity:0;transform:translateY(5px)}
+to{opacity:1;transform:none}}
 
 /* Cards. Every panel on both views is the same object. */
 .tk,.st-tk,.track,.panel,.st-run,.st-empty,.gaps{background:var(--card);
 border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+/* A card lifts very slightly under the pointer. Enough to say "this is one
+   object and you are on it", not enough to make a scroll down the page feel
+   like walking over cobbles. Shadow only on the card itself: transform here
+   would blur the text on a non-retina screen. */
+.tk,.st-tk{transition:box-shadow var(--t-mid) var(--ease),
+border-color var(--t-mid) var(--ease)}
+.tk:hover,.st-tk:hover{box-shadow:var(--lift)}
 .st-lead{background:var(--card);border:1px solid var(--line);
 border-left:4px solid var(--accent);border-radius:13px;padding:16px 20px;
 margin-bottom:20px;box-shadow:var(--shadow)}
@@ -115,8 +208,18 @@ color:var(--soft);margin:28px 0 11px;font-weight:700}
 border-radius:20px;border:1px solid;letter-spacing:.01em;white-space:nowrap}
 .btn{font-size:12.5px;text-decoration:none;color:var(--accent);
 border:1px solid var(--line);background:#fff;padding:4px 10px;border-radius:7px;
-white-space:nowrap;font-weight:550}
-.btn:hover{border-color:var(--accent-line);background:var(--accent-bg)}
+white-space:nowrap;font-weight:550;
+transition:border-color var(--t-fast) var(--ease),
+background-color var(--t-fast) var(--ease),transform var(--t-fast) var(--ease),
+box-shadow var(--t-fast) var(--ease)}
+.btn:hover{border-color:var(--accent-line);background:var(--accent-bg);
+transform:translateY(-1px);box-shadow:0 2px 6px rgba(16,24,40,.07)}
+/* The press. It goes *down* and loses its shadow, which is the whole trick:
+   a button that only changes colour on click feels like a link, and one that
+   moves under the finger feels like a button. 60ms, because the release has to
+   feel instant or it reads as lag rather than feedback. */
+.btn:active{transform:translateY(0) scale(.975);box-shadow:none;
+transition-duration:60ms}
 .tag{display:inline-block;font-size:12.5px;font-weight:700;padding:2px 9px;
 border-radius:6px;background:var(--accent-bg);color:var(--accent-ink);
 margin-right:8px;vertical-align:2px;letter-spacing:0}
@@ -167,7 +270,18 @@ details.sub{padding-top:0}
    saying whether there is anything behind it. */
 details.sub>summary{display:flex;align-items:center;padding:14px 10px;
 margin:0 -10px;border-radius:9px}
+details.sub>summary{transition:background-color var(--t-fast) var(--ease)}
 details.sub>summary:hover{background:var(--hair)}
+/* Opening a fold. `details` cannot transition its own height without JS, but
+   the content behind it can arrive rather than appear, and that is most of what
+   the eye reads as "it opened" instead of "the page changed". */
+details.sub[open]>*:not(summary),details.act[open]>.act-body,
+.step-past[open]>.steps-list,.bg-drawer[open] .bg-in{
+animation:fold-in var(--t-mid) var(--ease) both}
+@keyframes fold-in{from{opacity:0;transform:translateY(-4px)}
+to{opacity:1;transform:none}}
+.fold-hint{transition:color var(--t-fast) var(--ease),
+border-color var(--t-fast) var(--ease)}
 details.sub[open]>summary{padding-bottom:8px}
 details.sub>summary>h3{margin:0;width:auto;flex:1}
 details.sub>summary:hover .fold-hint{color:var(--accent);border-color:var(--accent-line)}
@@ -393,6 +507,137 @@ border-radius:8px;margin:13px 0 0;color:var(--ink)}
 .jp{font-size:16.5px;line-height:1.85}
 .jump{position:static}
 }
+/* ── 波 ──────────────────────────────────────────────────────────────────────
+   Closing a job. It happens in a terminal, so the page's only job here is to
+   notice and say well done: the crest draws itself left to right, the foam
+   pops after it, a 判子 seal presses down over the lot, and the whole thing
+   leaves after two and a half seconds. Nothing under it is clickable while it
+   is there, because it removes itself rather than hiding.
+
+   `pointer-events:none` throughout regardless, because a celebration that eats
+   a click on the card behind it is not a celebration. */
+.nami{position:fixed;left:50%;bottom:44px;transform:translateX(-50%);z-index:70;
+pointer-events:none;display:grid;place-items:center;
+animation:nami-go 2.6s var(--ease) both}
+.nami-w{width:250px;height:156px;overflow:visible;
+filter:drop-shadow(0 6px 18px rgba(18,83,158,.28))}
+.nami-b,.nami-c{fill:none;stroke:var(--accent);stroke-width:5;
+stroke-linecap:round;stroke-linejoin:round}
+.nami-c{fill:rgba(18,83,158,.1);stroke-width:4}
+/* The crest is one path, so drawing it is one dash offset. 620 is comfortably
+   longer than the path, which is all that matters. */
+.nami-b,.nami-c{stroke-dasharray:620;stroke-dashoffset:620;
+animation:nami-draw .72s var(--ease) both}
+.nami-c{animation-delay:.16s}
+.nami-f circle{fill:#fff;stroke:var(--accent);stroke-width:2.5;
+opacity:0;transform-origin:center;animation:nami-foam .5s var(--spring) both}
+.nami-f circle:nth-child(1){animation-delay:.52s}
+.nami-f circle:nth-child(2){animation-delay:.60s}
+.nami-f circle:nth-child(3){animation-delay:.68s}
+.nami-f circle:nth-child(4){animation-delay:.76s}
+.nami-f circle:nth-child(5){animation-delay:.84s}
+/* 判子. A round vermilion seal, pressed, with the slight over-rotation of a
+   stamp put down by hand. */
+.nami-seal{position:absolute;width:62px;height:62px;border-radius:50%;
+display:grid;place-items:center;background:#c0362b;color:#fff;
+font:800 30px/1 "Hiragino Sans","Noto Sans JP",serif;
+box-shadow:0 4px 14px rgba(192,54,43,.45);
+animation:nami-seal .5s var(--spring) .82s both}
+.nami-said{position:absolute;bottom:-6px;white-space:nowrap;
+font:700 12.5px/1 inherit;color:var(--accent-ink);background:#fff;
+border:1px solid var(--accent-line);border-radius:20px;padding:5px 13px;
+box-shadow:var(--shadow);animation:nami-said .4s var(--ease) 1s both}
+@keyframes nami-draw{from{stroke-dashoffset:620}to{stroke-dashoffset:0}}
+@keyframes nami-foam{from{opacity:0;transform:scale(.4)}
+to{opacity:1;transform:scale(1)}}
+@keyframes nami-seal{from{opacity:0;transform:scale(2.1) rotate(-22deg)}
+70%{opacity:1;transform:scale(.94) rotate(-7deg)}
+to{opacity:1;transform:scale(1) rotate(-9deg)}}
+@keyframes nami-said{from{opacity:0;transform:translateY(6px)}
+to{opacity:1;transform:none}}
+/* The whole group fades at the end rather than each part unwinding. */
+@keyframes nami-go{0%,82%{opacity:1}100%{opacity:0;transform:translateX(-50%) scale(.96)}}
+
+/* Someone who has asked the operating system for less movement gets none of
+   it. Not reduced, none: the whole page still works without a single
+   transition, because every state it shows is also a colour or a word. */
+@media (prefers-reduced-motion:reduce){
+*,*:before,*:after{animation-duration:1ms!important;animation-delay:0ms!important;
+animation-iteration-count:1!important;transition-duration:1ms!important;
+transition-delay:0ms!important;scroll-behavior:auto!important}
+.btn:hover,.tk:hover,.st-tk:hover{transform:none}
+}
+/* Same again, asked for in Settings rather than in the operating system. */
+body[data-motion="off"] *,body[data-motion="off"] *:before,
+body[data-motion="off"] *:after{animation-duration:1ms!important;
+animation-delay:0ms!important;animation-iteration-count:1!important;
+transition-duration:1ms!important;transition-delay:0ms!important}
+body[data-motion="off"] .btn:hover,body[data-motion="off"] .tk:hover,
+body[data-motion="off"] .st-tk:hover{transform:none}
+body[data-motion="off"] .nami{display:none}
+
+/* The theme picker. Each swatch paints itself with the wash it is offering, so
+   the choice is the thing rather than a description of the thing. */
+.thms{display:grid;grid-template-columns:repeat(auto-fit,minmax(196px,1fr));
+gap:8px;margin:10px 0 4px}
+.thm{display:flex;gap:10px;align-items:center;text-align:left;font:inherit;
+cursor:pointer;padding:9px 11px;border:1px solid var(--line);border-radius:10px;
+background:#fff;color:var(--ink);
+transition:border-color var(--t-fast) var(--ease),
+box-shadow var(--t-fast) var(--ease),transform var(--t-fast) var(--ease)}
+.thm:hover{border-color:var(--accent-line);transform:translateY(-1px);
+box-shadow:0 2px 8px rgba(20,26,40,.07)}
+.thm:active{transform:scale(.985);transition-duration:60ms}
+.thm[aria-pressed="true"]{border-color:var(--accent);
+box-shadow:0 0 0 3px var(--accent-bg)}
+.thm-sw{flex:none;width:34px;height:34px;border-radius:8px;
+border:1px solid rgba(20,26,40,.12);background:#f3f5fa}
+.thm-t{flex:1;min-width:0;font-size:12px;color:var(--soft);line-height:1.4}
+.thm-t b{display:block;font-size:13px;font-weight:700;color:var(--ink);
+margin-bottom:1px}
+.thm-on{flex:none;display:none;font:700 9.5px/1 inherit;text-transform:uppercase;
+letter-spacing:.06em;color:var(--accent);background:var(--accent-bg);
+border:1px solid var(--accent-line);border-radius:4px;padding:3px 5px}
+.thm[aria-pressed="true"] .thm-on{display:block}
+.thm.wide{padding:11px 13px}
+/* The swatches, each the wash of the theme it names. */
+.thm-plain{background:#f3f5fa}
+.thm-ukiyoe{background:
+radial-gradient(22px 18px at 22% 10%,rgba(18,83,158,.55),transparent 62%),
+radial-gradient(20px 16px at 92% 22%,rgba(179,38,30,.42),transparent 64%),
+repeating-linear-gradient(94deg,rgba(23,27,38,.10) 0 1px,transparent 1px 4px),
+#f7f4ee}
+.thm-ai{background:linear-gradient(180deg,#12539e,#cddff2)}
+.thm-sakura{background:
+radial-gradient(26px 20px at 78% 14%,rgba(200,90,130,.62),transparent 66%),#fbf1f4}
+.thm-koke{background:
+radial-gradient(26px 20px at 24% 14%,rgba(10,107,74,.58),transparent 66%),#eff6f1}
+.thm-sumi{background:linear-gradient(180deg,#3b4250,#eceef2)}
+
+/* Test connections. Three separate questions with three separate answers, so
+   the panel is a list of rows rather than one green tick: on 28 September the
+   servers were all fine and the credential was not, and a single verdict would
+   have said "broken" without saying which half. */
+.chk-bar{display:flex;gap:11px;align-items:center;margin:10px 0 0;flex-wrap:wrap}
+.chk-go{font-weight:650}
+.chk-when{font-size:11.5px;color:var(--soft);font-variant-numeric:tabular-nums}
+.chk-rows{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:1px;
+background:var(--line);border:1px solid var(--line);border-radius:10px;
+overflow:hidden}
+.chk-rows:empty{display:none}
+.chk{background:#fff;display:flex;gap:10px;align-items:baseline;padding:9px 12px;
+animation:fold-in var(--t-mid) var(--ease) both}
+.chk-m{flex:none;width:17px;height:17px;border-radius:50%;display:grid;
+place-items:center;font:800 9.5px/1 inherit;color:#fff;align-self:center}
+.chk.ok .chk-m{background:var(--green)}
+.chk.bad .chk-m{background:var(--red)}
+.chk.unsure .chk-m{background:var(--amber)}
+.chk-b{flex:1;min-width:0;font-size:12.5px;color:var(--mut);line-height:1.45}
+.chk-b b{display:block;font-size:13px;font-weight:700;color:var(--ink)}
+.chk-b i{display:block;font-style:normal;font-size:12px;color:var(--amber-ink);
+margin-top:2px}
+.chk-note{margin:9px 0 0;font-size:12.5px;font-weight:600;color:var(--mut)}
+.chk-note:empty{display:none}
 @media print{header.top,.btn,.copy,.toggle,.views,.jump,.howto{display:none}
 body{background:#fff}.tk,.st-tk{break-inside:avoid;border-color:#ccc;box-shadow:none}
 details{display:block}details>summary{display:none}}

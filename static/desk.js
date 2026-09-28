@@ -220,6 +220,92 @@
       .catch(function () { login.disabled = false; say("could not reach the desk server", "bad"); });
   });
 
+  // Test connections, in Settings. It lives here rather than in base.js because
+  // it needs the server key, and base.js is the half of the front end that runs
+  // on a page opened from disk with no server behind it.
+  //
+  // The check takes about twenty seconds (most of it starting a headless run to
+  // count its tools), so the server does it in a thread and this polls
+  // /api/status for the rows as they land. Every row arrives as it is decided,
+  // rather than all six at the end, because a panel that shows the credential
+  // result in one second has already answered the usual question.
+  //
+  // Bound on the document rather than on the button, because this script runs
+  // inline in the header while the page is still parsing: the Settings dialog
+  // is at the end of the body and does not exist yet. The same reason the ask
+  // sends are delegated a few lines down.
+  (function () {
+    var list, when, note, go;
+    var watching = null;
+    function parts() {
+      go = document.querySelector("[data-check]");
+      list = document.querySelector(".chk-rows");
+      when = document.querySelector(".chk-when");
+      note = document.querySelector(".chk-note");
+      return !!(go && list && when && note);
+    }
+
+    function draw(h) {
+      if (!parts()) return;
+      var rows = h.rows || [];
+      list.innerHTML = rows.map(function (r) {
+        var mark = r.ok === true ? "ok" : r.ok === false ? "bad" : "unsure";
+        var glyph = r.ok === true ? "\u2713" : r.ok === false ? "\u2715" : "?";
+        return '<li class="chk ' + mark + '"><span class="chk-m">' + glyph + "</span>"
+          + '<span class="chk-b"><b>' + esc(r.name) + "</b>" + esc(r.said || "")
+          + (r.fix ? '<i>' + esc(r.fix) + "</i>" : "")
+          + "</span></li>";
+      }).join("");
+      note.textContent = h.note || "";
+      if (h.state === "running") {
+        when.textContent = "Checking\u2026 " + rows.length + " of about 6";
+      } else if (h.state === "done") {
+        when.textContent = "Checked at " + (h.at || "");
+        go.disabled = false;
+        go.textContent = "Test again";
+        if (watching) { clearInterval(watching); watching = null; }
+      }
+    }
+
+    function esc(s) {
+      return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+      });
+    }
+
+    function follow() {
+      fetch("/api/status").then(function (r) { return r.json(); }).then(function (s) {
+        if (s.health) draw(s.health);
+      }).catch(function () {
+        if (parts()) {
+          when.textContent = "lost the desk server";
+          go.disabled = false;
+        }
+        if (watching) { clearInterval(watching); watching = null; }
+      });
+    }
+
+    document.addEventListener("click", function (e) {
+      if (!e.target.closest("[data-check]")) return;
+      if (!parts()) return;
+      go.disabled = true;
+      go.textContent = "Checking";
+      note.textContent = "";
+      list.innerHTML = "";
+      when.textContent = "Starting\u2026";
+      fetch("/api/check?k=" + encodeURIComponent(key), { method: "POST" })
+        .then(function () {
+          if (!watching) watching = setInterval(follow, 900);
+          follow();
+        })
+        .catch(function () {
+          go.disabled = false;
+          go.textContent = "Test connections";
+          when.textContent = "could not reach the desk server";
+        });
+    });
+  })();
+
   // Asking from a card. The question travels with the job it was asked about,
   // so the server can hand the agent the ticket, the item and its draft, and
   // the answer comes back onto the same card.
