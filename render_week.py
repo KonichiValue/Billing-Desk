@@ -26,16 +26,30 @@ from render import (
     esc,
     item_state as state_of,
     next_live,
+    urgency_of,
 )
 
 # An ISO date and nothing else. `chase_on` is sometimes a sentence ("Only if he
 # raises it again"), and a sentence is not a day on a calendar.
 ISO = re.compile(r"\d{4}-\d{2}-\d{2}")
 
-# How many days across. Seven is this week and the next session, which is the
-# horizon he actually plans against; a month view would be four times the pixels
-# for a question he does not ask of this page.
-DAYS = 7
+# How many days to look ahead, and which of them get drawn.
+#
+# Monday to Friday of the week being looked at. A calendar should say "this
+# week", because that is the unit the work is actually organised in: the cycle
+# runs in weeks, the standup is Monday and Wednesday, and "is Wednesday covered"
+# is a question about a week rather than about the next five days.
+#
+# A rolling window starting today was the first attempt and it was wrong. It
+# meant the columns changed identity every morning, Thursday's strip began at
+# Thursday with no way to see that Tuesday had been busy, and on a Friday it
+# showed three days of next week with no heading to say so.
+#
+# Saturday and Sunday get no column. Nothing on this desk happens on them and no
+# standup is ever scheduled on one, so they were two sevenths of the width
+# carrying nothing. A date that does fall on one moves to the Friday before,
+# flagged with its real date, because Friday is the last day he can act on it.
+WEEK_DAYS = 5
 
 # Rows before a day starts saying "and 3 more" instead of growing. Three is
 # what fits without any column setting the height of the whole strip.
@@ -56,31 +70,101 @@ def whose(item: dict, st: dict) -> tuple[str, str]:
     return who or "Them", "theirs"
 
 
-def due_rows(tickets: list[dict], today: date) -> tuple[dict[str, list[dict]], int]:
-    """Everything with a real date on it, filed by the day it falls.
+def monday_of(day: date) -> date:
+    """The Monday of the week `day` falls in.
 
-    Anything already overdue is pulled onto today rather than left off the left
-    edge of the strip: a chase that slipped last Tuesday is more urgent than one
-    that has not come up yet, not less, and a calendar that hides it is lying by
-    omission.
+    On a Saturday or Sunday this is the Monday coming, not the one just gone:
+    by the weekend the week on the page is over, and what he wants to see is the
+    one he is about to walk into.
     """
+    if day.weekday() >= 5:
+        return day + timedelta(days=7 - day.weekday())
+    return day - timedelta(days=day.weekday())
+
+
+def columns(monday: date) -> list[date]:
+    """Monday to Friday of one week."""
+    return [monday + timedelta(days=n) for n in range(WEEK_DAYS)]
+
+
+def dated(item: dict, st: dict, today: date) -> str:
+    """The day this job belongs on, or "" if it has no day at all.
+
+    Two different fields, because the board dates two different things. Work
+    sitting with someone else carries `waits_on.chase_on`, the day their silence
+    becomes his problem again. Work sitting with *him* carries no date at all,
+    only an urgency, which is why the first version of this calendar showed five
+    of other people's chases and none of his own jobs: the column he was meant
+    to work from was the one thing missing.
+
+    So urgency is read as a day. `today` means today, `this-week` means the next
+    working day he has not passed yet, and `monitor` is genuinely undated and
+    stays off the strip. It is an inference rather than a fact, so the row says
+    so and the card stays the place the real state lives.
+    """
+    chase = (item.get("waits_on") or {}).get("chase_on") or ""
+    if ISO.fullmatch(chase or ""):
+        return chase
+    if st["state"] not in {"todo", "hold"}:
+        return ""
+    urgency = urgency_of(item)
+    if urgency == "today":
+        return today.isoformat()
+    if urgency == "this-week":
+        # Tomorrow, or Monday when tomorrow is the weekend: a job he has not got
+        # to today is a job for the next day he is at the desk.
+        d = today + timedelta(days=1)
+        while d.weekday() >= 5:
+            d += timedelta(days=1)
+        return d.isoformat()
+    return ""
+
+
+def due_rows(
+    tickets: list[dict], days: list[date], today: date
+) -> tuple[dict[str, list[dict]], int, int]:
+    """Everything with a day, filed by the column it falls in.
+
+    Three things can happen to a date. Inside the week it lands on its own day,
+    except a weekend one which moves back to Friday and says so. Before the
+    week's first column it is overdue and lands on the first column he can still
+    act on, because a chase that slipped is more urgent than one that has not
+    come up, not less, and a calendar that hides it is lying by omission. After
+    the last column it is counted and named in the header rather than drawn.
+    """
+    shown = {d.isoformat() for d in days}
+    first, last = days[0].isoformat(), days[-1].isoformat()
+    # Overdue work stacks on today when today is in this week, and on Monday
+    # when he is looking at a week he has not started yet.
+    catch = today.isoformat() if first <= today.isoformat() <= last else first
     by_day: dict[str, list[dict]] = {}
-    late = 0
-    horizon = (today + timedelta(days=DAYS - 1)).isoformat()
+    late = ahead = 0
     for t in tickets:
         for i in t.get("items", []):
             st = state_of(i)
             if st["closed"]:
                 continue
-            when = (i.get("waits_on") or {}).get("chase_on") or ""
-            if not ISO.fullmatch(when or ""):
+            when = dated(i, st, today)
+            if not when:
                 continue
-            if when > horizon:
+            if when > last:
+                ahead += 1
                 continue
             who, tone = whose(i, st)
-            overdue = when < today.isoformat()
+            overdue = when < first or when < today.isoformat()
             if overdue:
                 late += 1
+                lands = catch
+            elif when in shown:
+                lands = when
+            else:
+                # A Saturday or Sunday, which has no column: back to the Friday.
+                d = date.fromisoformat(when)
+                while d.weekday() >= 5:
+                    d -= timedelta(days=1)
+                lands = d.isoformat()
+                if lands not in shown:
+                    continue
             row = {
                 "id": str(i.get("id", "")),
                 "title": i.get("title", ""),
@@ -89,16 +173,25 @@ def due_rows(tickets: list[dict], today: date) -> tuple[dict[str, list[dict]], i
                 "tone": "late" if overdue else tone,
                 "late": overdue,
                 "on": when,
+                # A job drawn on a day that is not its own says which day is,
+                # or the strip quietly misreports the date.
+                "moved": lands != when,
+                # Whether the day came from the board or from the urgency. An
+                # inferred day is drawn dashed, because "this-week means
+                # tomorrow" is this renderer's opinion and not a fact he set.
+                "guess": not ISO.fullmatch(
+                    (i.get("waits_on") or {}).get("chase_on") or ""
+                ),
             }
-            by_day.setdefault(today.isoformat() if overdue else when, []).append(row)
-    return by_day, late
+            by_day.setdefault(lands, []).append(row)
+    return by_day, late, ahead
 
 
 def render(board: dict, tickets: list[dict], refs: dict[str, str]) -> str:
-    """Seven days, with every room and every due job drawn in them."""
+    """One week, Monday to Friday, with every room and every job due in it."""
     today = date.today()
-    days = [today + timedelta(days=n) for n in range(DAYS)]
-    by_day, late = due_rows(tickets, today)
+    days = columns(monday_of(today))
+    by_day, late, ahead = due_rows(tickets, days, today)
 
     rooms: dict[str, list[dict]] = {}
     for s in board.get("sessions") or []:
@@ -118,11 +211,18 @@ def render(board: dict, tickets: list[dict], refs: dict[str, str]) -> str:
         )
         shown, rest = jobs[:ROWS_PER_DAY], jobs[ROWS_PER_DAY:]
         rows = "".join(
-            f"""<a class="wd-job {esc(r["tone"])}" href="#{esc(refs.get(r["ref"], ""))}"
-               title="{esc(r["title"])}">
+            f"""<a class="wd-job {esc(r["tone"])}{" guess" if r["guess"] else ""}"
+               href="#{esc(refs.get(r["ref"], ""))}"
+               title="{esc(r["title"])}{esc(
+                   f' (really due {day_words(r["on"])})' if r["moved"]
+                   else " (no date on the board, placed by its urgency)"
+                   if r["guess"] else ""
+               )}">
               <span class="wd-n">{esc(r["id"])}</span>
               <span class="wd-w">{esc(r["title"])}</span>
-              <span class="wd-who">{esc(r["who"])}</span></a>"""
+              <span class="wd-who">{esc(r["who"])}{
+                  esc(f' · due {day_words(r["on"])}') if r["moved"] else ""
+              }</span></a>"""
             for r in shown
         )
         if rest:
@@ -130,21 +230,23 @@ def render(board: dict, tickets: list[dict], refs: dict[str, str]) -> str:
                 f'<span class="wd-rest">and {len(rest)} more</span>'
             )
         quiet = not sess and not jobs
+        # A day this week that is already behind him reads back rather than
+        # empty, so Monday on a Wednesday does not look like nothing is due.
         klass = " ".join(
             filter(
                 None,
                 [
                     "wd",
-                    "today" if n == 0 else "",
-                    "weekend" if d.weekday() >= 5 else "",
+                    "today" if d == today else "",
+                    "past" if d < today else "",
                     "quiet" if quiet else "",
                 ],
             )
         )
         head_note = ""
-        if n == 0:
+        if d == today:
             head_note = '<span class="wd-today">Today</span>'
-        elif n == 1:
+        elif d == today + timedelta(days=1):
             head_note = '<span class="wd-soon">Tomorrow</span>'
         cells.append(f"""
       <li class="{klass}">
@@ -173,12 +275,24 @@ def render(board: dict, tickets: list[dict], refs: dict[str, str]) -> str:
     if busiest[0] >= 3 and busiest[1]:
         day = "today" if busiest[1] == today.isoformat() else day_words(busiest[1])
         warn = f'{busiest[0]} land {day}'
+    # Which week this is. "This week" on a Monday to Friday, and the dates
+    # besides, because on a Saturday the strip is showing the week coming and
+    # has to say so rather than looking like a stale one.
+    first, last = days[0], days[-1]
+    this_week = first <= today <= last
+    span = (
+        f'{first.strftime("%-d")}&ndash;{last.strftime("%-d %b")}'
+        if first.month == last.month
+        else f'{first.strftime("%-d %b")} &ndash; {last.strftime("%-d %b")}'
+    )
+    title = ("This week" if this_week else "Next week") + f" &middot; {span}"
     return f"""
-    <section class="week" id="week" aria-label="The week ahead">
+    <section class="week" id="week" aria-label="The week">
       <header class="week-h">
-        <h2>The week ahead</h2>
+        <h2>{title}</h2>
         {f'<span class="week-next">{esc(lead)}</span>' if lead else ""}
         {f'<span class="week-busy">{esc(warn)}</span>' if warn else ""}
+        {f'<span class="week-ahead">{ahead} after Friday</span>' if ahead else ""}
         {f'<span class="week-late">{late} overdue</span>' if late else ""}
       </header>
       <ol class="week-days">{"".join(cells)}</ol>

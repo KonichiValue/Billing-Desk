@@ -159,9 +159,23 @@ background:linear-gradient(90deg,var(--red-bg),rgba(255,255,255,0) 42%)}
 font-variant-numeric:tabular-nums}
 .tr-tag{flex:none;font-size:12px;font-weight:700;padding:2px 8px;border-radius:6px;
 background:var(--hair);color:var(--mut)}
-.tr-title{flex:1;min-width:0;font-size:14.5px;font-weight:550;color:inherit;
-text-decoration:none}
+/* The title takes what is left and is the thing that must not be squeezed. A
+   long owner pill ("Waiting on Robert Balayan, Kraken CE" is 233px and cannot
+   wrap) was crushing it to 129px and 456px tall on a narrow window, so the
+   basis is generous and the pill gives way instead. */
+.tr-title{flex:1 1 260px;min-width:0;font-size:14.5px;font-weight:550;
+color:inherit;text-decoration:none}
 .tr-title:hover{color:var(--accent)}
+/* An owner pill may shrink and clip; the row it is on may not grow. */
+.tr>.pill{min-width:0;overflow:hidden;text-overflow:ellipsis}
+/* Below this the row cannot hold a title and a long owner on one line, so it
+   wraps deliberately: title on its own line, then the status chips under it.
+   Left to itself flexbox squeezed the title to a two-word column instead. */
+@media (max-width:820px){
+.tr{flex-wrap:wrap;align-items:baseline}
+.tr-title{flex:1 1 100%;order:-1}
+.tr-rank,.tr-tag{align-self:center}
+}
 .tr-note{display:block;font-size:12px;color:var(--soft);font-weight:400;margin-top:1px}
 .tr-min{flex:none;font-size:12px;color:var(--soft);font-variant-numeric:tabular-nums;
 width:44px;text-align:right}
@@ -252,21 +266,33 @@ border-bottom:1px solid var(--line)}
 .week-h h2{margin:0;font-size:11.5px;text-transform:uppercase;
 letter-spacing:.09em;color:var(--soft);font-weight:750}
 .week-next{font-size:12.5px;font-weight:700;color:var(--accent-ink)}
-.week-busy,.week-late{font-size:11px;font-weight:750;border-radius:20px;
-padding:2px 9px;border:1px solid}
+.week-busy,.week-late,.week-ahead{font-size:11px;font-weight:750;
+border-radius:20px;padding:2px 9px;border:1px solid}
 .week-busy{color:var(--amber-ink);background:var(--amber-bg);
 border-color:var(--amber-line)}
-.week-late{margin-left:auto;color:var(--red);background:var(--red-bg);
+/* Work that falls past Friday. Counted rather than drawn, so the week stays a
+   week, but named so nothing is silently off the edge. */
+.week-ahead{margin-left:auto;color:var(--soft);background:var(--hair);
+border-color:var(--line)}
+.week-late{color:var(--red);background:var(--red-bg);
 border-color:var(--red-line)}
-/* Today gets half again the width of a quiet day. `minmax(0,...)` so a long
-   job title cannot push the strip wider than the page. */
+.week-ahead+.week-late{margin-left:0}
+/* Weekdays only, so the columns that matter get the width the weekend was
+   taking. `auto-fit` rather than a fixed count, because the number of columns
+   now depends on which day of the week it is: Monday shows six, Thursday four.
+   `minmax(0,1fr)` so a long job title cannot push the strip wider than
+   the page. */
 .week-days{list-style:none;margin:0;padding:0;display:grid;
-grid-template-columns:1.5fr repeat(6,minmax(0,1fr));gap:1px;
+grid-template-columns:repeat(auto-fit,minmax(0,1fr));gap:1px;
 background:var(--line)}
 .wd{background:var(--card);min-height:96px;padding:8px 9px 9px;display:flex;
 flex-direction:column;gap:6px;
 transition:background-color var(--t-mid) var(--ease)}
-.wd.weekend{background:var(--hair)}
+/* A day this week that is already behind him. Dimmed rather than hidden: on a
+   Wednesday, Monday and Tuesday are context, not clutter. */
+.wd.past{background:var(--hair)}
+.wd.past .wd-d b,.wd.past .wd-d i{opacity:.6}
+.wd.past .wd-jobs{opacity:.72}
 .wd.quiet{background:var(--hair)}
 .wd.today{background:linear-gradient(180deg,var(--accent-bg),var(--card) 72%);
 box-shadow:inset 0 3px 0 var(--accent)}
@@ -318,6 +344,9 @@ overflow:hidden}
 .wd-jobs::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
 .wd-who{grid-column:2;font-size:10px;font-weight:650;color:var(--soft);
 white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* A day this renderer inferred from the urgency rather than read off the board.
+   Dashed, so the strip never claims a date he did not set. */
+.wd-job.guess{border-style:dashed;border-left-style:solid}
 .wd-job.mine{border-left-color:var(--red);background:var(--red-bg)}
 .wd-job.mine .wd-n{background:var(--red)}
 .wd-job.mine .wd-who{color:var(--red)}
@@ -334,10 +363,10 @@ background:var(--red-bg)}
 .wd-rest{font-size:10.5px;font-weight:650;color:var(--soft);padding:2px 3px}
 .wd-none{color:#c3cad6;font-size:15px;margin-top:auto;text-align:center}
 @media (max-width:900px){
-/* Seven columns stops being readable before it stops fitting. Two rows of
-   four, today still the widest thing in the first row. */
-.week-days{grid-template-columns:repeat(4,minmax(0,1fr))}
-.wd{min-height:88px}
+/* Below this a column cannot hold a job title, so the strip becomes three
+   wider ones and wraps. */
+.week-days{grid-template-columns:repeat(3,minmax(0,1fr))}
+.wd{min-height:84px}
 }
 @media (max-width:560px){
 .week-days{grid-template-columns:repeat(2,minmax(0,1fr))}

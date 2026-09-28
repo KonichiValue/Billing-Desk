@@ -46,11 +46,38 @@ CLOSED_STATES = {"done", "sent", "dropped"}
 # Inside a group, the order is what has to happen soonest, not the number. The
 # numbers are for typing, and reading the list top to bottom should be the same
 # as working down it.
+#
+# Three values and no more: today, this-week, monitor. A sweep writing anything
+# else used to sort as "unknown" and land in the middle of the list silently,
+# which is how `this week` (a space, not a hyphen) sat on item 51 unnoticed.
+# `urgency_of` normalises instead of trusting, and check.py fails the board if a
+# value cannot be normalised, so the failure is loud and at the point of writing.
 URGENCY = {"today": 0, "this-week": 1, "monitor": 2}
+
+# What a sweep has actually written and what it meant. Anything not here and not
+# in URGENCY is a real mistake rather than a spelling of one.
+URGENCY_ALIASES = {
+    "this week": "this-week",
+    "thisweek": "this-week",
+    "week": "this-week",
+    "now": "today",
+    "urgent": "today",
+    "todo": "this-week",
+    "waiting": "monitor",
+    "watch": "monitor",
+}
+
+
+def urgency_of(item: dict) -> str:
+    """The item's urgency as one of the three words, whatever was written."""
+    raw = (item.get("urgency") or "").strip().lower()
+    if raw in URGENCY:
+        return raw
+    return URGENCY_ALIASES.get(raw, "this-week")
 
 
 def pressing(item: dict) -> int:
-    return URGENCY.get(item.get("urgency", "this-week"), 1)
+    return URGENCY[urgency_of(item)]
 
 
 def index_items(tickets: list[dict]) -> dict[str, dict]:

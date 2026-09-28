@@ -723,28 +723,41 @@ body[data-motion="off"] .nami{display:none}
 
 /* The theme picker. Each swatch paints itself with the wash it is offering, so
    the choice is the thing rather than a description of the thing. */
-.thms{display:grid;grid-template-columns:repeat(auto-fit,minmax(196px,1fr));
-gap:8px;margin:10px 0 4px}
-.thm{display:flex;gap:10px;align-items:center;text-align:left;font:inherit;
-cursor:pointer;padding:9px 11px;border:1px solid var(--line);border-radius:10px;
+/* `align-items:start` and a wider column, because a row whose children are
+   centred and whose basis is 196px let the "Using this" badge take the width
+   off the label: "Ukiyo-e 浮世絵" came out as one character per line beside a
+   badge with room to spare. The badge is now a row of its own under the text,
+   which also means it never changes the height of the card it is on. */
+.thms{display:grid;grid-template-columns:repeat(auto-fit,minmax(232px,1fr));
+gap:8px;margin:10px 0 4px;align-items:start}
+.thm{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;
+align-items:start;text-align:left;font:inherit;
+cursor:pointer;padding:10px 12px;border:1px solid var(--line);border-radius:10px;
 background:var(--card);color:var(--ink);
-transition:border-color var(--t-fast) var(--ease),
-box-shadow var(--t-fast) var(--ease),transform var(--t-fast) var(--ease)}
+transition:border-color var(--t-off) var(--ease-in),
+box-shadow var(--t-off) var(--ease-in),transform var(--t-off) var(--ease-in)}
+.thm:hover{transition-duration:var(--t-on)}
 .thm:hover{border-color:var(--accent-line);transform:translateY(-1px);
 box-shadow:0 2px 8px rgba(20,26,40,.07)}
 .thm:active{transform:scale(.985);transition-duration:60ms}
 .thm[aria-pressed="true"]{border-color:var(--accent);
 box-shadow:0 0 0 3px var(--accent-bg)}
-.thm-sw{flex:none;width:34px;height:34px;border-radius:8px;
-border:1px solid rgba(20,26,40,.12);background:#f3f5fa}
-.thm-t{flex:1;min-width:0;font-size:12px;color:var(--soft);line-height:1.4}
+.thm-sw{grid-row:1/span 2;width:34px;height:34px;border-radius:8px;
+border:1px solid rgba(20,26,40,.12);background:#f3f5fa;align-self:start}
+.thm-t{min-width:0;font-size:12px;color:var(--soft);line-height:1.4}
+/* The name stays on one line. A wrapped "Ukiyo-e 浮世絵" was the whole bug. */
 .thm-t b{display:block;font-size:13px;font-weight:700;color:var(--ink);
-margin-bottom:1px}
-.thm-on{flex:none;display:none;font:700 9.5px/1 inherit;text-transform:uppercase;
+margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Its own row under the text rather than a third column competing for width,
+   and hidden rather than absent when not selected so nothing shifts. */
+.thm-on{grid-column:2;justify-self:start;visibility:hidden;
+font:700 9.5px/1 inherit;text-transform:uppercase;
 letter-spacing:.06em;color:var(--accent);background:var(--accent-bg);
-border:1px solid var(--accent-line);border-radius:4px;padding:3px 5px}
-.thm[aria-pressed="true"] .thm-on{display:block}
-.thm.wide{padding:11px 13px}
+border:1px solid var(--accent-line);border-radius:4px;padding:3px 6px}
+.thm[aria-pressed="true"] .thm-on{visibility:visible}
+/* The rows with no swatch (motion, opening view) have only the one column. */
+.thm.wide{grid-template-columns:1fr;padding:11px 13px}
+.thm.wide .thm-on{grid-column:1}
 /* The swatches, each the wash of the theme it names. */
 .thm-plain{background:#f3f5fa}
 .thm-ukiyoe{background:radial-gradient(20px 16px at 20% 14%,rgba(18,83,158,.85),transparent 66%),radial-gradient(18px 14px at 86% 26%,rgba(179,38,30,.7),transparent 68%),repeating-linear-gradient(93deg,rgba(80,60,30,.16) 0 1px,transparent 1px 4px),#e8e0d2}
