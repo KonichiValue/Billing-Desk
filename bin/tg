@@ -164,6 +164,24 @@ run_agent() {
   local job="${1:t:r}"   # prompt-refresh.md -> refresh, matching config.json
   job="${job#prompt-}"
 
+  # Everything standing between here and a real run, asked before a token is
+  # spent. The page has always done this; this script never did, which is why a
+  # locked 1Password vault or a lapsed Slack grant showed up here as a sweep that
+  # ran for six minutes and died half-way through writing the board. The check is
+  # the same `agent.blockers()` the buttons use, so a failure reads the same
+  # whichever way the job was started.
+  local why
+  why="$(python3 -c '
+import agent
+left, message = agent.blockers(agent.pick())
+if left:
+    print(message)
+')" || { print -u2 "could not check whether a run can work"; return 1 }
+  if [[ -n "$why" ]]; then
+    print -u2 "$why"
+    return 1
+  fi
+
   # Which CLI runs this, on which model, and with which flags, is agent.py's
   # business. The page and this script have to agree about it, and two copies of
   # that knowledge is how they stop agreeing. It prints the command one word per

@@ -115,7 +115,28 @@ class Claude(Kind):
     stream = ["--output-format", "stream-json", "--verbose"]
 
     def env(self) -> dict[str, str]:
-        """The environment a headless run needs, with the host's stripped out.
+        """The environment a headless run needs, with the credential pinned in.
+
+        `_base_env()` does the stripping. This adds the one thing that keeps a
+        long sweep alive: the gateway key, resolved once and passed in as
+        `ANTHROPIC_API_KEY`.
+
+        Claude Code re-runs `apiKeyHelper` periodically rather than once at
+        startup, so a sweep that began with an unlocked vault still dies when
+        1Password idle-locks ten minutes later. That is exactly how the 28 Sep
+        prep was lost: Asana and Slack had already answered, and the run was
+        part-way through writing the board. Handing the key over in the
+        environment means the helper is never needed again mid-run, so the vault
+        can lock without taking the sweep with it.
+        """
+        env = self._base_env()
+        key = self.credential()
+        if key:
+            env["ANTHROPIC_API_KEY"] = key
+        return env
+
+    def _base_env(self) -> dict[str, str]:
+        """The run's environment with the attending host's variables stripped.
 
         When this server is started from inside a Claude Code session, that
         session exports variables saying an app is managing the provider and
@@ -177,18 +198,74 @@ class Claude(Kind):
         `claude auth status` reports the first-party account, which says nothing
         here: this account authenticates to the Kraken gateway through
         `apiKeyHelper`, so a working setup reports `loggedIn: false`. What
-        actually matters is whether the gateway is configured, so that is what
-        is tested.
+        actually matters is whether the credential can actually be *fetched*, so
+        that is what is tested.
+
+        Reading settings.json is not enough, and 28 Sep is what proved it. The
+        helper was configured, this returned True, and the prep died six minutes
+        in with "authorization timeout" because the 1Password vault was locked.
+        A configured helper that cannot answer is worse than no helper: it passes
+        the preflight and fails after the money is spent. So the helper is run.
         """
+        return bool(self.credential())
+
+    def credential(self) -> str:
+        """The gateway key, resolved now, or "" when it cannot be had.
+
+        Three places it can come from, cheapest first: an API key already in the
+        environment, one written into settings.json, or `apiKeyHelper` run as a
+        subprocess. The helper is the normal case here and the only one that can
+        fail, because it shells out to 1Password.
+
+        The answer is memoised for the life of the process so a preflight and the
+        run it guards cannot disagree, and so pressing Prep does not open the
+        vault twice.
+        """
+        if Claude._credential is not None:
+            return Claude._credential
+        Claude._credential = self._resolve_credential()
+        return Claude._credential
+
+    # Set once per process by credential(). None means "not asked yet"; "" means
+    # asked and there is nothing to be had.
+    _credential: str | None = None
+
+    def _resolve_credential(self) -> str:
+        # ANTHROPIC_API_KEY only. Not ANTHROPIC_AUTH_TOKEN: that is the attending
+        # host's bearer token, it is a different auth mechanism from an API key,
+        # and `_base_env()` strips it on purpose. Passing it back in under the
+        # key's name would send the run at the gateway with a credential the
+        # gateway does not accept.
+        if os.environ.get("ANTHROPIC_API_KEY"):
+            return os.environ["ANTHROPIC_API_KEY"]
         settings = Path.home() / ".claude" / "settings.json"
         try:
             conf = json.loads(settings.read_text(encoding="utf-8"))
         except (OSError, ValueError):
-            return False
-        env = conf.get("env") or {}
-        if conf.get("apiKeyHelper") or env.get("ANTHROPIC_API_KEY"):
-            return True
-        return bool(os.environ.get("ANTHROPIC_API_KEY"))
+            return ""
+        if (conf.get("env") or {}).get("ANTHROPIC_API_KEY"):
+            return conf["env"]["ANTHROPIC_API_KEY"]
+        helper = conf.get("apiKeyHelper")
+        if not helper:
+            return ""
+        # `_base_env()` rather than os.environ, because a helper run from inside
+        # an attended session inherits variables that send it looking for a host
+        # handshake. Not `env()`: that asks for the credential, which is what we
+        # are in the middle of working out.
+        #
+        # 60s because `op read` on a locked vault blocks on a Touch ID prompt
+        # nobody is there to answer, and failing is better than hanging a sweep.
+        try:
+            out = subprocess.run(
+                helper, shell=True, capture_output=True, text=True, check=False,
+                timeout=60, stdin=subprocess.DEVNULL, env=self._base_env(),
+                cwd=ROOT,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return ""
+        if out.returncode != 0:
+            return ""
+        return out.stdout.strip()
 
     def mcp_states(self) -> dict[str, str]:
         """Every configured MCP server, and whether it is usable right now.
@@ -504,8 +581,10 @@ def blockers(kind: Kind | None) -> tuple[list[str], str]:
     if not kind.signed_in():
         if kind.name == "claude":
             return ["account"], (
-                "Claude Code has no model credential. Check apiKeyHelper in "
-                "~/.claude/settings.json."
+                "Claude Code could not fetch its model credential. apiKeyHelper "
+                "in ~/.claude/settings.json ran and gave nothing back, which is "
+                "usually a locked 1Password vault: unlock it, or run "
+                "`op signin`, then try again."
             )
         return ["account"], f"{kind.name} is signed out."
     fresh = _ready_cache.get(kind.name, 0)
