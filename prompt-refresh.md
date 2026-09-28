@@ -168,6 +168,26 @@ The SWEEP PLAN names the incremental gate. It does not replace the census: run
 the census even when the plan does not mention it, because the plan is built from
 what is already on the board and cannot list a ticket the board has never seen.
 
+**The census is the only door onto the board. A ticket it did not return does not
+become one, however important the room made it.** This cuts both ways and the
+second way is the one that has actually gone wrong: a sweep read an unassigned
+incident that the standup had just made Top Priority, judged it important, and
+wrote it on as a ticket with an item asking Kraken to staff it. Nobody had given
+it to Rei, his name was nowhere on it in Asana, and the desk is his to-do list
+rather than the programme's. So:
+
+- **Assigned to him in the census, or it is not a ticket.** An unassigned ticket
+  is not his even when it is Top Priority, an incident, and the only thing the
+  room talked about. Neither is one assigned to somebody else, unless it is
+  already on the board with an open item of his on it.
+- **Important and not his is `news`, and that is the whole of it.** One row, the
+  route by which it reaches one of his tickets named, and off again when that
+  route closes. If the sweep did real work on it, a code trace, a count out of
+  prod, the finding goes in the `news` row's `what` so it is not lost. Never an
+  item, because an item is something he does.
+- **Chasing a Kraken queue is never his item.** "Get an engineer onto this" is
+  not work he owns, it is somebody else's resourcing, and step 6 already says so.
+
 Against that combined set:
 
 - The ticket set is every incomplete task assigned to Rei in `インシデント（TG
@@ -488,6 +508,69 @@ is still true: the moment somebody has answered, or the thing has become an item
 with a number, take it off. Do not write a new one to fill the space. The line
 above it, what needs him and which item to start on, is counted from the board
 by the renderer, so never write a headline or a summary of the day anywhere.
+
+## 8b. Write the morning brief
+
+`brief` is the last thing you write and the first thing he reads: the five things
+a good secretary would tell him before the day starts. It is the one place on
+this board where a written sentence about the day is wanted, and it is bounded
+precisely so it cannot become the summary section 8 forbids.
+
+**Five lines maximum, and fewer is the normal answer.** Three good lines beat five
+padded ones. The cap is the point: everything on this board is already on a card,
+so a sixth line means one of the five had not earned its place. Never write a
+line to fill a slot, and never write one whose content is "nothing has changed" —
+leave the slot out.
+
+The test for every line: **would he be worse off not knowing this before 09:00
+today?** If the answer is no, it stays on its card and out of here.
+
+Each line is `{"kind", "what", "items", "ref", "source_url", "at"}`. `what` is
+one or two plain sentences that make sense to someone who has read nothing else,
+with no internal shorthand and no Asana ids he would have to look up. `items` are
+the numbers the line is about, so the page can link them; `ref` is the ticket tag.
+
+The five kinds, in the order they are drawn. **Two of them you normally leave
+alone**, because the page writes them off the board and a written copy would go
+stale beside a live one:
+
+- `room` — the next session and what he owes it. **The page writes this from
+  `sessions`**, so only write one yourself if you know something about today's
+  room that `sessions` does not, and then it replaces the drawn one.
+- `big` — **the page writes this from the newest `news` row.** Write one yourself
+  only when something is bigger than anything in `news`, and then also put it in
+  `news` if it has a route to one of his tickets.
+
+  This is the one line on the board that does not need that route. Something
+  moving across **TG or Kyuden** with enough people and enough consequence behind
+  it that not knowing would be worse than any of his own jobs: a platform
+  decision, a migration-wide freeze, a top-priority build, an incident heading
+  for billing. If you picked it up in any channel, any meeting note, any thread,
+  and it is genuinely big, it belongs here even with no ticket to hang it on.
+  Most days the newest `news` row is the right answer and you write nothing.
+
+The three you do write, every sweep:
+
+- `moved` — something that actually changed since the previous `brief.built_at`:
+  a reply landed, TG closed or moved a ticket, a flag went on, a ticket was
+  assigned to him. Not a restatement of where things stand. Read the previous
+  brief's `built_at` and only report what is newer than it.
+- `do` — the one thing to start on, by number, and why it is that one. One line.
+- `watch` — a clock he cannot act on: a hold window, someone away, a release
+  going out. One line at most.
+
+So a normal sweep writes two or three lines and the page makes five. Writing all
+five is the sign you have copied something the page already knew.
+
+Set `for_date` to today and `built_at` to `board.now()`, and rewrite the whole
+block every sweep rather than appending to it. The page refuses to draw a brief
+whose `for_date` has passed, so a stale one disappears rather than being read as
+this morning's.
+
+Two things this may never be. It is not a summary of the board: "four items need
+you, 60 minutes in total" is counted by the renderer and already on the page. And
+it is not where work goes. If a line describes something he has to do, that thing
+is an item with a number, and the line points at the number.
 
 ## 9. Keep the shorthand current
 

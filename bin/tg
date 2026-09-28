@@ -16,6 +16,7 @@
 #   tg mcp              check the Asana and Slack connections a sweep needs
 #   tg build            rebuild the page from the board, no agent
 #   tg post             fold today's Notion meeting note into the board
+#   tg morning          sweep at 08:15 Mon-Fri, so the brief is already written
 #   tg phone [mins]     open this page to the wifi for an hour, for a phone
 #   tg stop             shut the local page server down
 #
@@ -266,6 +267,34 @@ case "${1:-}" in
     python3 render_desk.py "$BOARD" output/desk.html || exit 1
     python3 render_desk_md.py "$BOARD" output/desk.md ;;
   post)          ./run_post.sh --force ;;
+  # The morning sweep on a schedule, so the brief is written before he sits down.
+  # Opt-in rather than something install.sh does, because it spends money every
+  # weekday morning and that is his decision to make once, knowingly.
+  morning)
+    agent_plist="$HOME/Library/LaunchAgents/com.tg-billing-desk.brief.plist"
+    case "${2:-on}" in
+      off)
+        launchctl bootout "gui/$UID/com.tg-billing-desk.brief" 2>/dev/null \
+          || launchctl unload -w "$agent_plist" 2>/dev/null || true
+        rm -f "$agent_plist"
+        print -r -- "morning brief off. Nothing runs on a schedule now." ;;
+      status)
+        if launchctl list 2>/dev/null | grep -q com.tg-billing-desk.brief; then
+          print -r -- "morning brief on, 08:15 Mon-Fri"
+        else
+          print -r -- "morning brief off. Turn it on with: tg morning"
+        fi ;;
+      *)
+        cp "$REPO/launchd/com.tg-billing-desk.brief.plist" "$agent_plist"
+        launchctl bootout "gui/$UID/com.tg-billing-desk.brief" 2>/dev/null || true
+        launchctl bootstrap "gui/$UID" "$agent_plist" 2>/dev/null \
+          || launchctl load -w "$agent_plist" 2>/dev/null \
+          || { print -u2 "could not load the agent"; exit 1 }
+        print -r -- "morning brief on: a sweep at 08:15, Mon to Fri."
+        print -r -- "It takes the same lock as the buttons and refuses to run"
+        print -r -- "without Asana, Slack and a model credential."
+        print -r -- "Off again with: tg morning off" ;;
+    esac ;;
   open)          page ;;
   -h|--help|help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' ;;
   *)             python3 tick.py "$@" ;;

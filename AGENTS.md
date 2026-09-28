@@ -21,6 +21,18 @@ carries its own status, so a script cannot contradict the list.
 that will reach one of his tickets. Add a row only with the route named, and
 take it off once that route closes.
 
+**A ticket goes on the board because Asana assigns it to Rei, never because it
+matters.** The board is his to-do list, not the programme's status. So a ticket
+nobody has given him stays off it even when it is Top Priority, handled as an
+incident, and the only thing the standup discussed: that is a `news` row, with the
+route by which it reaches one of his tickets named, and nothing more. If work in a
+chat turned up a real finding on it, a code trace or a count out of production,
+the finding goes in that row rather than becoming an item, because an item is
+something he does. Chasing who Kraken assign to a build is not his work and never
+gets a number. The one exception is a ticket already on the board with an open item
+of his on it: that stays until the item closes, however Asana's assignee field
+moves.
+
 `sessions` on the board is every room he still has to speak in, soonest first,
 and `script.for_date` says which one the current script was written for. That
 session may be an onsite rather than the 10:30 standup, which changes how much

@@ -22,6 +22,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import render_standup
+import render_brief
 import render_dialogs
 import render_path
 import render_week
@@ -896,103 +897,14 @@ def news_rows(rows: list[dict]) -> str:
     </div>"""
 
 
-def first_line(tickets: list[dict], soon: dict) -> str:
-    """The first sentence on the page, worked out from the board itself.
-
-    This used to be a sentence an agent wrote about yesterday, and by the time
-    he read it the words were a recap of a conversation he had already had. The
-    only thing worth the top line is what needs him, so it is counted rather
-    than composed: the page cannot editorialise, and it cannot go stale.
-    """
-    index = index_items(tickets)
-    mine, held, waiting = [], [], []
-    for t in tickets:
-        for item in t.get("items", []):
-            st = state_of(item)
-            row = (t, item, st)
-            if st["state"] == "todo":
-                # Something queued behind another job is not one of the things
-                # that needs him, and counting it here is how the top line ends
-                # up naming work he cannot start.
-                if not blocked_on(item, index):
-                    mine.append(row)
-            elif st["state"] == "hold":
-                held.append(row)
-            elif st["state"] == "waiting":
-                waiting.append(row)
-
-    today = date.today().isoformat()
-    before = ""
-    if soon.get("date"):
-        when = when_words(soon.get("date", ""))
-        if when in ("today", "tomorrow"):
-            room = esc(soon.get("name", "standup")).lower()
-            before = (
-                f" Material for the {room} {when}."
-                if when == "tomorrow"
-                else f" The {room} is {when}."
-            )
-
-    if mine:
-        # The one to start on: something promised to a person outranks a
-        # deadline, and a deadline outranks the order the numbers happen to be
-        # in. Everything else is on its card.
-        def urgency(row: tuple) -> tuple:
-            _, item, _ = row
-            return (
-                0 if item.get("committed_to") else 1,
-                0 if item.get("at_standup") else 1,
-                item.get("id", 99),
-            )
-
-        ticket, item, _ = sorted(mine, key=urgency)[0]
-        mins = sum(i.get("est_minutes") or 0 for _, i, _ in mine)
-        n = len(mine)
-        clock = f", about {mins} min" if mins else ""
-        lead = (
-            f"<b>One thing needs you{clock}.</b>"
-            if n == 1
-            else f"<b>{n} things need you{clock} in total.</b>"
-        )
-        owed = (
-            f' You promised it to {esc(item["committed_to"])}.'
-            if item.get("committed_to")
-            else before
-        )
-        which = "Item" if n == 1 else "Start with item"
-        return (
-            f'{lead} {which} <b>{esc(item.get("id"))}</b> on '
-            f'{esc(ticket.get("ref"))}: {esc(item.get("title"))}.{owed}'
-        )
-
-    due = [
-        row
-        for row in held + waiting
-        if ((row[1].get("hold") or {}).get("revisit") or "") <= today
-        and ((row[1].get("hold") or {}).get("revisit") or "")
-        or ((row[1].get("waits_on") or {}).get("chase_on") or "") <= today
-        and ((row[1].get("waits_on") or {}).get("chase_on") or "")
-    ]
-    if due:
-        ticket, item, st = due[0]
-        return (
-            f"<b>Nothing is yours to write, but {len(due)} "
-            f'{"chase is" if len(due) == 1 else "chases are"} due.</b> '
-            f'<b>{esc(item.get("id"))}</b>, {esc(item.get("title"))}, has been '
-            f'with {esc(st.get("who") or "them")} since {esc(st.get("at", ""))}.'
-        )
-    if held or waiting:
-        n = len(held) + len(waiting)
-        return (
-            f"<b>Nothing needs you right now.</b> {n} "
-            f'{"thing is" if n == 1 else "things are"} sitting with other people, '
-            "none of them due a chase today."
-        )
-    return "<b>Nothing open across any ticket.</b> Enjoy it."
-
 
 def need_to_know(
-    board: dict, has_script: bool, news: list[dict], tickets: list[dict], soon: dict
+    board: dict,
+    has_script: bool,
+    news: list[dict],
+    tickets: list[dict],
+    soon: dict,
+    refs: dict[str, str] | None = None,
 ) -> str:
     """Everything he has to know before he starts, in one block he can shut.
 
@@ -1070,6 +982,15 @@ def need_to_know(
         for that meeting has to move into Asana.</span>
       </div>"""
 
+    # What is left under the brief: the detail behind its lines. The brief names
+    # the room and the biggest news; this is where the rest of the rooms, the
+    # alert and the other four news rows live, for when one of those lines makes
+    # him want the whole thing.
+    #
+    # The counted sentence that used to head this block is gone. "4 things need
+    # you, about 60 minutes in total" is arithmetic he can see on the cards, and
+    # above a brief that says what to start on it was one more line to read
+    # before the useful one.
     inside = []
     if alert_block:
         inside.append("something urgent")
@@ -1077,14 +998,15 @@ def need_to_know(
         inside.append("the next room")
     if news:
         inside.append(f"{len(news)} TG updates" if len(news) != 1 else "1 TG update")
+    if not (alert_block or next_block or news):
+        return ""
     return f"""
   <details class="nk{" hot" if alert_block else ""}" id="need"
-           data-remember="need" open>
+           data-remember="need">
     <summary>
-      <span class="nk-k">Need to know</span>
+      <span class="nk-k">The detail</span>
       <span class="nk-n">{esc(", ".join(inside))}</span>
       <span class="fold-hint"></span>
-      <span class="nk-sum">{first_line(tickets, soon)}</span>
     </summary>
     <div class="nk-in">
       {alert_block}
@@ -1336,7 +1258,8 @@ def render(data: dict) -> str:
 <div class="wrap" id="top">
   <div id="view-desk" role="tabpanel">
     {jump_bar(tickets, refs, True)}
-    {need_to_know(data, has_script, news, tickets, soon)}
+    {render_brief.render(data, refs)}
+    {need_to_know(data, has_script, news, tickets, soon, refs)}
     {render_week.render(data, tickets, refs)}
     {render_track(tickets, refs, soon)}
     <div class="howto">

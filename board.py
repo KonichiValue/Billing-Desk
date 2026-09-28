@@ -133,6 +133,42 @@ nothing else, and a link to the message.
 
     {"what": "...", "source_url": "..."}
 
+`brief` is the morning briefing: the five things he would want a secretary to
+tell him before the day starts, and nothing else.
+
+    {"built_at": "2026-09-28T08:15:00+09:00", "for_date": "2026-09-28",
+     "lines": [{"what": "...", "kind": "room|moved|do|watch|big",
+                "items": ["43"], "ref": "保安閉栓",
+                "source_url": "...", "at": "10:30"}]}
+
+**Five lines, hard cap, and fewer is the normal answer.** Everything on the board
+is already on a card; this is only the part that is true *this morning* and would
+cost him something to miss. A sixth line means one of the five was not important
+enough, not that today was busy.
+
+`kind` is what sort of thing it is, and orders the list:
+
+- `room` a session today and what he owes it. Always first if there is one.
+- `moved` something that changed since the last brief: a reply landed, TG closed
+  a ticket, a flag went on, a ticket was assigned to him.
+- `do` what to start on, named by item number so he can act on it at once.
+- `watch` something with a clock on it he cannot act on: a hold window, someone
+  away, a release going out.
+- `big` the exception to "his work only". Something happening across TG **or
+  Kyuden** with enough people and enough consequence that not knowing it would
+  be worse than any of the above: a platform decision, a migration-wide freeze,
+  an incident that will reach billing. It does not need a route to one of his
+  tickets, which is the one place on this board that rule is relaxed. Most days
+  there is none, and inventing one to fill the slot is the failure mode.
+
+`items` are item numbers the line is about, so the page can link them. `ref` is a
+ticket tag when the line is about one. A line with neither is fine for `big`.
+
+Written by the sweep as its last step, and rewritten every time, so it always
+matches the board it was drawn from. The page says its age and refuses to draw a
+brief written for a day that has passed, because a stale briefing read as a
+current one is worse than no briefing.
+
 `terms` carries the vocabulary of the ticket in both languages: `term` in
 English, `say` as TG say it with furigana as `{漢字|かんじ}`, `means` in a
 sentence or two that opens with what the thing is. He hears the Japanese in the

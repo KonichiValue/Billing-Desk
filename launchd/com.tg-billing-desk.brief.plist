@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.tg-billing-desk.brief</string>
+
+    <!-- The morning sweep, so the brief is already written when he opens the
+         page. `tg refresh` is the same routine the Refresh button runs, and its
+         last step writes `brief`, so this needs no separate job of its own. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/zsh</string>
+        <string>-lc</string>
+        <string>bin/tg refresh &gt;&gt; logs/launchd-brief.out.log 2&gt;&amp;1</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/rei.samuelsson/Projects/tg-billing-desk</string>
+
+    <!-- 08:15 on weekdays. Early enough that the brief is waiting for him and
+         that a slow sweep still lands well before the 10:30 standup, late enough
+         that overnight Slack from the Kraken side has arrived.
+
+         Not the weekend: nothing on this desk moves on a Saturday, and a brief
+         written then would be stale by Monday anyway (the page refuses to draw
+         one whose `for_date` has passed, so it would simply not appear).
+
+         `tg refresh` takes the same lock the buttons take, so this cannot
+         collide with a sweep he started himself, and it refuses to run at all if
+         the MCP servers or the model credential are not there. -->
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>15</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>15</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>15</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>15</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>15</integer></dict>
+    </array>
+
+    <!-- A laptop asleep at 08:15 runs it on waking rather than skipping the day,
+         which is the difference between a brief most mornings and a brief on the
+         mornings he happened to be at the desk early. -->
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/Users/rei.samuelsson/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>TZ</key>
+        <string>Asia/Tokyo</string>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/rei.samuelsson/Projects/tg-billing-desk/logs/launchd-brief.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/rei.samuelsson/Projects/tg-billing-desk/logs/launchd-brief.err.log</string>
+</dict>
+</plist>
