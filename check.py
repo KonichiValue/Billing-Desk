@@ -187,6 +187,51 @@ def pages_render() -> list[str]:
     return bad
 
 
+def week_shows_his_work() -> list[str]:
+    """Every job he could start today is drawn on the week strip.
+
+    The strip is what he plans against, and its first version read only
+    `waits_on.chase_on`, which is the field for work sitting with *somebody
+    else*. His own jobs carry no date at all, so a calendar meant to answer
+    "what am I doing this week" showed five of other people's chases and none of
+    his four jobs.
+
+    So this asserts the thing that was wrong: anything the desk labels "Do now"
+    has a column on the strip. It also catches the subtler version, where his
+    work is filed correctly but folded into "and 2 more" behind somebody else's
+    chases.
+    """
+    try:
+        import render_desk
+        import render_week
+        from render import item_state, next_live, when_tag
+    except Exception as exc:
+        return [f"could not import the renderers: {exc}"]
+    data = B.load()
+    tickets = data.get("tickets", [])
+    soon = next_live(data)
+    mine = []
+    for ticket in tickets:
+        for item in ticket.get("items", []):
+            state = item_state(item)
+            if state["closed"]:
+                continue
+            if when_tag(item, state, soon)[0] == "Do now":
+                mine.append((str(item.get("id")), item.get("title", "")))
+    if not mine:
+        return []
+    refs = {t.get("ref", ""): render_desk.anchor(t.get("ref", "")) for t in tickets}
+    drawn = set(
+        re.findall(r'class="wd-n">(\d+)<', render_week.render(data, tickets, refs))
+    )
+    return [
+        f'job {ident} ("{title[:40]}") is Do now but has no place on the week '
+        f"strip, so the calendar does not show work he could start today"
+        for ident, title in mine
+        if ident not in drawn
+    ]
+
+
 def themes_keep_the_text() -> list[str]:
     """No theme may move the text ramp, and every theme must move a surface.
 
@@ -332,6 +377,7 @@ CHECKS = (
     ("Spoken lines carry furigana", furigana_present),
     ("Both pages render", pages_render),
     ("A theme moves the paper, never the ink", themes_keep_the_text),
+    ("The week shows the work he could start", week_shows_his_work),
     ("The board is up to date", board_freshness),
 )
 

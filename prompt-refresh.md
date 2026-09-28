@@ -418,6 +418,29 @@ each group, so a `today` that is really next week is worse than no flag. Reserve
 `today` for work with a person or a room waiting on it, and use `monitor` for
 anything that only needs watching.
 
+**`urgency` is one of exactly three words: `today`, `this-week`, `monitor`.**
+Hyphen, not a space. Nothing else is a value, and this is not a style
+preference: the page reads these three to place a job on the week strip, so
+`this week` with a space is a job that loses its column. `./check.py` fails a
+board that carries anything else, and `./tick.py` will not save one, so a
+mistake here stops the sweep rather than quietly mis-sorting the page.
+
+**Every job he can act on needs a day, one way or the other.** The week strip is
+how he plans, and it gets a job's day from one of two places:
+
+- Work sitting with **somebody else** carries `waits_on.chase_on`, an ISO date:
+  the day their silence becomes his problem again. Always a real date, never a
+  sentence — `"chase_on": "Only if he raises it again"` is a job with no day,
+  and it is invisible on the strip. Put that sentence in `waits_on.what` and
+  give `chase_on` a date, or leave it out and set `urgency: monitor`.
+- Work sitting with **him** carries no date, only `urgency`, and the strip reads
+  it: `today` lands on today, `this-week` on the next working day, `monitor`
+  stays off. So an actionable job marked `monitor` is a job he will not see
+  coming, and that is the one mistake to avoid here.
+
+A job is therefore either somebody else's with a real `chase_on`, or his with an
+honest `urgency`. Anything else disappears from the week he plans against.
+
 **`at_standup` follows `sessions`, not habit.** The billing standup runs on the
 days in `config.json`, so check the next live session before you leave a flag
 on. If the next room is days away and the item is due today, or it is a session

@@ -51,23 +51,29 @@ ISO = re.compile(r"\d{4}-\d{2}-\d{2}")
 # flagged with its real date, because Friday is the last day he can act on it.
 WEEK_DAYS = 5
 
-# Rows before a day starts saying "and 3 more" instead of growing. Three is
-# what fits without any column setting the height of the whole strip.
-ROWS_PER_DAY = 3
+# Rows a day draws before the rest become "and 2 more". The column scrolls, so
+# this is about which rows are visible without asking, not which exist.
+#
+# Work sitting with *him* is never folded away, however many there are: the
+# strip exists so he can see what he is doing, and "and 2 more" hiding two of
+# his own jobs is the failure it was built to prevent. Only other people's
+# chases count against the limit.
+ROWS_PER_DAY = 4
 
 
 def whose(item: dict, st: dict) -> tuple[str, str]:
     """Who is holding this, and which of the page's four colours that is.
 
-    Same language as everywhere else on the desk, because a job that is red on
-    its card and grey here is two facts about one job.
+    The words are the card's words. A job whose card pill reads "With you" and
+    whose calendar row read "You" is the same fact told two ways, and the whole
+    point of putting his work on the strip is that he recognises it there.
     """
     if st["state"] == "todo":
-        return "You", "mine"
+        return "With you", "mine"
     if st["state"] == "hold":
-        return st.get("who") or "Blocked", "held"
+        return st.get("who") or "Held", "held"
     who = (item.get("waits_on") or {}).get("who") or st.get("who") or ""
-    return who or "Them", "theirs"
+    return f"With {who}" if who else "With them", "theirs"
 
 
 def monday_of(day: date) -> date:
@@ -202,14 +208,23 @@ def render(board: dict, tickets: list[dict], refs: dict[str, str]) -> str:
     for n, d in enumerate(days):
         iso = d.isoformat()
         sess = sorted(rooms.get(iso, []), key=lambda s: s.get("at") or "")
-        jobs = sorted(by_day.get(iso, []), key=lambda r: (not r["late"], r["id"]))
+        # Late first, then his own work, then everyone else's, then by number.
+        jobs = sorted(
+            by_day.get(iso, []),
+            key=lambda r: (not r["late"], r["tone"] != "mine", int(r["id"] or 0)),
+        )
         marks = "".join(
             f"""<span class="wd-room" title="{esc(s.get("label") or "")}">
               <b>{esc(s.get("at", ""))}</b>
               {esc((s.get("tab") or s.get("name") or s.get("kind") or "Session"))}</span>"""
             for s in sess
         )
-        shown, rest = jobs[:ROWS_PER_DAY], jobs[ROWS_PER_DAY:]
+        # His own work is never folded away, however long the day is. Only the
+        # rest competes for the remaining rows.
+        his = [r for r in jobs if r["tone"] in {"mine", "late"}]
+        others = [r for r in jobs if r not in his]
+        room = max(0, ROWS_PER_DAY - len(his))
+        shown, rest = his + others[:room], others[room:]
         rows = "".join(
             f"""<a class="wd-job {esc(r["tone"])}{" guess" if r["guess"] else ""}"
                href="#{esc(refs.get(r["ref"], ""))}"

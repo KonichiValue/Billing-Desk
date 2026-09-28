@@ -323,6 +323,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -401,6 +402,14 @@ SHAPES: dict[str, type | tuple[type, ...]] = {
 LISTS_OF_TEXT = ("steps",)
 PREPARED_TEXT = ("findings", "unanswered", "sources", "files")
 
+# The only three urgencies. The week strip reads them to place a job on a day,
+# so a fourth spelling is a job that loses its column rather than a tidiness
+# problem. `prompt-refresh.md` says the same thing in the same words.
+URGENCIES = frozenset({"today", "this-week", "monitor"})
+
+# A chase date, and nothing else. A sentence in this field is a job with no day.
+ISO_DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
+
 
 def check(board: dict) -> list[str]:
     """Everything wrong with the shape of this board, in the words of a fix.
@@ -440,6 +449,31 @@ def check(board: dict) -> list[str]:
                         f"{where}: {field}[{n}] is a {type(entry).__name__}, "
                         f"should be a plain sentence"
                     )
+
+        # `urgency` is a closed set of three words, because the week strip reads
+        # them to place a job on a day. A fourth spelling is not a style slip:
+        # `this week` with a space sorted as unknown and the job lost its column.
+        # Refused here, at the point of writing, rather than found on the page.
+        urgency = item.get("urgency")
+        if urgency is not None and str(urgency).strip().lower() not in URGENCIES:
+            bad.append(
+                f"{where}: urgency is {urgency!r}. It has to be one of "
+                f"{', '.join(sorted(URGENCIES))} (hyphen, not a space), because "
+                f"the week strip reads it to place this job on a day."
+            )
+
+        # A chase date has to be a date. A sentence here ("Only if he raises it
+        # again") is a job with no day on it, so it never appears on the week he
+        # plans against. The sentence belongs in waits_on.what.
+        waits = item.get("waits_on")
+        if isinstance(waits, dict):
+            chase = waits.get("chase_on")
+            if chase and not ISO_DAY.fullmatch(str(chase).strip()):
+                bad.append(
+                    f"{where}: waits_on.chase_on is {chase!r}, which is not a "
+                    f"date. Use YYYY-MM-DD so the week strip can place it, and "
+                    f"put any condition in waits_on.what."
+                )
 
         prepared = item.get("prepared")
         if isinstance(prepared, dict):
