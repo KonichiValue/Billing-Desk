@@ -350,6 +350,16 @@ font-size:10.5px;font-weight:800}
 color:var(--green)}
 .step-past[open]>summary{margin-bottom:12px;border-radius:9px 9px 0 0}
 .step-past .steps-list{padding-left:2px}
+/* After the base rules, not before them: the shorthand `padding` below would
+   otherwise win on specificity ties and the phone would keep the full indent.
+   On a 375px screen 30px of rail was coming off the width of every draft. */
+@media (max-width:640px){
+.steps-list:before{left:6px}
+.step{padding-left:21px}
+.step .g-m{width:15px;height:15px;top:10px}
+.step-head{gap:8px}
+.step-work{padding-left:0}
+}
 
 /* Background: how it got here, the words, the threads. Three folds that were
    three sections and are now one drawer. What is inside keeps its own shape,
