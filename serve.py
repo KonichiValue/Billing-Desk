@@ -63,8 +63,16 @@ PREP_TIMEOUT_SECS = 1200
 # before its first token on this gateway, and killing a run that was only still
 # connecting is the worse mistake. So the clock does not start until the agent
 # says something, and STARTUP_GRACE_SECS is how long it has to say anything.
+#
+# While a request to the model is in flight, silence means something else again.
+# Thinking arrives whole rather than streamed, so a long think on a 300k-token
+# context is minutes with nothing to show, and 150s is what killed the 30 Sep
+# prep 43 tool calls in with every server connected. MODEL_STALL_SECS is that
+# case, and a request that truly hangs is still caught: the CLI's own request
+# timeout is ten minutes and it reports its retries, which count as life.
 STALL_SECS = 150
 STARTUP_GRACE_SECS = 300
+MODEL_STALL_SECS = 480
 
 job = {"state": "idle", "message": "", "url": "", "at": ""}
 job_lock = threading.Lock()
@@ -342,7 +350,8 @@ def mmss(secs: float) -> str:
 
 def read_events(stream, said: list[str], noise: list[str], calls: list[str],
                 began: float, beat: list[float], fh=None,
-                kind: agent.Kind | None = None) -> None:
+                kind: agent.Kind | None = None,
+                thinking: list[bool] | None = None) -> None:
     """Turn the agent's event stream into progress, and into a readable log.
 
     Three things come out of one pass: the final message, whatever the CLI said
@@ -352,8 +361,12 @@ def read_events(stream, said: list[str], noise: list[str], calls: list[str],
 
     Which events mean what is the CLI's business, so `kind.event` answers that
     and this only has to know the three things it can be told.
+
+    `thinking`, when given, is kept true while a model request is in flight, so
+    the watchdog can tell a model at work from a session that has gone.
     """
     reader = kind or agent.KINDS[0]
+    thinking = thinking if thinking is not None else [False]
     try:
         for raw in stream:
             clean = ANSI.sub("", raw).strip()
@@ -373,13 +386,18 @@ def read_events(stream, said: list[str], noise: list[str], calls: list[str],
                 noise.append(clean)
                 continue
             what, text = reader.event(event)
-            if what == "said":
+            if what in ("model", "idle"):
+                thinking[0] = what == "model"
+            elif what == "said":
                 said.append(text)
                 set_live(add=len(text))
                 tail = "".join(said)[-200:].replace("\n", " ").strip()
                 if tail:
                     set_live(last=tail)
             elif what == "call":
+                # The tool runs now, not the model, so a hung MCP call gets
+                # the ordinary stall window rather than the model's.
+                thinking[0] = False
                 calls.append(text)
                 set_live(last=plain_phrase(text))
                 if fh is not None:
@@ -443,9 +461,10 @@ def run_stream(cmd: list[str], payload: str, timeout: int, fh=None, key: str = "
     noise: list[str] = []
     calls: list[str] = []
     beat = [began]   # last time the agent emitted anything; read_events bumps it
+    thinking = [False]  # a model request is in flight; read_events keeps it
     reader = threading.Thread(
         target=read_events,
-        args=(proc.stdout, said, noise, calls, began, beat, fh, runner),
+        args=(proc.stdout, said, noise, calls, began, beat, fh, runner, thinking),
         daemon=True,
     )
     reader.start()
@@ -463,9 +482,17 @@ def run_stream(cmd: list[str], payload: str, timeout: int, fh=None, key: str = "
             # Before the first word, the grace period applies: a cold start on
             # this gateway has taken over two minutes to its first token, and
             # killing a run that was only still connecting is the worse error.
+            # With a model request open, the model's window; otherwise the
+            # tools', which are fast when they are alive at all.
             quiet = now - beat[0]
             silent_start = not said and not calls
-            stalled = quiet >= (STARTUP_GRACE_SECS if silent_start else STALL_SECS)
+            if silent_start:
+                allowed = STARTUP_GRACE_SECS
+            elif thinking[0]:
+                allowed = MODEL_STALL_SECS
+            else:
+                allowed = STALL_SECS
+            stalled = quiet >= allowed
             if stalled or now - began >= timeout:
                 proc.kill()
                 try:
@@ -1295,10 +1322,19 @@ def run_agent(kind: str) -> None:
                 fh.write(
                     f"\n{ran.text}\n"
                     f"=== {kind} ended after {ran.took}s, {ran.calls} tool calls, "
-                    f"exit {ran.code} ===\n"
+                    f"exit {ran.code}{', stalled' if ran.stalled else ''} ===\n"
                 )
             if ran.code is None:
-                if ran.stalled:
+                if ran.stalled and ran.calls:
+                    # It was working and then stopped answering, which is a
+                    # hung request or tool, not a lapsed login: pointing him
+                    # at setup-mcp.sh then sent him to check servers that were
+                    # all connected.
+                    set_job("failed",
+                            f"the {kind} stopped answering after {ran.calls} steps "
+                            f"and was stopped. It may have written part of the "
+                            f"board, so read {log.name} before pressing it again.")
+                elif ran.stalled:
                     set_job("failed",
                             f"the {kind} went quiet and was stopped, so the agent "
                             "session has most likely lapsed or a connection is down. "

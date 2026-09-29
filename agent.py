@@ -112,7 +112,15 @@ class Claude(Kind):
 
     # stream-json refuses to run without --verbose, and the pair is what makes a
     # tool call visible the moment it starts rather than at the end.
-    stream = ["--output-format", "stream-json", "--verbose"]
+    #
+    # --include-partial-messages is what keeps the stall watchdog honest. Without
+    # it the CLI says nothing at all while the model writes a turn, so a long
+    # board-writing script on a 300k-token context is two and a half minutes of
+    # silence that looks exactly like a dead session. That is how the 30 Sep prep
+    # was killed: 43 tool calls in, every server connected, stopped mid-sentence.
+    # With it, every chunk of text and tool input is a line, and a line is a beat.
+    stream = ["--output-format", "stream-json", "--verbose",
+              "--include-partial-messages"]
 
     def env(self) -> dict[str, str]:
         """The environment a headless run needs, with the credential pinned in.
@@ -311,8 +319,23 @@ class Claude(Kind):
         Three kinds matter to a page with a spinner on it: a tool call starting,
         prose arriving, and the final result. Everything else is noise the log
         does not need.
+
+        Two more matter to the watchdog: "model" when a request to the model is
+        in flight and "idle" when it has finished. Thinking does not stream on
+        this gateway even with partial messages, it arrives whole when it is
+        done, so silence during a request is the model working rather than the
+        session dying, and it is given longer.
         """
         kind = raw.get("type")
+        if kind == "system" and raw.get("subtype") == "status":
+            return ("model", "") if raw.get("status") == "requesting" else ("", "")
+        if kind == "stream_event":
+            step = (raw.get("event") or {}).get("type")
+            if step == "message_start":
+                return "model", ""
+            if step == "message_stop":
+                return "idle", ""
+            return "", ""
         if kind == "assistant":
             for part in (raw.get("message") or {}).get("content") or []:
                 if part.get("type") == "tool_use":
