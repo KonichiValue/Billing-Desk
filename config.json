@@ -19,7 +19,8 @@
     "name": "Billing standup (TG)",
     "time_local": "10:30",
     "timezone": "Asia/Tokyo",
-    "days": ["Mon", "Wed"]
+    "days": ["Mon", "Wed"],
+    "also": [{"name": "Billing Weekly (Other-priority review)", "kind": "weekly", "time_local": "13:00", "days": ["Wed"]}]
   },
   "ask": {
     "model": "claude-low-carbon-apac-opus-5-5"

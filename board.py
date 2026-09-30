@@ -42,7 +42,7 @@ rooms, and `script.for_date` says which one the current script was written for.
 A standup that is not running stays in the list with `skipped` set, since "no
 standup Wednesday" changes what has to move into Asana instead.
 
-    [{"kind": "standup|onsite|workshop", "date": "2026-08-26", "at": "10:30",
+    [{"kind": "standup|weekly|onsite|workshop", "date": "2026-08-26", "at": "10:30",
       "label", "title", "place", "focus", "skipped", "reason", "quote",
       "timetable": [{"at": "11:00", "what": "...", "mine": true}],
       "agenda": [{"topic", "why", "owner"}], "bring": ["..."]}]
@@ -436,6 +436,7 @@ SHAPES: dict[str, type | tuple[type, ...]] = {
     "after": (int, str),
 }
 LISTS_OF_TEXT = ("steps",)
+PREP_LISTS = ("issue", "script", "open_questions", "decisions", "pushback", "unknowns")
 PREPARED_TEXT = ("findings", "unanswered", "sources", "files")
 
 # The only three urgencies. The week strip reads them to place a job on a day,
@@ -557,6 +558,20 @@ def check(board: dict) -> list[str]:
                 f"{where}: state is {state!r}, which no renderer knows. "
                 f"One of {', '.join(OPEN_STATES + CLOSED_STATES)}."
             )
+
+    # A prep list written as null rather than left out takes both pages down:
+    # the renderers read a missing list as empty but iterate whatever is there.
+    for ticket in board.get("tickets", []):
+        prep = ticket.get("prep")
+        if not isinstance(prep, dict):
+            continue
+        for field in PREP_LISTS:
+            if field in prep and not isinstance(prep[field], list):
+                bad.append(
+                    f"prep on {ticket.get('ref', '?')}: {field} is "
+                    f"{type(prep[field]).__name__}, should be a list. Leave it "
+                    f"out when there is nothing to say."
+                )
 
     highest = max((int(n) for n in ids if n.isdigit()), default=0)
     if board.get("next_id", 0) <= highest:

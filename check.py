@@ -339,13 +339,13 @@ def furigana_present() -> list[str]:
     for t in data.get("tickets", []):
         ref = str(t.get("ref") or t.get("id") or "?")
         prep = t.get("prep") or {}
-        for block in prep.get("script", []):
+        for block in (prep.get("script") or []):
             head = block.get("heading", "現状")
             for line in block.get("lines", []):
                 scan(ref, f"script {head}", line.get("ja_ruby", ""))
-        for q in prep.get("open_questions", []):
+        for q in (prep.get("open_questions") or []):
             scan(ref, "question", q.get("ja_ruby", ""))
-        for p in prep.get("pushback", []):
+        for p in (prep.get("pushback") or []):
             scan(ref, "pushback", p.get("say_ja", ""))
     # The X-Workstream rollup is read out to the same room, so it is held to the
     # same rule as the standup script.

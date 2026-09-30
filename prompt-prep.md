@@ -72,6 +72,15 @@ standup, the `agenda` and what he has to `bring`. A standup that is not running
 stays in the list with `skipped` and a `reason`, because "no standup Wednesday"
 changes what has to move into Asana instead.
 
+**Wednesday has two rooms.** The 10:30 standup walks Top Priority and New, and
+the 13:00 **Billing Weekly** (`kind: weekly`) reviews the Other-priority tickets,
+which is where most of his are actually discussed. Once the 10:30 has passed,
+write for the weekly, and set `script.at` to `13:00` so the page picks it over the
+standup on the same date. A weekly gets onsite depth for a contested ticket
+(`decisions`, `pushback`), but it is an hour, not a day: three or four blocks at
+most, and a quiet ticket still gets one 現状. A ticket the morning standup did not
+reach is not settled by it; carry its question into the weekly unchanged.
+
 **When the session is an onsite**, four things change:
 
 1. **Depth.** A standup is 15 minutes for the whole board and he gets two

@@ -577,11 +577,16 @@ def script_session(board: dict) -> dict:
     """The session the current script was written for.
 
     If the script names a date, that is the room it describes, even when a
-    different session is now sooner. Otherwise, the next live one.
+    different session is now sooner. Otherwise, the next live one. Two rooms
+    can share a day (the 10:30 standup and the 13:00 weekly on a Wednesday),
+    so the script's `at` picks between them when it names one.
     """
-    wanted = script_meta(board).get("for_date")
+    meta = script_meta(board)
+    wanted = meta.get("for_date")
     if wanted:
-        match = next((s for s in sessions(board) if s.get("date") == wanted), None)
+        same_day = [s for s in sessions(board) if s.get("date") == wanted]
+        match = next((s for s in same_day if s.get("at") == meta.get("at")), None)
+        match = match or next(iter(same_day), None)
         if match:
             return match
         return a_session({"kind": "standup", "date": wanted})
