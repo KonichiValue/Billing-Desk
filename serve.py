@@ -56,9 +56,10 @@ DESK_PORT = 8787
 # is what catches a dead run. 30 Sep is what sized them. With a new ticket and
 # the Wednesday huddle, the sweep half of the prep alone took sixteen minutes on
 # Opus, three of its turns thinking for two to six minutes each, and the old
-# twenty-minute cap stopped it before it wrote a word.
-TIMEOUT_SECS = 1500
-PREP_TIMEOUT_SECS = 2100
+# twenty-minute cap stopped it before it wrote a word. The run that then got
+# through took 34 minutes, so the cap sits well clear of that.
+TIMEOUT_SECS = 1800
+PREP_TIMEOUT_SECS = 2700
 # A launched agent that streams nothing for this long is a dead session (a lapsed
 # login, the MCP servers down), not slow work: a real sweep emits a tool call
 # within seconds and keeps emitting. Stop it here with a re-auth message rather
