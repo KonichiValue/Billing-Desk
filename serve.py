@@ -1186,7 +1186,7 @@ def run_ask(ask_id: str, ref: str, question: str, parent: str = "") -> None:
         with cancel_lock:
             asks_running -= 1
         return
-    cmd = kind.command(model)
+    cmd = kind.command(model, effort=agent.effort_for("ask"))
     log = ROOT / "logs" / f"ask-{datetime.now():%Y-%m-%d}.log"
     log.parent.mkdir(exist_ok=True)
     try:
@@ -1295,7 +1295,7 @@ def run_agent(kind: str) -> None:
     log = ROOT / "logs" / f"{kind}-{datetime.now():%Y-%m-%d}.log"
     log.parent.mkdir(exist_ok=True)
     model = agent_model(kind)
-    cmd = runner.command(model)
+    cmd = runner.command(model, effort=agent.effort_for(kind))
     LOCK.write_text(f"{os.getpid()} desk-server {kind} {datetime.now():%H:%M}\n")
 
     # The board is ours alone for a sweep. The lock is set now, so new questions
@@ -1321,7 +1321,7 @@ def run_agent(kind: str) -> None:
             with log.open("a", encoding="utf-8") as fh:
                 fh.write(
                     f"\n=== {datetime.now():%H:%M:%S} {kind} on "
-                    f"{runner.name}/{model} ===\n"
+                    f"{runner.name}/{model}/{agent.effort_for(kind) or 'default'} ===\n"
                 )
                 fh.flush()
                 ran = run_stream(cmd, prompt.read_text(encoding="utf-8"), timeout, fh,

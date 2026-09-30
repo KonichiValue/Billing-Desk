@@ -25,10 +25,12 @@
     "model": "claude-low-carbon-apac-opus-5-5"
   },
   "refresh": {
-    "model": "claude-low-carbon-apac-opus-5-5"
+    "model": "claude-low-carbon-apac-opus-5-5",
+    "effort": "medium"
   },
   "prep": {
-    "model": "claude-low-carbon-apac-opus-5-5"
+    "model": "claude-low-carbon-apac-opus-5-5",
+    "effort": "medium"
   },
   "post": {
     "model": "claude-low-carbon-apac-opus-5-5"

@@ -68,8 +68,11 @@ add() {
 
 # Asana and Slack are the two a sweep cannot work without: the tickets and the
 # threads. Google comes along because the AI Hub grants it beside Slack and a
-# meeting invite is sometimes the only record of when a room happens.
-for name in asana slack google; do
+# meeting invite is sometimes the only record of when a room happens. Notion is
+# where the Migration Daily notes are; without it here, a sweep reports Notion
+# as missing even when the desktop app has it connected, because headless
+# Claude Code only sees the servers in ~/.claude.json.
+for name in asana slack google notion; do
   add "$name" --transport http --scope user "$name" "$HUB/$name"
 done
 

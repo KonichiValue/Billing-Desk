@@ -43,7 +43,11 @@ not rewrite `events` or `where_it_stands` beyond what the sweep already did.
 **Read the board for the script the same way the sweep does: once, and never by
 dumping it.** Writing the script needs the untruncated `where_it_stands`,
 `consequences`, `events` and `prepared` that the ordinary digest clips, so run
-`./digest.py --full` **once** and write from that. The hard rule in
+`./digest.py --full` **once, at the very start, in place of the plain
+`./digest.py` the sweep would run**, and use that one read for both halves. It
+has the SWEEP PLAN and the cheatsheet too. Reading the board twice, or reading
+`output/desk.md` on top of it, is the same board in context two or three times,
+and that is what made the 30 Sep prep take 34 minutes. The hard rule in
 `prompt-refresh.md` holds here too: no `help(board)`, and no `python3 -c "import
 board; ... for t in b['tickets']: print(...)"` to read a field back. You may only
 `import board` to *write* your `prep` block, using the WRITE CHEATSHEET forms.

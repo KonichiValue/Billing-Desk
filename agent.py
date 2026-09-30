@@ -46,7 +46,7 @@ NEEDED_MCPS = ("asana", "slack")
 # NEEDED_MCPS on purpose: a sweep that reaches for the calendar to date a room,
 # or the replica to see how many accounts a hold covers, should get an answer
 # rather than a denial nobody is at the keyboard to clear.
-MCP_ALLOW = ("asana", "slack", "google", "ktdb-tg-krakencore")
+MCP_ALLOW = ("asana", "slack", "google", "notion", "ktdb-tg-krakencore")
 
 # The built-ins a sweep uses: read the repo, write the board, run ./tick.py.
 # They are only listed because naming an MCP tool turns the allow list
@@ -76,7 +76,8 @@ class Claude(Kind):
     name = "claude"
     binary = "claude"
 
-    def command(self, model: str, prompt_is_stdin: bool = False) -> list[str]:
+    def command(self, model: str, prompt_is_stdin: bool = False,
+                effort: str = "") -> list[str]:
         # The run is unattended, so a permission prompt is a hang nobody is
         # watching, and `--add-dir` is what keeps the blast radius to this folder.
         #
@@ -108,6 +109,8 @@ class Claude(Kind):
             cmd += ["--allowedTools", tool]
         if model != "auto":
             cmd += ["--model", model]
+        if effort:
+            cmd += ["--effort", effort]
         return cmd
 
     # stream-json refuses to run without --verbose, and the pair is what makes a
@@ -356,7 +359,8 @@ class CursorAgent(Kind):
     name = "cursor-agent"
     binary = "cursor-agent"
 
-    def command(self, model: str, prompt_is_stdin: bool = False) -> list[str]:
+    def command(self, model: str, prompt_is_stdin: bool = False,
+                effort: str = "") -> list[str]:
         cmd = [self.binary, "--print", "--force", "--approve-mcps", "--trust",
                "--workspace", str(ROOT)]
         if model != "auto":
@@ -499,6 +503,30 @@ def model_for(job: str) -> str:
     except (OSError, ValueError):
         conf = {}
     return conf.get("model") or DEFAULT_MODEL
+
+
+EFFORTS = ("low", "medium", "high", "xhigh", "max")
+
+
+def effort_for(job: str) -> str:
+    """How hard the model thinks on a job, or "" for the CLI's own default.
+
+    This is where a sweep's time goes, not the tools: on 30 Sep a prep spent
+    1965 of its 2064 seconds in the model, most turns thinking 40,000 characters
+    before a single Slack search. `config.json` sets it per job; TG_<JOB>_EFFORT
+    or TG_EFFORT overrides for one run. A value the CLI would refuse is dropped
+    rather than passed, so a typo costs thinking time, not the run.
+    """
+    for var in (f"TG_{job.upper()}_EFFORT", "TG_EFFORT"):
+        if os.environ.get(var):
+            value = os.environ[var]
+            break
+    else:
+        try:
+            value = json.loads(CONFIG.read_text(encoding="utf-8")).get(job, {}).get("effort", "")
+        except (OSError, ValueError, AttributeError):
+            value = ""
+    return value if value in EFFORTS else ""
 
 
 def tools_ready(kind: Kind, timeout: int = 180) -> tuple[bool, str]:

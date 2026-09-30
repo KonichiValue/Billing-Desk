@@ -77,8 +77,17 @@ history that has already happened.
 **Run `./digest.py`, once.** It prints the whole readable half of the board in
 one call: every ticket with where it stands, its gates, its threads with the time
 each was last read, its last events, and every open item with its steps, its
-draft and what it is queued behind. Add `--full` only if you need closed items or
-untruncated prose.
+draft and what it is queued behind. A ticket with nothing open prints as one
+line and is not worth reading further. `--full` unclips the prose of the open
+tickets (a prep reads that one instead, never both); `--everything` adds closed
+items and finished tickets and is almost never what a sweep needs.
+
+**Everything you read stays in context and is re-read on every later turn**, so
+what a sweep costs is mostly how much it has read, not how many calls it made.
+Keep Asana answers small: the gate query asks for
+`opt_fields=name,modified_at,assignee.name,completed` and nothing else, because
+`custom_fields` returns twenty fields per task and made one gate 250KB. Ask for
+`custom_fields` only on the handful of gids you deep-read.
 
 **The digest ends by printing a SWEEP PLAN: work it, do not rebuild it.** It is
 the worklist for this sweep, made from the watermarks already on the board so you

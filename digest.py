@@ -9,8 +9,9 @@ it spent talking to Asana or Slack.
 
 So this prints the whole readable half of the board at once: what is on it, what
 is open, where each ticket stands, which threads to read and when each was last
-read. `--full` adds closed items and untruncated prose for the rare sweep that
-needs them.
+read. `--full` unclips the prose of the tickets with open work, which is what a
+prep writes from. `--everything` adds closed items, every event and the finished
+tickets, for the rare sweep that needs them.
 
 It never writes. The writing half is `import board; b = board.load(); ...;
 board.save(b)`, and `./tick.py` rebuilds the pages.
@@ -72,7 +73,7 @@ def _out(line: str = "") -> None:
     print(line)
 
 
-def _ticket_head(t: dict, full: bool) -> None:
+def _ticket_head(t: dict, full: bool, everything: bool = False) -> None:
     ref = t.get("ref") or t.get("id")
     asana = t.get("asana") or {}
     _out(f"=== {ref}   gid {t.get('id', '?')} ===")
@@ -127,7 +128,9 @@ def _ticket_head(t: dict, full: bool) -> None:
 
     events = t.get("events") or []
     if events:
-        shown = events if full else events[-4:]
+        # Twelve is two cycles of a busy ticket, which is as far back as a
+        # script or a draft ever reaches. 検針票諸元 alone has 104.
+        shown = events if everything else events[-12:] if full else events[-4:]
         _out(f"    events ({len(events)} total, showing {len(shown)}):")
         for e in shown:
             _out(
@@ -208,6 +211,10 @@ def _sweep_plan(b: dict) -> None:
     _out(
         "  1. Asana gate, ONE call: search_tasks modified_at.after=" + (since or "?")
         + (f" projects={','.join(gids)}" if gids else "")
+        + " opt_fields=name,modified_at,assignee.name,completed"
+    )
+    _out(
+        "     Those four fields only. custom_fields is twenty per task and made one gate 250KB."
     )
     _out(
         "     This decides DEPTH, not membership. Deep-read (get_task / get_task_stories)"
@@ -325,10 +332,13 @@ SCHEMA:   the docstring at the top of board.py is the contract. Read it once if 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--full", action="store_true", help="closed items too, and no truncation")
+    ap.add_argument("--full", action="store_true",
+                    help="no truncation, for the tickets with open work")
+    ap.add_argument("--everything", action="store_true",
+                    help="--full, plus closed items and finished tickets")
     ap.add_argument("--items-only", action="store_true", help="just the work, no ticket context")
     args = ap.parse_args()
-    full = args.full
+    full = args.full or args.everything
 
     b = B.load()
     all_items = B.items(b)
@@ -417,13 +427,23 @@ def main() -> int:
     _out("TICKETS AND WORK")
     _out()
     for t in b.get("tickets", []):
+        # A ticket with nothing of his left open is finished work. Printed whole
+        # it was 170KB of the 235KB --full digest, and on 30 Sep the model spent
+        # most of a 34-minute prep re-reading it on every turn. One line keeps
+        # it findable; --everything prints it for the rare sweep that needs it.
+        if not args.everything and not any(B.is_open(i) for i in t.get("items", [])):
+            status = (t.get("asana") or {}).get("status", "?")
+            _out(f"=== {t.get('ref')}   gid {t.get('id', '?')}   nothing open"
+                 f" (asana status={status}), skipped ===")
+            _out()
+            continue
         if not args.items_only:
-            _ticket_head(t, full)
+            _ticket_head(t, full, args.everything)
         else:
             _out(f"=== {t.get('ref')} ===")
-        rows = [i for i in t.get("items", []) if full or B.is_open(i)]
+        rows = [i for i in t.get("items", []) if args.everything or B.is_open(i)]
         closed = len(t.get("items", [])) - len(rows)
-        _out(f"    items ({len(rows)} shown{'' if full else f', {closed} closed hidden'}):")
+        _out(f"    items ({len(rows)} shown{'' if args.everything else f', {closed} closed hidden'}):")
         for i in rows:
             _item_line(i, full)
         _out()
