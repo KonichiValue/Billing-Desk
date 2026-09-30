@@ -51,8 +51,14 @@ DESK_PORT = 8787
 # top of it, so it needs longer before the timeout counts it dead: a lean sweep
 # that finishes in time only to have the script it set up killed is the worst
 # outcome, because the page then shows yesterday's words on a board swept today.
-TIMEOUT_SECS = 900
-PREP_TIMEOUT_SECS = 1200
+#
+# These are the runaway guard, not the liveness check: the stall watchdog below
+# is what catches a dead run. 30 Sep is what sized them. With a new ticket and
+# the Wednesday huddle, the sweep half of the prep alone took sixteen minutes on
+# Opus, three of its turns thinking for two to six minutes each, and the old
+# twenty-minute cap stopped it before it wrote a word.
+TIMEOUT_SECS = 1500
+PREP_TIMEOUT_SECS = 2100
 # A launched agent that streams nothing for this long is a dead session (a lapsed
 # login, the MCP servers down), not slow work: a real sweep emits a tool call
 # within seconds and keeps emitting. Stop it here with a re-auth message rather
