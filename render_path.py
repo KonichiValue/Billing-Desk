@@ -128,12 +128,70 @@ def render_draft(d: dict, st: dict | None = None) -> str:
     return f'<div class="act-draft">{inner}</div>'
 
 
+# A finding is written as a claim and then the evidence for it: "The four
+# reasons do not exist in the product. MANUAL_LATE_PAYMENT_FEE_GAS appears
+# nowhere in the repository, and neither does..." The claim is the overview and
+# the rest is the proof, so the page shows the claims as a list and keeps each
+# proof one press away.
+LEAD = re.compile(r"^(.{20,200}?[.。])\s+(?=\S)")
+# Several findings are written as a dated addendum. The date is not the claim.
+DATED = re.compile(r"^(\[[^\]]{2,24}\]\s*)")
+
+
+def claim(text: str) -> tuple[str, str, str]:
+    """A finding split into its date, its first claim, and the evidence under it."""
+    body = str(text or "").strip()
+    when = ""
+    mark = DATED.match(body)
+    if mark:
+        when = mark.group(1).strip().strip("[]")
+        body = body[mark.end():]
+    lead = LEAD.match(body)
+    if not lead:
+        return when, body, ""
+    return when, lead.group(1).strip(), body[lead.end():].strip()
+
+
+def finding_html(text: str) -> str:
+    """One finding: the claim on a line, the proof behind it."""
+    when, head, rest = claim(text)
+    tag = f'<span class="pw-when">{esc(when)}</span>' if when else ""
+    if not rest:
+        return f'<li class="pw-one">{tag}<span>{code(head)}</span></li>'
+    return f"""<li class="pw-one has-more"><details>
+                <summary>{tag}<span>{code(head)}</span><span class="fold-hint"></span></summary>
+                <p>{code(rest)}</p></details></li>"""
+
+
+def conclusion_html(text: object) -> str:
+    """The bottom line, with its first sentence as the line.
+
+    A conclusion is meant to be one sentence he could act on. Some run to four,
+    and then the first is the answer and the rest is the qualification, so the
+    first stands at full weight and the rest sits under it, smaller.
+    """
+    if not text:
+        return ""
+    _, head, rest = claim(str(text))
+    more = f'<span class="pw-more">{code(rest)}</span>' if rest else ""
+    return f'<div class="pw-answer"><b>Bottom line</b><span class="pw-line">{code(head)}</span>{more}</div>'
+
+
 def prepared_block(p: dict, meeting_href: str = "") -> str:
     """Work that was already done for him, above the steps that remain.
 
     If a step can be followed without judgement then following it was never his
     job, so the page carries the product rather than the instruction. What is
     left underneath is the part only he can do: check it, decide with it, say it.
+
+    The part that needed fixing is how much of it arrives at once. A full trace
+    through the code is twelve findings, four essays and a table, and printed
+    whole it is three screens with the answer somewhere inside: he said he could
+    not tell what mattered or what to act on. So the shape is now the shape of an
+    answer. The bottom line and what is still unanswered stand on their own; the
+    evidence is one scannable claim per line behind a single fold, and each claim
+    opens to its proof. Nothing is dropped, because the proof is the reason the
+    conclusion can be trusted; it is just no longer in the way.
     """
     if not p:
         return ""
@@ -145,10 +203,10 @@ def prepared_block(p: dict, meeting_href: str = "") -> str:
             "<tr>" + "".join(cell(c) for c in row) + "</tr>" for row in tbl["rows"]
         )
         head = f'<table class="pw-t"><thead><tr>{cols}</tr></thead><tbody>{body}</tbody></table>'
-    finds = "".join(f"<li>{code(f)}</li>" for f in p.get("findings", []))
+    finds = "".join(finding_html(f) for f in p.get("findings", []))
     notes = "".join(
-        f'<div class="pw-note"><b>{esc(n.get("heading"))}</b>'
-        f'{code(n.get("body"))}</div>'
+        f'<details class="pw-note"><summary><b>{esc(n.get("heading"))}</b>'
+        f'<span class="fold-hint"></span></summary>{code(n.get("body"))}</details>'
         for n in p.get("notes", [])
         if n.get("heading") and n.get("body")
     )
@@ -168,20 +226,49 @@ def prepared_block(p: dict, meeting_href: str = "") -> str:
         for s in p.get("sources", [])
         if s.get("url")
     )
+    # The evidence, counted in words on the fold so he knows what is behind it
+    # without opening it. Three findings and nothing else is not worth a fold, so
+    # a small block stays open and only a long one shuts.
+    n_find = len(p.get("findings") or [])
+    n_note = len([n for n in p.get("notes") or [] if n.get("heading") and n.get("body")])
+    tally = ", ".join(
+        part
+        for part in (
+            f"{n_find} finding{'' if n_find == 1 else 's'}" if n_find else "",
+            f"{n_note} note{'' if n_note == 1 else 's'}" if n_note else "",
+            "a table" if head else "",
+        )
+        if part
+    )
+    inside = f"""{head}
+              {f'<ul class="pw-f">{finds}</ul>' if finds else ""}
+              {notes}"""
+    heavy = n_find + n_note > 3 or (head and n_find + n_note > 1)
+    built_from = f'<div class="pw-src"><span>Built from</span>{srcs}</div>' if srcs else ""
+    if tally and heavy:
+        # The sources go inside with the evidence: they are how he checks it,
+        # and checking it is the only reason to open the fold.
+        evidence = f"""
+              <details class="pw-ev">
+                <summary>The evidence: {esc(tally)}<span class="fold-hint"></span></summary>
+                {inside}
+                {built_from}
+              </details>"""
+        built_from = ""
+    else:
+        evidence = inside if tally else ""
     return f"""
             <div class="act-prep">
               <p class="act-lab done">Prepared for you{f' &middot; {esc(p.get("built_at"))}' if p.get("built_at") else ""}
                 <button class="ask-here" type="button"
                         data-ask-seed="About the prepared work: ">{SPARK}Ask about this</button></p>
               {f'<p class="pw-what">{code(p.get("what"))}</p>' if p.get("what") else ""}
-              {f'<p class="pw-answer"><b>Bottom line</b>{code(p.get("conclusion"))}</p>' if p.get("conclusion") else ""}
-              {head}
-              {f'<ul class="pw-f">{finds}</ul>' if finds else ""}
-              {notes}
-              {f'<div class="pw-open"><b>Still unanswered</b><ul>{open_qs}</ul></div>' if open_qs else ""}
+              {conclusion_html(p.get("conclusion"))}
+              {f'<div class="pw-open"><b>Still open</b><ul>{open_qs}</ul></div>' if open_qs else ""}
+              {evidence}
               {f'<div class="pw-src"><span>Files it made</span>{docs}</div>' if docs else ""}
               {meeting_block}
-              {f'<div class="pw-src"><span>Built from</span>{srcs}</div>' if srcs else ""}
+              {built_from}
             </div>"""
 
 
@@ -361,8 +448,8 @@ def render_items(
           </{head_tag}>
           <div class="act-body">
             {status_block}
-            {prepared_block(r.get("prepared") or {}, standup_href)}
             {steps_block(r, steps, active)}
+            {prepared_block(r.get("prepared") or {}, standup_href)}
             {render_draft(r.get("draft") or {}, st)}
             {f'<p class="act-done"><b>Finished when</b>{code(r.get("done_when"))}</p>' if r.get("done_when") and not done else ""}
             {f'<p class="act-commit">You committed this to {esc(committed)}</p>' if committed else ""}

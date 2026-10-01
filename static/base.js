@@ -152,34 +152,78 @@
   });
 
   // Keep his place across that same reload, so the card he was reading does not
-  // jump to the top when the answer lands. Skipped when the URL points at an
-  // anchor, so a link to a specific ticket still wins.
+  // jump when the answer lands. By the card rather than by the pixel: the job
+  // he was reading is found again and put back at the same height on screen,
+  // because an answer, a fold or a new draft above it moves every pixel below.
+  // Skipped when the URL points at an anchor, so a link to a ticket still wins.
+  function placeKey(el){
+    if(el.matches('article[id]'))return '#'+el.id;
+    var a=el.querySelector('.ask[data-ask]');
+    return a?'@'+a.dataset.ask:'';
+  }
+  function takePlace(){
+    var best=null,first=null;
+    [].forEach.call(document.querySelectorAll('article.tk[id],.act'),function(el){
+      if(!el.offsetParent)return;
+      var r=el.getBoundingClientRect();
+      // The innermost thing crossing the top of the screen, so an item beats
+      // the ticket it is in. Otherwise the first thing below the top.
+      if(r.top<=1&&r.bottom>1){if(!best||best.contains(el))best=el}
+      else if(r.top>1&&!first)first=el;
+    });
+    var el=best||first;
+    var key=el&&placeKey(el);
+    return key?{key:key,top:el.getBoundingClientRect().top,y:window.scrollY||0}:null;
+  }
+  function putPlace(p){
+    if(!p)return;
+    var el=null;
+    if(p.key.charAt(0)==='#')el=document.getElementById(p.key.slice(1));
+    else{
+      var a=document.querySelector('.ask[data-ask="'+p.key.slice(1).replace(/"/g,'')+'"]');
+      el=a&&a.closest('.act');
+    }
+    if(el&&el.offsetParent)window.scrollBy(0,el.getBoundingClientRect().top-p.top);
+    else if(p.y)window.scrollTo(0,p.y);
+  }
+  // desk.js swaps one card's conversation in place, and the same promise holds
+  // there: whatever he is reading stays where it is on screen.
+  window.deskPlace={take:takePlace,put:putPlace};
   try{
-    var sy=sessionStorage.getItem('desk-scroll');
-    if(!location.hash&&sy!==null){var y=parseInt(sy,10);if(y)window.scrollTo(0,y);}
+    var sp=sessionStorage.getItem('desk-place');
+    if(!location.hash&&sp)putPlace(JSON.parse(sp));
   }catch(e){}
   window.addEventListener('beforeunload',function(){
-    try{sessionStorage.setItem('desk-scroll',String(window.scrollY||window.pageYOffset||0))}catch(e){}
+    try{sessionStorage.setItem('desk-place',JSON.stringify(takePlace()))}catch(e){}
   });
 
-  // The ask box: the chat for one job. Opening it, the one-tap starters, and the
-  // way out for when the page is a file on disk with no server behind it, which
-  // is the same words with the job named, on the clipboard.
+  // The ask box: the chat for one job. Opening it, and the way out for when the
+  // page is a file on disk with no server behind it, which is the same words
+  // with the job named, on the clipboard.
+  function grow(t){
+    // A line that grows with what he writes, up to a point, the way every chat
+    // composer does. A fixed four-row box is either too big or too small.
+    if(!t||t.tagName!=='TEXTAREA'||!t.closest('.ask'))return;
+    t.style.height='auto';
+    t.style.height=Math.min(t.scrollHeight+2,260)+'px';
+  }
+  document.addEventListener('input',function(e){grow(e.target)});
   function openAsk(box,seed){
     var panel=box.querySelector('.ask-box');
-    var field=box.querySelector('textarea');
+    var field=panel.querySelector('textarea');
     panel.hidden=false;
     box.querySelector('.ask-bar').hidden=true;
     if(seed&&!field.value)field.value=seed;
+    grow(field);
     field.focus();
     field.selectionStart=field.selectionEnd=field.value.length;
     // Say which of the two this box is. A page with no server behind it can
     // only hand the words to a chat, and a copy button that looks like the
     // whole feature is worse than one that admits what it is.
-    var send=box.querySelector('.ask-send');
-    var keys=box.querySelector('.ask-keys');
+    var send=panel.querySelector('.ask-send');
+    var keys=panel.querySelector('.ask-keys');
     if(keys)keys.innerHTML=(send&&!send.hidden)
-      ?'Enter sends \u00b7 Shift+Enter for a new line'
+      ?'Enter sends · Shift+Enter for a new line · Esc closes'
       :'No desk server behind this page, so Enter copies it for a chat instead';
     return field;
   }
@@ -206,36 +250,15 @@
     }
     var box=e.target.closest('.ask');
     if(!box)return;
-    // Two composers can be open in one block: the box at the foot of the card,
-    // and the one inside whichever answer he is pulling on. Every button works
-    // on the one it is inside.
+    // Two composers can be in one block: the box at the foot of the card, and
+    // the reply line inside whichever answer he is pulling on. Every button
+    // works on the one it is inside.
     var here=e.target.closest('.fu')||box.querySelector('.ask-box');
     var field=here.querySelector('textarea');
-    var follow=e.target.closest('.qa-follow');
-    if(follow){
-      var fu=follow.closest('details').querySelector('.fu');
-      fu.hidden=false;
-      follow.closest('.qa-foot').hidden=true;
-      var t=fu.querySelector('textarea');
-      t.focus();
-      return;
-    }
-    if(e.target.closest('.fu-cancel')){
-      var mine=e.target.closest('.fu');
-      mine.hidden=true;
-      var foot=mine.parentNode.querySelector('.qa-foot');
-      if(foot)foot.hidden=false;
-      return;
-    }
     if(e.target.closest('.ask-open')){
       openAsk(box,'');
     }else if(e.target.closest('.ask-cancel')){
       closeAsk(box);
-    }else if(e.target.closest('.qa-chip')){
-      var add=e.target.closest('.qa-chip').dataset.fill;
-      field.value=field.value.trim()?field.value.trim()+' '+add:add;
-      field.focus();
-      field.selectionStart=field.selectionEnd=field.value.length;
     }else if(e.target.closest('.ask-copy')){
       var q=(field.value||'').trim();
       // Following up in a chat means handing over what it is a follow-up to,
@@ -256,20 +279,18 @@
     }
   });
   // Enter sends, the way it does in every chat. Shift-Enter is a new line, and
-  // escape puts the box away.
+  // escape puts the box away, or lets go of the reply line.
   document.addEventListener('keydown',function(e){
     var panel=e.target.closest&&(e.target.closest('.ask-box')||e.target.closest('.fu'));
     if(!panel||e.target!==panel.querySelector('textarea'))return;
     var box=panel.closest('.ask');
     if(e.key==='Escape'){
       if(panel.classList.contains('fu')){
-        panel.hidden=true;
-        var foot=panel.parentNode.querySelector('.qa-foot');
-        if(foot)foot.hidden=false;
+        e.target.value='';grow(e.target);e.target.blur();
       }else{closeAsk(box)}
       return;
     }
-    if(e.key!=='Enter'||e.shiftKey||e.altKey)return;
+    if(e.key!=='Enter'||e.shiftKey||e.altKey||e.isComposing)return;
     e.preventDefault();
     var send=panel.querySelector('.ask-send');
     // No server behind the page, so the only thing Enter can honestly do is

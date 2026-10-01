@@ -724,7 +724,7 @@ def shell(
 <title>{esc(title)}</title>
 <style>{asset("base.css")}{asset("desk.css")}{asset("standup.css")}</style></head>
 <body data-view="{esc(view)}" data-meeting="{esc(meeting_iso)}"
-      data-meeting-label="{esc(meeting_label)}" data-stamp="{stamp()}"
+      data-meeting-label="{esc(meeting_label)}" data-stamp="{stamp()}" data-board="{stamp(False)}"
       data-closed="{esc(closed)}">
 <script>
 /* The theme, before anything is drawn. Read from localStorage here rather than

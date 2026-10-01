@@ -375,6 +375,15 @@ actually posted, copy the sent text into the item's `history` as
 wiping the `draft` field. A sent draft is part of the record and must not be
 lost even when the item comes back to `todo`.
 
+Rewrite a prepared block, never append to it. A finding that starts
+`[30 Sep] Still true after re-reading` or `[30 Sep] Correction:` is a sweep's
+working notes left on his page: twelve of them on one card and he said he could
+not tell what mattered or what to act on. When something new is learned, fold it
+into the finding it changes and correct the wrong one in place, so the block
+reads as what is true now, four findings at most, each leading with its claim in
+one sentence and the evidence after it. The page shows that first sentence as
+the line and folds the rest, so a first sentence that is not the claim hides it.
+
 Prune what was prepared the same way. Take an `unanswered` question off once it
 has an answer, and drop a `prepared` note whose finding has been overtaken,
 rather than letting a card grow a history. Nothing stays because it was true

@@ -57,6 +57,56 @@ BUILTIN_TOOLS = (
     "Bash", "Read", "Write", "Edit", "Glob", "Grep", "TodoWrite", "NotebookEdit",
 )
 
+# What each job is actually given, which is less than what it is allowed. An
+# allow rule grants a tool without removing anything else, and on 1 Oct a run
+# that only answered "hi" was 192k tokens of context on every turn: Notion's
+# tool definitions alone were 80k, Asana 39k, Slack 20k, Google 15k. None of
+# that is the question. `--disallowedTools` is what takes a definition out of
+# the context, and it takes mid-name wildcards, so a family goes in one line.
+#
+# Every job loses the tools that write or send outside this folder. Nothing on
+# this desk ever sends, and a tool that is not there cannot be called by
+# mistake, which is a stronger guarantee than a sentence in a prompt.
+NEVER = (
+    "mcp__google__gmail_*", "mcp__google__sheets_*", "mcp__google__slides_*",
+    "mcp__google__calendar_create*", "mcp__google__calendar_delete*",
+    "mcp__google__calendar_update*", "mcp__google__calendar_respond*",
+    "mcp__google__calendar_suggest*", "mcp__google__drive_copy*",
+    "mcp__google__drive_create*",
+    "mcp__asana__add_*", "mcp__asana__create*", "mcp__asana__update*",
+    "mcp__asana__delete*", "mcp__asana__*portfolio*", "mcp__asana__*agent*",
+    "mcp__asana__*preview*", "mcp__asana__get_teams", "mcp__asana__get_workspace*",
+    "mcp__asana__get_status_overview",
+    "mcp__slack__slack_send*", "mcp__slack__slack_schedule*",
+    "mcp__slack__slack_create*", "mcp__slack__slack_update*",
+    "mcp__slack__slack_add*",
+    # Notion is the heaviest server and a sweep uses four of its tools: fetch,
+    # search, the meeting notes and the user list. Everything else is writing,
+    # Notion AI sessions or skills.
+    "mcp__notion__notion-create*", "mcp__notion__notion-update*",
+    "mcp__notion__notion-move*", "mcp__notion__notion-duplicate*",
+    "mcp__notion__notion-upload*", "mcp__notion__notion-download*",
+    "mcp__notion__notion-convert*", "mcp__notion__*session*",
+    "mcp__notion__*skill*", "mcp__notion__*agents*", "mcp__notion__*next-steps*",
+    "mcp__notion__notion-get-async*", "mcp__notion__notion-list-*",
+    "mcp__notion__notion-get-teams", "mcp__notion__notion-get-comments",
+    "mcp__notion__notion-query-data-sources",
+    "mcp__notion__notion-query-multiple*", "mcp__notion__notion-ai-search",
+    "mcp__ktdb-tg-krakencore__analyze*", "mcp__ktdb-tg-krakencore__get_top*",
+    "mcp__ktdb-tg-krakencore__explain*",
+)
+
+# An ask reads one ticket's threads and sometimes the replica. It has never once
+# opened the calendar, Drive or Notion, and those two servers are 94k tokens of
+# a context the question is a few thousand of.
+ASK_NEVER = ("mcp__google__*", "mcp__notion__*")
+
+# The built-ins a run is given at all, as distinct from the ones it may use
+# without asking. The default set carries Cron, worktrees, Workflow, WebFetch
+# and a dozen others nobody headless has a use for, at about 10k tokens a turn.
+# ToolSearch stays, because it is how a run loads a tool the CLI chose to defer.
+GIVEN_BUILTINS = ("Bash", "Read", "Write", "Edit", "Glob", "Grep", "ToolSearch")
+
 
 class Kind:
     """One agent CLI, and the vocabulary it happens to use."""
@@ -77,7 +127,7 @@ class Claude(Kind):
     binary = "claude"
 
     def command(self, model: str, prompt_is_stdin: bool = False,
-                effort: str = "") -> list[str]:
+                effort: str = "", job: str = "") -> list[str]:
         # The run is unattended, so a permission prompt is a hang nobody is
         # watching, and `--add-dir` is what keeps the blast radius to this folder.
         #
@@ -107,11 +157,29 @@ class Claude(Kind):
         # had none, and `./tick.py` never ran.
         for tool in (*(f"mcp__{s}__*" for s in MCP_ALLOW), *BUILTIN_TOOLS):
             cmd += ["--allowedTools", tool]
+        cmd += self.profile(job)
         if model != "auto":
             cmd += ["--model", model]
         if effort:
             cmd += ["--effort", effort]
         return cmd
+
+    @staticmethod
+    def profile(job: str) -> list[str]:
+        """The tools a job is handed, as flags. See NEVER above for the why.
+
+        A sweep keeps TodoWrite, which it uses to pace forty tickets. An ask
+        also drops the project settings, which is this repo's CLAUDE.md, 6k
+        tokens of instructions for a chat that prompt-ask.md already restates
+        for the one card it is about.
+        """
+        given = GIVEN_BUILTINS + (("TodoWrite",) if job != "ask" else ())
+        flags = ["--tools", ",".join(given)]
+        for tool in NEVER + (ASK_NEVER if job == "ask" else ()):
+            flags += ["--disallowedTools", tool]
+        if job == "ask":
+            flags += ["--setting-sources", "user"]
+        return flags
 
     # stream-json refuses to run without --verbose, and the pair is what makes a
     # tool call visible the moment it starts rather than at the end.
@@ -360,7 +428,7 @@ class CursorAgent(Kind):
     binary = "cursor-agent"
 
     def command(self, model: str, prompt_is_stdin: bool = False,
-                effort: str = "") -> list[str]:
+                effort: str = "", job: str = "") -> list[str]:
         cmd = [self.binary, "--print", "--force", "--approve-mcps", "--trust",
                "--workspace", str(ROOT)]
         if model != "auto":
@@ -544,7 +612,7 @@ def tools_ready(kind: Kind, timeout: int = 180) -> tuple[bool, str]:
     """
     if not isinstance(kind, Claude):
         return True, ""        # only the claude path has this failure mode
-    cmd = kind.command(model_for("refresh")) + kind.stream
+    cmd = kind.command(model_for("refresh"), job="refresh") + kind.stream
     proc = subprocess.Popen(
         cmd, cwd=ROOT, env=kind.env(), text=True, bufsize=1,
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,

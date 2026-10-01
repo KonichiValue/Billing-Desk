@@ -23,7 +23,8 @@
     "also": [{"name": "Billing Weekly (Other-priority review)", "kind": "weekly", "time_local": "13:00", "days": ["Wed"]}]
   },
   "ask": {
-    "model": "claude-low-carbon-apac-opus-5-5"
+    "model": "claude-low-carbon-apac-opus-5-5",
+    "effort": "medium"
   },
   "refresh": {
     "model": "claude-low-carbon-apac-opus-5-5",

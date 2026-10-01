@@ -130,6 +130,13 @@ def cancel_ask(ask_id: str) -> str:
         except OSError:
             pass
         return "stopped"
+    # Still in the line, so nothing will touch its row until the worker reaches
+    # it. Say so on the row now, or the card redrawn a second later would draw
+    # it as still waiting.
+    row = next((r for r in load_asks() if r.get("id") == ask_id), None)
+    if row and row.get("state") == "queued":
+        row.update(state="cancelled", answer="You called this one off.")
+        save_ask(row)
     return "dropped from the queue"
 
 
@@ -891,6 +898,53 @@ def forget_ask(ident: str) -> int:
         return len(rows) - len(left)
 
 
+def act_on(body: dict) -> tuple[int, dict]:
+    """Make the move an answer proposed, now that he has pressed it.
+
+    Only a move the answer actually wrote, on a job that card is about, in one
+    of the four shapes `./tick.py` already knows. The button carries the words,
+    but the server reads them again from the saved answer, so nothing the page
+    sends can move an item the agent did not propose for this card.
+    """
+    ident = str(body.get("id", ""))
+    n, verb, who = str(body.get("n", "")), str(body.get("verb", "")), str(body.get("who", ""))
+    row = next((r for r in load_asks() if r.get("id") == ident), None)
+    if not row or row.get("state") != "answered":
+        return 404, {"error": "no such answer"}
+    if row.get("acted_on"):
+        return 409, {"error": row["acted_on"]}
+    _, moves = render.proposed(row.get("answer", ""))
+    if not any((m["n"], m["verb"], m["who"]) == (n, verb, who) for m in moves):
+        return 400, {"error": "that answer did not propose this"}
+    ticket, item = find_subject(row.get("ref", ""))
+    mine = {str(item.get("id"))} if item else {
+        str(i.get("id")) for i in ticket.get("items", [])
+    }
+    if n not in mine:
+        return 400, {"error": f"{n} is not on this card"}
+    args = {
+        "done": [n],
+        "mine": [n, "--mine"],
+        "dropped": [n, "--dropped"] + (["-n", who] if who else []),
+        "waiting": [n, "-w", who],
+    }[verb]
+    done = subprocess.run(
+        [sys.executable, str(ROOT / "tick.py"), *args],
+        cwd=ROOT, capture_output=True, text=True, timeout=60,
+    )
+    if done.returncode:
+        return 500, {"error": (done.stderr or done.stdout).strip()[-300:] or "tick.py failed"}
+    said = {
+        "done": f"Marked {n} done",
+        "mine": f"{n} is yours again",
+        "dropped": f"Dropped {n}",
+        "waiting": f"{n} is with {who}",
+    }[verb]
+    row["acted_on"] = f"{said}, {datetime.now().strftime('%H:%M')}"
+    save_ask(row)
+    return 200, {"acted_on": row["acted_on"]}
+
+
 def find_subject(ref: str) -> tuple[dict, dict]:
     """The ticket and item a question is about, from `item:8` or `ticket:<ref>`.
 
@@ -995,6 +1049,7 @@ def followed(chain: list[dict]) -> list[str]:
 
 
 ASK_NOTE_CAP = 220
+EARLIER_CAP = 360
 
 
 def trim_history(hist: list | None) -> list:
@@ -1140,9 +1195,16 @@ def ask_context(ref: str, question: str, parent: str = "") -> str:
         if r.get("ref") == ref and r.get("answer") and r.get("id") not in above
     ]
     if earlier:
-        lines += ["", "Already asked about this, oldest first:"]
-        for r in earlier[-4:]:
-            lines += [f"  Q: {r.get('question', '')}", f"  A: {r.get('answer', '')}"]
+        # Only the gist of what was asked before. The follow-up chain below goes
+        # whole, because that is the exchange he is replying to; these are the
+        # card's other questions, and a 2KB draft answer from last week repeated
+        # in every new question is weight the model reads and he waits for.
+        lines += ["", "Already asked about this, oldest first (answers cut short):"]
+        for r in earlier[-3:]:
+            a = " ".join(str(r.get("answer", "")).split())
+            if len(a) > EARLIER_CAP:
+                a = a[:EARLIER_CAP] + " …"
+            lines += [f"  Q: {r.get('question', '')}", f"  A: {a}"]
     lines += followed(chain)
     lines += ["", "His question:", "", question.strip(), ""]
     return "\n".join(lines)
@@ -1231,7 +1293,7 @@ def run_ask(ask_id: str, ref: str, question: str, parent: str = "") -> None:
         with cancel_lock:
             asks_running -= 1
         return
-    cmd = kind.command(model, effort=agent.effort_for("ask"))
+    cmd = kind.command(model, effort=agent.effort_for("ask"), job="ask")
     log = ROOT / "logs" / f"ask-{datetime.now():%Y-%m-%d}.log"
     log.parent.mkdir(exist_ok=True)
     try:
@@ -1352,7 +1414,7 @@ def run_agent(kind: str) -> None:
     log = ROOT / "logs" / f"{kind}-{datetime.now():%Y-%m-%d}.log"
     log.parent.mkdir(exist_ok=True)
     model = agent_model(kind)
-    cmd = runner.command(model, effort=agent.effort_for(kind))
+    cmd = runner.command(model, effort=agent.effort_for(kind), job=kind)
     LOCK.write_text(f"{os.getpid()} desk-server {kind} {datetime.now():%H:%M}\n")
 
     # The board is ours alone for a sweep. The lock is set now, so new questions
@@ -1558,6 +1620,20 @@ class Handler(BaseHTTPRequestHandler):
                 "text/html; charset=utf-8",
             )
             return
+        if path == "/api/thread":
+            # One card's conversation, redrawn. When an answer lands the page
+            # swaps this in where the old one was, rather than reloading and
+            # putting him somewhere else on the board. Unkeyed for the same
+            # reason as /api/events: it is what the page already shows.
+            query = self.path.split("?", 1)[1] if "?" in self.path else ""
+            want = next(
+                (unquote(b[4:]) for b in query.split("&") if b.startswith("ref=")), ""
+            )
+            render.load_asks(ASKS)
+            self.send(
+                200, render.thread_html(want).encode("utf-8"), "text/html; charset=utf-8"
+            )
+            return
         if path == "/api/status":
             with job_lock:
                 state = dict(job)
@@ -1574,6 +1650,7 @@ class Handler(BaseHTTPRequestHandler):
             # from, so a `./tick.py 26` in a terminal reloads the browser rather
             # than sitting there being quietly wrong.
             state["stamp"] = render.stamp()
+            state["board"] = render.stamp(False)
             state["boot"] = BOOT
             self.json_out(200, state)
             return
@@ -1689,6 +1766,16 @@ class Handler(BaseHTTPRequestHandler):
                 self.json_out(400, {"error": "no question named"})
                 return
             self.json_out(200, {"state": "cancelled", "how": cancel_ask(ask_id)})
+            return
+        if path == "/api/act":
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+                body = json.loads(self.rfile.read(length) or b"{}")
+            except (ValueError, OSError):
+                self.json_out(400, {"error": "unreadable"})
+                return
+            code, reply = act_on(body)
+            self.json_out(code, reply)
             return
         if path == "/api/forget":
             try:

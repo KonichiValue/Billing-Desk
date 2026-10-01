@@ -48,7 +48,8 @@ function element(extra) {
 // typed into the composer, and whether a composer is open at all.
 function makePage(options) {
   const opts = Object.assign(
-    { stamp: "AAA", typed: "", composerOpen: false, palOpen: false, helpOpen: false },
+    { stamp: "AAA", typed: "", composerOpen: false, palOpen: false, helpOpen: false,
+      running: "" },
     options
   );
 
@@ -66,12 +67,17 @@ function makePage(options) {
   const timers = [];
 
   const document = {
-    body: element({ dataset: { stamp: opts.stamp } }),
+    body: element({ dataset: { stamp: opts.stamp, board: "B1" } }),
     hidden: false,
     getElementById: (id) => (Object.hasOwn(ids, id) ? ids[id] : null),
     querySelectorAll: (sel) => {
       if (sel === "[data-run]") return [element({ dataset: {} })];
       if (sel === ".ask textarea") return [textarea];
+      // A question still out when the page was drawn: a bubble on one card.
+      if (sel === ".qa[data-live]" && opts.running) {
+        const box = element({ dataset: { ask: "item:1" } });
+        return [element({ dataset: { qa: opts.running }, closest: () => box })];
+      }
       return [];
     },
     querySelector: (sel) => {
@@ -94,7 +100,17 @@ function makePage(options) {
     setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
     clearTimeout: () => {},
     // Whatever the test wants the server to be saying this poll.
-    fetch: () => Promise.resolve({ ok: true, json: () => Promise.resolve(sandbox.reply) }),
+    fetch: (url) => {
+      sandbox.fetched.push(url);
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(sandbox.reply),
+        text: () => Promise.resolve("<ul class=\"qa-list\"></ul>"),
+      });
+    },
+    fetched: [],
+    Object,
+    Date,
     reply: { state: "idle", message: "", asks: {}, stamp: opts.stamp },
   };
 
@@ -195,6 +211,31 @@ async function run() {
     await settle();
     check("the same server is not a restart", page.reloads.count === 0,
       "it reloaded with nothing changed");
+  }
+
+  // 9. His question was answered and the answer touched nothing but the
+  //    conversation. It goes into the card in place; a reload is what used to
+  //    put him somewhere else on the board.
+  {
+    const page = makePage({ stamp: "AAA", running: "q1" });
+    page.sandbox.reply = { state: "done", message: "", asks: {}, stamp: "BBB", board: "B1" };
+    await settle();
+    await settle();
+    check("an answer lands without a reload", page.reloads.count === 0,
+      `reloaded ${page.reloads.count} times, wanted none`);
+    check("it redraws that card's thread", page.sandbox.fetched.some((u) => u.indexOf("/api/thread?ref=item%3A1") === 0),
+      "never asked the server for the card's thread: " + page.sandbox.fetched.join(", "));
+  }
+
+  // 10. The same answer, but it rewrote the board too (a draft, an item). That
+  //     card must be redrawn from the board, so this one does reload.
+  {
+    const page = makePage({ stamp: "AAA", running: "q1" });
+    page.sandbox.reply = { state: "done", message: "", asks: {}, stamp: "BBB", board: "B2" };
+    await settle();
+    await settle();
+    check("an answer that moved the board reloads", page.reloads.count === 1,
+      `reloaded ${page.reloads.count} times, wanted once`);
   }
 
   const bad = results.filter((r) => !r.pass);

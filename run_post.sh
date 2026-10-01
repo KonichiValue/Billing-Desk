@@ -61,7 +61,7 @@ kind = agent.pick()
 if kind is None:
     sys.exit(3)
 model = sys.argv[1] or agent.model_for("post")
-print("\n".join(kind.command(model, effort=agent.effort_for("post"))))
+print("\n".join(kind.command(model, effort=agent.effort_for("post"), job="post")))
 ' "${POST_MODEL:-}")}") || fail "no agent CLI is installed. Install Claude Code."
 
 AGENT_BIN="${AGENT_CMD[1]}"

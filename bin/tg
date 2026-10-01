@@ -194,7 +194,7 @@ import agent
 kind = agent.pick()
 if kind is None:
     sys.exit(3)
-print("\n".join(kind.command(agent.model_for(sys.argv[1]), effort=agent.effort_for(sys.argv[1]))))
+print("\n".join(kind.command(agent.model_for(sys.argv[1]), effort=agent.effort_for(sys.argv[1]), job=sys.argv[1])))
 ' "$job")}") || {
     print -u2 "No agent is installed. Install Claude Code, or type 'refresh' in a chat on this folder instead."
     return 1

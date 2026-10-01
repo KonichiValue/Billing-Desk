@@ -687,7 +687,7 @@ STATIC = ROOT / "static"
 SOURCES = ("state/board.json", "state/asks.json")
 
 
-def stamp() -> str:
+def stamp(conversation: bool = True) -> str:
     """What this page was rendered from, in one short token.
 
     The page carries it in `data-stamp` and asks the server for it every couple of
@@ -698,7 +698,12 @@ def stamp() -> str:
     so there is no moment where this reads half a write.
     """
     marks = []
-    for name in SOURCES + tuple(f"static/{p.name}" for p in sorted(STATIC.glob("*"))):
+    # Without the conversation, it is the board alone. An answer arriving moves
+    # the whole stamp, and the page needs to know whether that was all that
+    # moved: if so it swaps one card's thread in place, and only a board that
+    # moved under it is worth a reload.
+    names = SOURCES if conversation else tuple(n for n in SOURCES if "asks" not in n)
+    for name in names + tuple(f"static/{p.name}" for p in sorted(STATIC.glob("*"))):
         try:
             info = (ROOT / name).stat()
             marks.append(f"{info.st_mtime_ns}.{info.st_size}")
@@ -990,58 +995,144 @@ SPARK = (
     '<path d="M18.6 2.2l.7 1.9.9.3-.9.4-.7 1.9-.7-1.9-.9-.4.9-.3z"/></svg>'
 )
 
-# A starter earns its place by being a thing he actually types, finished enough
-# to send as it stands. "What do you mean by" was neither: a dangling fragment he
-# had to complete before it did anything, taking up the width of a real one.
-STARTERS = (
-    "Is this still right?",
-    "What is actually left here?",
-    "Catch this up with the thread",
-    "Who do I need for this?",
-    "This is done, close it",
+# The arrow on both send buttons, the box at the foot of a card and the reply
+# line under an answer, so the two read as the same action.
+SEND = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h12M12 6l6 6-6 6"/></svg>'
+
+# A move an answer may propose but never make. The agent writes one of these on
+# its last line when the conversation plainly ends in the work moving, and the
+# page turns it into a button: he presses it or he does not. Reading a thread
+# and concluding a job is finished has never been the same thing as him saying
+# so, and this is that distinction made into a mechanism rather than a rule in a
+# prompt. `/api/act` is the other half, and it accepts only these four shapes.
+ACTION = re.compile(
+    r"^ACTION:\s*tick\s+(\d+)\s+(done|mine|dropped|waiting)\s*(?:\|\s*(.{1,90}?))?\s*$",
+    re.M,
 )
 
-# Asked from the speaking view. Same ticket, same thread, so the starters are not
-# all about the script: the words are what he is looking at, and the ticket is
-# still what he is asking about.
-SAY_STARTERS = (
-    "Rewrite what I say here",
-    "Shorter, I have two minutes",
-    "What do I say if they push on the date?",
-    "What am I missing?",
-    "Is this accurate?",
-)
+ACTION_WORDS = {
+    "done": ("Mark {n} done", "finished, nothing comes back"),
+    "mine": ("Back to you", "they replied, {n} is yours again"),
+    "dropped": ("Drop {n}", "not happening"),
+    "waiting": ("{n} is with {who}", "sent, waiting on them"),
+}
 
-DRAFT_STARTERS = (
-    "Rewrite this with the latest from the thread",
-    "Shorter",
-    "Softer, we are still checking",
-    "Is this still right?",
-    "I have sent this",
-)
+
+def proposed(raw: str) -> tuple[str, list[dict]]:
+    """An answer split from the moves it suggests at the end of it.
+
+    The line never reaches the card as text: either it becomes a button or it
+    is dropped, because `ACTION: tick 30 waiting | Anna` printed as prose is
+    worse than nothing.
+    """
+    moves = []
+    for m in ACTION.finditer(raw or ""):
+        n, verb, who = m.group(1), m.group(2), (m.group(3) or "").strip()
+        if verb == "waiting" and not who:
+            continue
+        label, sub = ACTION_WORDS[verb]
+        moves.append(
+            {
+                "n": n,
+                "verb": verb,
+                "who": who,
+                "label": label.format(n=n, who=who),
+                "sub": sub.format(n=n, who=who),
+            }
+        )
+    return (ACTION.sub("", raw or "").strip(), moves)
+
+
+def action_html(ident: str, moves: list[dict], done: str = "") -> str:
+    """The moves an answer proposed, as buttons that have not happened yet.
+
+    Said in words so there is no doubt which way round it is: it is offering,
+    and nothing moves until he presses. Once he has, the row says what moved
+    rather than offering it again.
+    """
+    if done:
+        return f'<p class="qa-did">{esc(done)}</p>'
+    if not moves:
+        return ""
+    btns = "".join(
+        f'<button type="button" class="qa-act" data-act="{esc(ident)}"'
+        f' data-act-n="{esc(m["n"])}" data-act-verb="{esc(m["verb"])}"'
+        f' data-act-who="{esc(m["who"])}">{esc(m["label"])}'
+        f'<span>{esc(m["sub"])}</span></button>'
+        for m in moves
+    )
+    return f"""
+                  <div class="qa-acts">
+                    <span class="qa-acts-k">It suggests, nothing has moved yet</span>
+                    {btns}
+                  </div>"""
 
 
 def qa_one(
     a: dict, open_: bool, child: bool = False, kids: str = "", foot: bool = True
 ) -> str:
-    """One question and what came back, shut down to a single line.
+    """One exchange: what he asked, and what came back under it.
 
-    Shut, it is the question and when it was asked, which is how he finds the
-    exchange he half remembers. Open, it is the answer, whatever he asked next
-    about it, and the box to ask the next thing. Two buttons on it: forget this
-    one, and follow it up.
+    Shut, it is the question and when he asked it, which is how he finds the
+    one he half remembers. Open, it is the answer, whatever he asked next about
+    it, and the box to ask the next thing.
+
+    A question still being answered is not shut and not foldable: it is the
+    bubble with the thinking line under it, which is where he is looking.
     """
     state = a.get("state", "answered")
-    body = a.get("answer") or (
-        "Thinking. This takes a minute or two, and the page reloads itself."
-        if state == "running"
-        else "No answer came back."
-    )
+    running = state in ("running", "queued")
+    failed = state == "failed"
+    raw = a.get("answer") or ""
+    body, moves = proposed(raw) if state == "answered" else (raw, [])
     ident = esc(a.get("id", ""))
-    running = state == "running"
+    if running:
+        # No <details> while it is working, so nothing can fold the answer away
+        # as it arrives, and the live line is part of the bubble rather than a
+        # strip at the bottom of the card.
+        return f"""
+              <li class="qa running" data-qa="{ident}" data-live="1">
+                <div class="qa-me"><span class="qa-k">You asked</span>
+                  <span class="qa-q">{esc(a.get("question"))}</span>
+                  <span class="qa-when">{esc(a.get("asked_at", ""))}</span></div>
+                <div class="qa-wait">
+                  <span class="ask-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                  <span class="ask-wait-t">{"Queued, behind the one in front"
+                      if state == "queued" else "Thinking"}</span>
+                  <button type="button" class="qa-stop" data-stop="{ident}">Stop</button>
+                  <span class="ask-wait-tail" hidden></span>
+                </div>
+              </li>"""
+    if state == "cancelled":
+        # Called off, so there is nothing to read. One quiet line that says so,
+        # rather than a bubble with "You called this one off" folded inside it.
+        return f"""
+              <li class="qa cancelled" data-qa="{ident}">
+                <div class="qa-me"><span class="qa-k">Stopped</span>
+                  <span class="qa-q">{esc(a.get("question"))}</span>
+                  <span class="qa-when">{esc(a.get("asked_at", ""))}</span></div>
+                <button type="button" class="qa-del" data-forget="{ident}"
+                        title="Forget this question" aria-label="Forget this question">&times;</button>
+              </li>"""
+    if failed:
+        # The failure belongs on the bubble that failed, with the question still
+        # in it and one button that sends it again. It used to be a red line at
+        # the top of the card, which is where he was not looking.
+        return f"""
+              <li class="qa failed" data-qa="{ident}" data-parent="{esc(a.get("parent", ""))}">
+                <div class="qa-me"><span class="qa-k">You asked</span>
+                  <span class="qa-q">{esc(a.get("question"))}</span>
+                  <span class="qa-when">{esc(a.get("asked_at", ""))}</span></div>
+                <div class="qa-bad">
+                  <b>That did not come back</b>{esc(body or "No answer came back.")}
+                  <button type="button" class="qa-retry" data-retry="{ident}">Try again</button>
+                </div>
+                <button type="button" class="qa-del" data-forget="{ident}"
+                        title="Forget this question" aria-label="Forget this question">&times;</button>
+              </li>"""
     return f"""
               <li class="qa {esc(state)}{" kid" if child else ""}" data-qa="{ident}">
-                <details {"open" if open_ or running else ""}>
+                <details {"open" if open_ else ""}>
                   <summary>
                     <span class="qa-k">{"Then" if child else "You asked"}</span>
                     <span class="qa-q">{esc(a.get("question"))}</span>
@@ -1049,8 +1140,9 @@ def qa_one(
                     <span class="fold-hint"></span>
                   </summary>
                   <div class="qa-a">{answered(body)}</div>
+                  {action_html(ident, moves, str(a.get("acted_on") or ""))}
                   {kids}
-                  {qa_foot(ident) if foot and not running else ""}
+                  {qa_foot(ident) if foot else ""}
                 </details>
                 <button type="button" class="qa-del" data-forget="{ident}"
                         title="Forget this question" aria-label="Forget this question">&times;</button>
@@ -1058,24 +1150,22 @@ def qa_one(
 
 
 def qa_foot(ident: str) -> str:
-    """The way to keep pulling on one answer, inside the answer.
+    """The reply line, inside the answer it replies to.
 
-    Without it the next question goes in the box at the foot of the card, where
-    it is a new question about the job and the agent has to be told what "it"
-    was. Here the exchange goes with it, so "why?" is a whole question.
+    Replying to the answer is the common case and it used to take two clicks
+    through a button that said "Ask about this answer". Now the line is already
+    there: one press on it is the cursor in it, and the exchange above travels
+    with whatever he types, so "why?" is a whole question.
     """
     return f"""
-                  <div class="qa-foot">
-                    <button type="button" class="qa-follow">{SPARK}Ask about this answer</button>
-                  </div>
-                  <div class="fu" data-parent="{ident}" hidden>
-                    <textarea rows="2" aria-label="Ask about this answer"
-                      placeholder="Why? Or: what would that mean for the onsite?"></textarea>
+                  <div class="fu" data-parent="{ident}">
+                    <textarea rows="1" aria-label="Reply to this answer"
+                      placeholder="Reply&hellip; why, or what to change"></textarea>
+                    <button type="button" class="ask-send" data-ask-send hidden
+                            aria-label="Send reply" title="Send (Enter)">{SEND}</button>
                     <div class="ask-go">
-                      <button type="button" class="ask-send" data-ask-send hidden>Send</button>
+                      <span class="ask-keys">Enter sends &middot; Shift+Enter for a new line &middot; Esc lets go</span>
                       <button type="button" class="ask-copy">Copy for a chat</button>
-                      <button type="button" class="fu-cancel">Cancel</button>
-                      <span class="ask-keys">Enter sends &middot; Shift+Enter for a new line</span>
                       <span class="ask-hint"></span>
                     </div>
                   </div>"""
@@ -1169,56 +1259,56 @@ def ask_block(
 
     `kind` is which view is asking. The box is the same box and the record is the
     same record, so a question asked in front of the script is on the card on the
-    work view too. Only the starters and the example change, because in front of
-    the script what he wants changed is the words.
+    work view too. Only the example changes, because in front of the script what
+    he wants changed is the words.
+
+    There used to be a row of starter chips under the box. He did not use them
+    and said so, and five canned sentences under every composer were the most
+    repeated thing on the page. The placeholder carries the one example instead.
+
+    `.ask-thread` is the part `/api/thread` redraws when an answer lands, so the
+    page swaps one card's conversation in place rather than reloading and
+    putting him somewhere else on the board.
     """
-    thread = [qa_thread(asks)]
     say = kind == "say"
-    starters = SAY_STARTERS if say else DRAFT_STARTERS if has_draft else STARTERS
-    chips = "".join(
-        f'<button type="button" class="qa-chip" data-fill="{esc(s)}">{esc(s)}</button>'
-        for s in starters
-    )
-    hint = (
-        "Anything on this ticket, not only the words: it knows the jobs, the "
-        "drafts, what moved, what you say at the next session and what you asked "
-        "before, and it can read the threads. Same thread as the work view."
-        if say
-        else "Ask it anything, tell it what to change, or tell it where this now "
-        "stands and it will move it. It knows this ticket, this job, the draft "
-        "and what you asked before, and it can read the threads. It never sends "
-        "anything."
-    )
     eg = (
-        "Rewrite the second line in plainer Japanese, and say we are still "
-        "checking the date"
+        "Rewrite the second line in plainer Japanese\u2026"
         if say
-        else "Rewrite this with the latest from the refinement thread, and tell "
-        "Tanaka-san we are still checking"
+        else "Ask, or tell it what to change\u2026"
+        if not has_draft
+        else "Rewrite this with the latest from the thread\u2026"
     )
     n = len(asks)
     return f"""
             <div class="ask" data-ask="{esc(ref)}" data-ask-lead="{esc(lead)}">
-              {"".join(thread)}
+              <div class="ask-thread">{qa_thread(asks)}</div>
               <div class="ask-bar">
                 <button type="button" class="ask-open">{SPARK}Ask or change on
                   <span class="ask-of">{esc(label)}</span></button>
                 {f'<span class="ask-n">{n} asked</span>' if asks else ""}
               </div>
               <div class="ask-box" hidden>
-                <p class="ask-lede">{esc(hint)}</p>
-                <textarea rows="2" aria-label="Ask or change on {esc(label)}"
-                  placeholder="{esc(eg)}"></textarea>
-                <div class="ask-chips">{chips}</div>
+                <div class="ask-field">
+                  {SPARK}
+                  <textarea rows="1" aria-label="Ask or change on {esc(label)}"
+                    placeholder="{esc(eg)}"></textarea>
+                  <button type="button" class="ask-send" data-ask-send hidden
+                          aria-label="Send" title="Send (Enter)">
+                    {SEND}</button>
+                </div>
                 <div class="ask-go">
-                  <button type="button" class="ask-send" data-ask-send hidden>Send</button>
+                  <span class="ask-keys">Enter sends &middot; Shift+Enter for a new line &middot; Esc closes</span>
                   <button type="button" class="ask-copy">Copy for a chat</button>
-                  <button type="button" class="ask-cancel">Cancel</button>
-                  <span class="ask-keys">Enter sends &middot; Shift+Enter for a new line</span>
+                  <button type="button" class="ask-cancel">Close</button>
                   <span class="ask-hint"></span>
                 </div>
               </div>
             </div>"""
+
+
+def thread_html(ref: str) -> str:
+    """One card's conversation, for the page to swap in without a reload."""
+    return qa_thread(ASKED.get(ref, []))
 
 
 def render_consequences(c: dict, ref: str = "") -> str:
