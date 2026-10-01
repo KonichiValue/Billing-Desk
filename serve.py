@@ -432,6 +432,44 @@ class Ran(NamedTuple):
     stalled: bool = False  # killed for producing nothing, not for running long
 
 
+# What the CLI says when it never reached the model. 1 Oct is the case: Zscaler
+# let its private-app session expire at 09:40, an ask started 23 seconds later,
+# and every TLS handshake to the gateway failed for three minutes. The CLI's own
+# retries gave up and the card read "API Error: Unable to connect to API
+# (UNKNOWN_CERTIFICATE_VERIFICATION_ERROR)". Nothing was wrong with the question
+# or the certificates; it only needed asking again once Zscaler settled.
+CONNECTION_LOST = re.compile(
+    r"Unable to connect to API|CERTIFICATE|Connection dropped|Can't reach the API"
+    r"|ECONNRESET|ECONNREFUSED|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|socket hang up",
+    re.I,
+)
+
+# How long to give the network before each further try. A Zscaler reconnect
+# settles in under a minute; one that wants him to sign in again does not settle
+# at all, and the message afterwards says so.
+RECONNECT_WAITS = (30, 90)
+
+
+def connection_lost(ran: Ran) -> bool:
+    """Whether a run failed only because it never reached the model.
+
+    No tool call is the safety half: nothing was read or written, so running it
+    again cannot apply anything twice.
+    """
+    # An answer that only mentions ECONNRESET is still an answer, so the final
+    # message counts only when it is the CLI's own "API Error" line.
+    if ran.calls or (ran.text and not ran.text.startswith("API Error")):
+        return False
+    return bool(CONNECTION_LOST.search(f"{ran.text}\n{ran.noise}"))
+
+
+CONNECTION_NOTE = (
+    "Could not reach the model: the connection kept failing, which on this Mac is "
+    "almost always Zscaler reconnecting or asking you to sign in again. Nothing was "
+    "read or changed. Check Zscaler shows connected, then press Send."
+)
+
+
 def run_stream(cmd: list[str], payload: str, timeout: int, fh=None, key: str = "sweep",
                kind: agent.Kind | None = None) -> Ran:
     """One agent run, reported as it goes."""
@@ -1193,15 +1231,22 @@ def run_ask(ask_id: str, ref: str, question: str, parent: str = "") -> None:
         # Streamed rather than collected, so the card can say what it is doing
         # rather than only that it is doing something. The answer is the final
         # message, which keeps the CLI's own chatter off the card.
-        ran = run_stream(
-            cmd,
-            prompt.read_text(encoding="utf-8") + ask_context(ref, question, parent),
-            ASK_TIMEOUT_SECS,
-            key=ask_id,
-            kind=kind,
-        )
-        with cancel_lock:
-            called_off = ask_id in cancelled
+        payload = prompt.read_text(encoding="utf-8") + ask_context(ref, question, parent)
+        waits = list(RECONNECT_WAITS)
+        while True:
+            ran = run_stream(cmd, payload, ASK_TIMEOUT_SECS, key=ask_id, kind=kind)
+            with cancel_lock:
+                called_off = ask_id in cancelled
+            if called_off or not waits or not connection_lost(ran):
+                break
+            wait = waits.pop(0)
+            set_job("running", f"The connection to the model dropped. Trying {which} "
+                               f"again in {wait}s")
+            for _ in range(wait):
+                with cancel_lock:
+                    if ask_id in cancelled:
+                        break
+                time.sleep(1)
         if called_off:
             # Terminated on purpose, so the non-zero exit below is not a fault
             # and must not be reported to him as one.
@@ -1228,6 +1273,11 @@ def run_ask(ask_id: str, ref: str, question: str, parent: str = "") -> None:
                 f"\n=== {datetime.now():%H:%M:%S} {ref} on {kind.name}/{model}, "
                 f"{took}s, {ran.calls} tool calls ===\n{question}\n\n{answer}\n"
             )
+        if connection_lost(ran):
+            row.update(state="failed", answer=CONNECTION_NOTE)
+            save_ask(row)
+            set_job("failed", "could not reach the model; check Zscaler, then press Send")
+            return
         if ran.code != 0 or not answer:
             row.update(
                 state="failed",
@@ -1316,8 +1366,9 @@ def run_agent(kind: str) -> None:
         waited += 3
 
     timeout = PREP_TIMEOUT_SECS if kind == "prep" else TIMEOUT_SECS
+    waits = list(RECONNECT_WAITS)
     try:
-        for attempt in (1, 2):
+        for attempt in (1, 2, 3):
             with log.open("a", encoding="utf-8") as fh:
                 fh.write(
                     f"\n=== {datetime.now():%H:%M:%S} {kind} on "
@@ -1361,9 +1412,20 @@ def run_agent(kind: str) -> None:
             # tool call means no edit, so nothing can be applied twice; a sweep
             # that stopped halfway must not be repeated, because the board would
             # take the same event on two numbers.
+            if connection_lost(ran) and waits and attempt < 3:
+                wait = waits.pop(0)
+                set_job("running", f"the connection to the model dropped. Trying again in {wait}s")
+                time.sleep(wait)
+                set_job("running", running_note)
+                continue
             if attempt == 1 and not ran.text and not ran.calls:
                 set_job("running", f"the connection dropped before it started. {running_note}")
                 continue
+            if connection_lost(ran):
+                set_job("failed", f"the {kind} could not reach the model, so nothing was "
+                                  "read or changed. Check Zscaler shows connected, then "
+                                  "press it again.")
+                return
             set_job("failed", failure_note(kind, ran, log.name))
             return
     finally:
