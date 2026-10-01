@@ -21,6 +21,18 @@ carries its own status, so a script cannot contradict the list.
 that will reach one of his tickets. Add a row only with the route named, and
 take it off once that route closes.
 
+**A ticket goes on the board because Asana assigns it to Rei, never because it
+matters.** The board is his to-do list, not the programme's status. So a ticket
+nobody has given him stays off it even when it is Top Priority, handled as an
+incident, and the only thing the standup discussed: that is a `news` row, with the
+route by which it reaches one of his tickets named, and nothing more. If work in a
+chat turned up a real finding on it, a code trace or a count out of production,
+the finding goes in that row rather than becoming an item, because an item is
+something he does. Chasing who Kraken assign to a build is not his work and never
+gets a number. The one exception is a ticket already on the board with an open item
+of his on it: that stays until the item closes, however Asana's assignee field
+moves.
+
 `sessions` on the board is every room he still has to speak in, soonest first,
 and `script.for_date` says which one the current script was written for. That
 session may be an onsite rather than the 10:30 standup, which changes how much
@@ -49,8 +61,8 @@ because the context is in the file:
  `~/Projects/kraken-core`, not here. Read `~/Projects/kraken-core/AGENTS.md`
  before touching it, and never run `./src/manage.py` directly.
 - **"What does the data say"** &mdash; the production data this desk can reach is
- the `krakencore` Postgres analytics replica, and `.cursor/mcp.json` declares it
- as `ktdb-tg-krakencore`. Not Databricks, whatever an older note may say. Read
+ the `krakencore` Postgres analytics replica, declared as `ktdb-tg-krakencore`
+ by `./setup-mcp.sh`. Not Databricks, whatever an older note may say. Read
  only: a `SELECT` to see how many accounts a hold covers or what a charge
  actually did is the point, and nothing here ever writes to it. Only
  `krakencore` is readable; `consumption`, `messaging` and `voice` sit on a
@@ -207,6 +219,29 @@ question about one job. The shape in `board.py` is the
 contract the renderers expect, so if you add a field, update `render_desk.py`,
 `render_standup.py` and `render_desk_md.py` in the same change.
 
+The page is drawn by five modules, split so one job lives in one file:
+`render_desk.py` (the shell, the ticket card, the top of the page),
+`render_path.py` (the path to closing a ticket, its jobs, drafts and steps),
+`render_week.py` (the week strip), `render_dialogs.py` (help and settings) and
+`render_standup.py` (the speaking view). `render.py` holds what more than one of
+them needs. `render_desk.render()` is still the entry point everything calls.
+
+**Every job needs a day, or it is invisible on the week strip.** Two fields, and
+which one depends on who is holding the work:
+
+- His own work carries `urgency`, which is **exactly one of `today`,
+  `this-week`, `monitor`** — hyphen, never a space. The strip reads it as a day:
+  `today` is today, `this-week` is the next working day, `monitor` is off the
+  strip. So an actionable job marked `monitor` is one he will not see coming.
+- Work with somebody else carries `waits_on.chase_on`, an **ISO date and never a
+  sentence**. A condition ("only if he raises it again") goes in
+  `waits_on.what`; a sentence in `chase_on` is a job with no day.
+
+`board.save()` refuses anything else, so a wrong value is an exception where it
+was written rather than a job quietly missing from the page an hour later.
+`./check.py` also asserts that everything the desk labels **Do now** has a place
+on the strip.
+
 **How the page looks and behaves lives in `static/`, not in the Python.**
 `base.css` and `desk.css` and `standup.css` are the styles, `base.js` runs the
 buttons and the live status, `desk.js` runs the ask boxes. The renderers read
@@ -229,6 +264,27 @@ It holds the reload back for one thing only: something half-written in a
 composer, where taking the words away would be worse than the staleness. Then it
 shows the amber Board changed button and waits. `tests/reload.js` is what keeps
 that true, and `./check.py` runs it.
+
+## Which agent runs a button
+
+`agent.py` is the only place that knows which CLI runs a job, on which model, and
+how to read what it says back. `serve.py`, `bin/tg` and `run_post.sh` all ask it
+rather than hard-coding a binary, so a refresh pressed on the page, typed in a
+terminal or fired by launchd is the same run. Claude Code is first choice,
+`cursor-agent` is the fallback behind it, and `TG_AGENT=cursor-agent` forces one.
+Models come from `config.json` per job, overridable with `TG_REFRESH_MODEL` and
+friends. Prompts go in on stdin, because `prompt-post.md` is 48KB and that is no
+business of the command line.
+
+A sweep is worth nothing without Asana and Slack, so `agent.blockers()` refuses
+one that cannot reach them and the page says which. `./setup-mcp.sh` adds the
+servers and walks the logins, `./setup-mcp.sh --check` and `tg mcp` report where
+they stand. Only Rei can approve a grant in a browser, so a lapsed one goes in
+`gaps` rather than being worked around.
+
+Headless Claude Code has a real `Task` tool, which `cursor-agent` did not, and a
+sweep that hands itself to a subagent loses the board. `prompt-refresh.md` and
+`prompt-prep.md` forbid it by name; keep that wording if you touch them.
 
 ## Before you say you are done
 

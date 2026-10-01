@@ -42,7 +42,7 @@ rooms, and `script.for_date` says which one the current script was written for.
 A standup that is not running stays in the list with `skipped` set, since "no
 standup Wednesday" changes what has to move into Asana instead.
 
-    [{"kind": "standup|onsite|workshop", "date": "2026-08-26", "at": "10:30",
+    [{"kind": "standup|weekly|onsite|workshop", "date": "2026-08-26", "at": "10:30",
       "label", "title", "place", "focus", "skipped", "reason", "quote",
       "timetable": [{"at": "11:00", "what": "...", "mine": true}],
       "agenda": [{"topic", "why", "owner"}], "bring": ["..."]}]
@@ -132,6 +132,42 @@ somebody else moves. Two sentences that make sense to someone who has read
 nothing else, and a link to the message.
 
     {"what": "...", "source_url": "..."}
+
+`brief` is the morning briefing: the five things he would want a secretary to
+tell him before the day starts, and nothing else.
+
+    {"built_at": "2026-09-28T08:15:00+09:00", "for_date": "2026-09-28",
+     "lines": [{"what": "...", "kind": "room|moved|do|watch|big",
+                "items": ["43"], "ref": "保安閉栓",
+                "source_url": "...", "at": "10:30"}]}
+
+**Five lines, hard cap, and fewer is the normal answer.** Everything on the board
+is already on a card; this is only the part that is true *this morning* and would
+cost him something to miss. A sixth line means one of the five was not important
+enough, not that today was busy.
+
+`kind` is what sort of thing it is, and orders the list:
+
+- `room` a session today and what he owes it. Always first if there is one.
+- `moved` something that changed since the last brief: a reply landed, TG closed
+  a ticket, a flag went on, a ticket was assigned to him.
+- `do` what to start on, named by item number so he can act on it at once.
+- `watch` something with a clock on it he cannot act on: a hold window, someone
+  away, a release going out.
+- `big` the exception to "his work only". Something happening across TG **or
+  Kyuden** with enough people and enough consequence that not knowing it would
+  be worse than any of the above: a platform decision, a migration-wide freeze,
+  an incident that will reach billing. It does not need a route to one of his
+  tickets, which is the one place on this board that rule is relaxed. Most days
+  there is none, and inventing one to fill the slot is the failure mode.
+
+`items` are item numbers the line is about, so the page can link them. `ref` is a
+ticket tag when the line is about one. A line with neither is fine for `big`.
+
+Written by the sweep as its last step, and rewritten every time, so it always
+matches the board it was drawn from. The page says its age and refuses to draw a
+brief written for a day that has passed, because a stale briefing read as a
+current one is worse than no briefing.
 
 `terms` carries the vocabulary of the ticket in both languages: `term` in
 English, `say` as TG say it with furigana as `{漢字|かんじ}`, `means` in a
@@ -323,6 +359,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -399,7 +436,16 @@ SHAPES: dict[str, type | tuple[type, ...]] = {
     "after": (int, str),
 }
 LISTS_OF_TEXT = ("steps",)
+PREP_LISTS = ("issue", "script", "open_questions", "decisions", "pushback", "unknowns")
 PREPARED_TEXT = ("findings", "unanswered", "sources", "files")
+
+# The only three urgencies. The week strip reads them to place a job on a day,
+# so a fourth spelling is a job that loses its column rather than a tidiness
+# problem. `prompt-refresh.md` says the same thing in the same words.
+URGENCIES = frozenset({"today", "this-week", "monitor"})
+
+# A chase date, and nothing else. A sentence in this field is a job with no day.
+ISO_DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
 def check(board: dict) -> list[str]:
@@ -440,6 +486,31 @@ def check(board: dict) -> list[str]:
                         f"{where}: {field}[{n}] is a {type(entry).__name__}, "
                         f"should be a plain sentence"
                     )
+
+        # `urgency` is a closed set of three words, because the week strip reads
+        # them to place a job on a day. A fourth spelling is not a style slip:
+        # `this week` with a space sorted as unknown and the job lost its column.
+        # Refused here, at the point of writing, rather than found on the page.
+        urgency = item.get("urgency")
+        if urgency is not None and str(urgency).strip().lower() not in URGENCIES:
+            bad.append(
+                f"{where}: urgency is {urgency!r}. It has to be one of "
+                f"{', '.join(sorted(URGENCIES))} (hyphen, not a space), because "
+                f"the week strip reads it to place this job on a day."
+            )
+
+        # A chase date has to be a date. A sentence here ("Only if he raises it
+        # again") is a job with no day on it, so it never appears on the week he
+        # plans against. The sentence belongs in waits_on.what.
+        waits = item.get("waits_on")
+        if isinstance(waits, dict):
+            chase = waits.get("chase_on")
+            if chase and not ISO_DAY.fullmatch(str(chase).strip()):
+                bad.append(
+                    f"{where}: waits_on.chase_on is {chase!r}, which is not a "
+                    f"date. Use YYYY-MM-DD so the week strip can place it, and "
+                    f"put any condition in waits_on.what."
+                )
 
         prepared = item.get("prepared")
         if isinstance(prepared, dict):
@@ -487,6 +558,20 @@ def check(board: dict) -> list[str]:
                 f"{where}: state is {state!r}, which no renderer knows. "
                 f"One of {', '.join(OPEN_STATES + CLOSED_STATES)}."
             )
+
+    # A prep list written as null rather than left out takes both pages down:
+    # the renderers read a missing list as empty but iterate whatever is there.
+    for ticket in board.get("tickets", []):
+        prep = ticket.get("prep")
+        if not isinstance(prep, dict):
+            continue
+        for field in PREP_LISTS:
+            if field in prep and not isinstance(prep[field], list):
+                bad.append(
+                    f"prep on {ticket.get('ref', '?')}: {field} is "
+                    f"{type(prep[field]).__name__}, should be a list. Leave it "
+                    f"out when there is nothing to say."
+                )
 
     highest = max((int(n) for n in ids if n.isdigit()), default=0)
     if board.get("next_id", 0) <= highest:

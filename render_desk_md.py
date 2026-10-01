@@ -2,9 +2,9 @@
 """Render the board into markdown.
 
 The HTML page is for reading. This markdown file is for working: it is what a
-Cursor chat in this repo reads when Rei says "draft the reply to Nakayama-san"
-or "check the codebase for X". Keep it dense, keep every link, and keep the
-ticket grouping so a single block is enough context to act on.
+chat in this repo reads when Rei says "draft the reply to Nakayama-san" or
+"check the codebase for X". Keep it dense, keep every link, and keep the ticket
+grouping so a single block is enough context to act on.
 
 Usage:
     python3 render_desk_md.py state/board.json output/desk.md
@@ -19,6 +19,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from render import item_state as state_of
+from render import proposed
 from render import (
     apply_glossary,
     blocked_on,
@@ -58,13 +59,17 @@ def render_asks(ref: str) -> list[str]:
     """
     out = []
     for a in ASKED.get(ref, []):
-        if not a.get("answer"):
+        if not a.get("answer") or a.get("state") == "cancelled":
             continue
         lead = "Followed up" if a.get("parent") else "Asked"
+        # The ACTION line is a button on the page, not prose; what he did with
+        # it is the part a chat needs.
+        body, _ = proposed(a["answer"])
         out += [
             f"**{lead} {a.get('asked_at', '')}:** {a.get('question', '')}",
             "",
-            f"> {a['answer'].replace(chr(10), chr(10) + '> ')}",
+            f"> {body.replace(chr(10), chr(10) + '> ')}",
+            *([f"> *{a['acted_on']}*"] if a.get("acted_on") else []),
             "",
         ]
     return out

@@ -152,34 +152,78 @@
   });
 
   // Keep his place across that same reload, so the card he was reading does not
-  // jump to the top when the answer lands. Skipped when the URL points at an
-  // anchor, so a link to a specific ticket still wins.
+  // jump when the answer lands. By the card rather than by the pixel: the job
+  // he was reading is found again and put back at the same height on screen,
+  // because an answer, a fold or a new draft above it moves every pixel below.
+  // Skipped when the URL points at an anchor, so a link to a ticket still wins.
+  function placeKey(el){
+    if(el.matches('article[id]'))return '#'+el.id;
+    var a=el.querySelector('.ask[data-ask]');
+    return a?'@'+a.dataset.ask:'';
+  }
+  function takePlace(){
+    var best=null,first=null;
+    [].forEach.call(document.querySelectorAll('article.tk[id],.act'),function(el){
+      if(!el.offsetParent)return;
+      var r=el.getBoundingClientRect();
+      // The innermost thing crossing the top of the screen, so an item beats
+      // the ticket it is in. Otherwise the first thing below the top.
+      if(r.top<=1&&r.bottom>1){if(!best||best.contains(el))best=el}
+      else if(r.top>1&&!first)first=el;
+    });
+    var el=best||first;
+    var key=el&&placeKey(el);
+    return key?{key:key,top:el.getBoundingClientRect().top,y:window.scrollY||0}:null;
+  }
+  function putPlace(p){
+    if(!p)return;
+    var el=null;
+    if(p.key.charAt(0)==='#')el=document.getElementById(p.key.slice(1));
+    else{
+      var a=document.querySelector('.ask[data-ask="'+p.key.slice(1).replace(/"/g,'')+'"]');
+      el=a&&a.closest('.act');
+    }
+    if(el&&el.offsetParent)window.scrollBy(0,el.getBoundingClientRect().top-p.top);
+    else if(p.y)window.scrollTo(0,p.y);
+  }
+  // desk.js swaps one card's conversation in place, and the same promise holds
+  // there: whatever he is reading stays where it is on screen.
+  window.deskPlace={take:takePlace,put:putPlace};
   try{
-    var sy=sessionStorage.getItem('desk-scroll');
-    if(!location.hash&&sy!==null){var y=parseInt(sy,10);if(y)window.scrollTo(0,y);}
+    var sp=sessionStorage.getItem('desk-place');
+    if(!location.hash&&sp)putPlace(JSON.parse(sp));
   }catch(e){}
   window.addEventListener('beforeunload',function(){
-    try{sessionStorage.setItem('desk-scroll',String(window.scrollY||window.pageYOffset||0))}catch(e){}
+    try{sessionStorage.setItem('desk-place',JSON.stringify(takePlace()))}catch(e){}
   });
 
-  // The ask box: the chat for one job. Opening it, the one-tap starters, and the
-  // way out for when the page is a file on disk with no server behind it, which
-  // is the same words with the job named, on the clipboard.
+  // The ask box: the chat for one job. Opening it, and the way out for when the
+  // page is a file on disk with no server behind it, which is the same words
+  // with the job named, on the clipboard.
+  function grow(t){
+    // A line that grows with what he writes, up to a point, the way every chat
+    // composer does. A fixed four-row box is either too big or too small.
+    if(!t||t.tagName!=='TEXTAREA'||!t.closest('.ask'))return;
+    t.style.height='auto';
+    t.style.height=Math.min(t.scrollHeight+2,260)+'px';
+  }
+  document.addEventListener('input',function(e){grow(e.target)});
   function openAsk(box,seed){
     var panel=box.querySelector('.ask-box');
-    var field=box.querySelector('textarea');
+    var field=panel.querySelector('textarea');
     panel.hidden=false;
     box.querySelector('.ask-bar').hidden=true;
     if(seed&&!field.value)field.value=seed;
+    grow(field);
     field.focus();
     field.selectionStart=field.selectionEnd=field.value.length;
     // Say which of the two this box is. A page with no server behind it can
     // only hand the words to a chat, and a copy button that looks like the
     // whole feature is worse than one that admits what it is.
-    var send=box.querySelector('.ask-send');
-    var keys=box.querySelector('.ask-keys');
+    var send=panel.querySelector('.ask-send');
+    var keys=panel.querySelector('.ask-keys');
     if(keys)keys.innerHTML=(send&&!send.hidden)
-      ?'Enter sends \u00b7 Shift+Enter for a new line'
+      ?'Enter sends · Shift+Enter for a new line · Esc closes'
       :'No desk server behind this page, so Enter copies it for a chat instead';
     return field;
   }
@@ -206,36 +250,15 @@
     }
     var box=e.target.closest('.ask');
     if(!box)return;
-    // Two composers can be open in one block: the box at the foot of the card,
-    // and the one inside whichever answer he is pulling on. Every button works
-    // on the one it is inside.
+    // Two composers can be in one block: the box at the foot of the card, and
+    // the reply line inside whichever answer he is pulling on. Every button
+    // works on the one it is inside.
     var here=e.target.closest('.fu')||box.querySelector('.ask-box');
     var field=here.querySelector('textarea');
-    var follow=e.target.closest('.qa-follow');
-    if(follow){
-      var fu=follow.closest('details').querySelector('.fu');
-      fu.hidden=false;
-      follow.closest('.qa-foot').hidden=true;
-      var t=fu.querySelector('textarea');
-      t.focus();
-      return;
-    }
-    if(e.target.closest('.fu-cancel')){
-      var mine=e.target.closest('.fu');
-      mine.hidden=true;
-      var foot=mine.parentNode.querySelector('.qa-foot');
-      if(foot)foot.hidden=false;
-      return;
-    }
     if(e.target.closest('.ask-open')){
       openAsk(box,'');
     }else if(e.target.closest('.ask-cancel')){
       closeAsk(box);
-    }else if(e.target.closest('.qa-chip')){
-      var add=e.target.closest('.qa-chip').dataset.fill;
-      field.value=field.value.trim()?field.value.trim()+' '+add:add;
-      field.focus();
-      field.selectionStart=field.selectionEnd=field.value.length;
     }else if(e.target.closest('.ask-copy')){
       var q=(field.value||'').trim();
       // Following up in a chat means handing over what it is a follow-up to,
@@ -256,20 +279,18 @@
     }
   });
   // Enter sends, the way it does in every chat. Shift-Enter is a new line, and
-  // escape puts the box away.
+  // escape puts the box away, or lets go of the reply line.
   document.addEventListener('keydown',function(e){
     var panel=e.target.closest&&(e.target.closest('.ask-box')||e.target.closest('.fu'));
     if(!panel||e.target!==panel.querySelector('textarea'))return;
     var box=panel.closest('.ask');
     if(e.key==='Escape'){
       if(panel.classList.contains('fu')){
-        panel.hidden=true;
-        var foot=panel.parentNode.querySelector('.qa-foot');
-        if(foot)foot.hidden=false;
+        e.target.value='';grow(e.target);e.target.blur();
       }else{closeAsk(box)}
       return;
     }
-    if(e.key!=='Enter'||e.shiftKey||e.altKey)return;
+    if(e.key!=='Enter'||e.shiftKey||e.altKey||e.isComposing)return;
     e.preventDefault();
     var send=panel.querySelector('.ask-send');
     // No server behind the page, so the only thing Enter can honestly do is
@@ -286,6 +307,95 @@
     help.addEventListener('click',function(e){if(e.target===help)help.close()});
     var x=help.querySelector('.help-close');
     if(x)x.addEventListener('click',function(){help.close()});
+  }
+
+  // Settings: the theme and whether anything moves. Both are this browser's
+  // business only, so both live in localStorage and neither goes near the
+  // board. The theme is already on the body by now (set by the inline script in
+  // the head, so the page never paints one theme and then another); this only
+  // has to keep the buttons in step and write the choice down.
+  var settings=document.getElementById('settings');
+  if(settings){
+    [].forEach.call(document.querySelectorAll('[data-settings]'),function(b){
+      b.addEventListener('click',function(){if(!settings.open)settings.showModal()});
+    });
+    settings.addEventListener('click',function(e){
+      if(e.target===settings)settings.close();
+    });
+    var sx=settings.querySelector('.help-close');
+    if(sx)sx.addEventListener('click',function(){settings.close()});
+
+    var themeBtns=[].slice.call(settings.querySelectorAll('[data-theme-set]'));
+    var motionBtns=[].slice.call(settings.querySelectorAll('[data-motion-set]'));
+    var openBtns=[].slice.call(settings.querySelectorAll('[data-open-set]'));
+    function stored(key,fallback){
+      try{return localStorage.getItem(key)||fallback}catch(e){return fallback}
+    }
+    function mark(){
+      var now=document.body.dataset.theme||'plain';
+      var moving=document.body.dataset.motion!=='off';
+      var opening=stored('desk-open','auto');
+      themeBtns.forEach(function(b){
+        b.setAttribute('aria-pressed',b.dataset.themeSet===now);
+      });
+      motionBtns.forEach(function(b){
+        b.setAttribute('aria-pressed',(b.dataset.motionSet==='on')===moving);
+      });
+      openBtns.forEach(function(b){
+        b.setAttribute('aria-pressed',b.dataset.openSet===opening);
+      });
+    }
+    openBtns.forEach(function(b){
+      b.addEventListener('click',function(){
+        try{localStorage.setItem('desk-open',b.dataset.openSet)}catch(e){}
+        mark();
+      });
+    });
+
+    // Forget the folds, the remembered tab and the scroll positions. Every one
+    // of them is this browser's memory of how he left the page, so throwing
+    // them away is a local act: it cannot touch the board.
+    var forget=settings.querySelector('[data-forget-ui]');
+    var forgetSaid=settings.querySelector('[data-forget-said]');
+    if(forget)forget.addEventListener('click',function(){
+      try{
+        var drop=[];
+        for(var i=0;i<localStorage.length;i++){
+          var k=localStorage.key(i);
+          if(k&&k.indexOf('desk-')===0&&k!=='desk-theme'&&k!=='desk-motion'
+             &&k!=='desk-open')drop.push(k);
+        }
+        drop.forEach(function(k){localStorage.removeItem(k)});
+        sessionStorage.removeItem('desk-view');
+        if(forgetSaid)forgetSaid.textContent='Forgotten. Reload to see it.';
+      }catch(e){
+        if(forgetSaid)forgetSaid.textContent='This browser will not let me.';
+      }
+    });
+    themeBtns.forEach(function(b){
+      b.addEventListener('click',function(){
+        document.body.dataset.theme=b.dataset.themeSet;
+        try{localStorage.setItem('desk-theme',b.dataset.themeSet)}catch(e){}
+        mark();
+      });
+    });
+    motionBtns.forEach(function(b){
+      b.addEventListener('click',function(){
+        var off=b.dataset.motionSet==='off';
+        if(off)document.body.dataset.motion='off';
+        else delete document.body.dataset.motion;
+        try{localStorage.setItem('desk-motion',off?'off':'on')}catch(e){}
+        mark();
+      });
+    });
+    mark();
+    document.addEventListener('keydown',function(e){
+      if(e.key!==','||e.metaKey||e.ctrlKey||e.altKey)return;
+      var t=e.target.tagName;
+      if(t==='INPUT'||t==='TEXTAREA'||e.target.isContentEditable)return;
+      e.preventDefault();
+      if(!settings.open)settings.showModal();
+    });
   }
 
   // The chip for the ticket you are looking at lights up as you scroll.
@@ -317,8 +427,13 @@
     if(e.key==='Escape')closePal();
   });
   if(tabs.length){
+    // Which half to open on. The server decided by the clock; a preference in
+    // Settings overrides that, and the tab he was last on overrides both,
+    // because coming back to this page inside one session should not move him.
     var start=document.body.dataset.view;
     try{
+      var pref=localStorage.getItem('desk-open');
+      if(pref==='desk'||pref==='standup')start=pref;
       var saved=sessionStorage.getItem('desk-view');
       if(saved)start=saved;
     }catch(e){}
@@ -354,5 +469,91 @@
     window.addEventListener('scroll',onScroll,{passive:true});
     window.addEventListener('resize',onScroll,{passive:true});
     paint();
+  })();
+
+  // The earlier half of a timeline, fetched when he asks for it.
+  //
+  // A card carries the last few days and a button for the rest, because 323
+  // events was a quarter of a one-megabyte page and every one of them was
+  // inside a fold that loads shut. This swaps the button for what comes back.
+  //
+  // Delegated from the document, so it works for every card without binding
+  // ten handlers, and so it survives the reload that follows an ask.
+  document.addEventListener('click',function(e){
+    var b=e.target.closest('[data-events]');
+    if(!b)return;
+    var label=b.textContent;
+    b.disabled=true;b.textContent='Loading…';
+    fetch('/api/events?ref='+encodeURIComponent(b.dataset.events))
+      .then(function(r){
+        if(!r.ok)throw new Error(r.status);
+        return r.text();
+      })
+      .then(function(html){
+        if(!html){b.textContent='Nothing earlier';return}
+        var box=document.createElement('div');
+        box.innerHTML=html;
+        // In front of the days already there, because the list reads forward.
+        while(box.firstChild)b.parentNode.insertBefore(box.firstChild,b);
+        b.remove();
+      })
+      .catch(function(){
+        b.disabled=false;
+        b.textContent=label;
+        var say=document.createElement('span');
+        say.className='ev-failed';
+        say.textContent='Could not load those. They are in output/desk.md.';
+        b.parentNode.insertBefore(say,b.nextSibling);
+      });
+  });
+
+  // 波 — closing a job.
+  //
+  // Finishing something is the one moment on this desk with nothing to show for
+  // it: `./tick.py 45` in a terminal reloads the page and the row just goes
+  // quiet. So the page notices which number fell and marks it the way the work
+  // itself is marked: a Hokusai wave crest with its claw of foam, and a 判子
+  // seal pressed over it. Two and a bit seconds, once, then gone.
+  //
+  // It fires on a reload because that is when the board moves, and the set of
+  // closed ids is compared against the one the last page carried. So it works
+  // whether the item was closed in a terminal, by an ask, or by a sweep.
+  (function(){
+    var now=(document.body.dataset.closed||'').split(',').filter(Boolean);
+    var KEY='desk-closed';
+    var before=[];
+    try{
+      var raw=sessionStorage.getItem(KEY);
+      if(raw!==null)before=raw.split(',').filter(Boolean);
+      sessionStorage.setItem(KEY,now.join(','));
+    }catch(e){return}
+    // Nothing to compare against on a first visit, so nothing is "new".
+    if(!before.length)return;
+    var fresh=now.filter(function(id){return before.indexOf(id)<0});
+    if(!fresh.length)return;
+    if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+
+    var wrap=document.createElement('div');
+    wrap.className='nami';
+    wrap.setAttribute('aria-hidden','true');
+    // One crest, drawn once, in the indigo the rest of the page uses. The foam
+    // circles are the 波の花 the prints break a wave into.
+    wrap.innerHTML=
+      '<svg viewBox="0 0 240 150" class="nami-w">'
+      +'<path class="nami-b" d="M4 122c34 0 52-16 74-38C104 58 128 24 170 24c30 0 50 14 66 30"/>'
+      +'<path class="nami-c" d="M170 24c-26 4-40 20-52 38 16-6 32-10 48-6-8 6-14 14-16 24 14-10 30-16 46-12-6-12-16-34-26-44z"/>'
+      +'<g class="nami-f">'
+      +'<circle cx="150" cy="44" r="6"/><circle cx="176" cy="34" r="4.5"/>'
+      +'<circle cx="126" cy="62" r="4"/><circle cx="200" cy="46" r="3.5"/>'
+      +'<circle cx="108" cy="80" r="3"/>'
+      +'</g></svg>'
+      +'<span class="nami-seal">済</span>'
+      +'<span class="nami-said">'+(fresh.length>1
+        ? fresh.length+' jobs closed'
+        : 'Job '+fresh[0]+' closed')+'</span>';
+    document.body.appendChild(wrap);
+    // Taken off the page rather than left hidden, so nothing it drew can ever
+    // sit in front of a click.
+    setTimeout(function(){wrap.remove()},2600);
   })();
 })();

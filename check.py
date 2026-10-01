@@ -187,6 +187,100 @@ def pages_render() -> list[str]:
     return bad
 
 
+def week_shows_his_work() -> list[str]:
+    """Every job he could start today is drawn on the week strip.
+
+    The strip is what he plans against, and its first version read only
+    `waits_on.chase_on`, which is the field for work sitting with *somebody
+    else*. His own jobs carry no date at all, so a calendar meant to answer
+    "what am I doing this week" showed five of other people's chases and none of
+    his four jobs.
+
+    So this asserts the thing that was wrong: anything the desk labels "Do now"
+    has a column on the strip. It also catches the subtler version, where his
+    work is filed correctly but folded into "and 2 more" behind somebody else's
+    chases.
+    """
+    try:
+        import render_desk
+        import render_week
+        from render import item_state, next_live, when_tag
+    except Exception as exc:
+        return [f"could not import the renderers: {exc}"]
+    data = B.load()
+    tickets = data.get("tickets", [])
+    soon = next_live(data)
+    mine = []
+    for ticket in tickets:
+        for item in ticket.get("items", []):
+            state = item_state(item)
+            if state["closed"]:
+                continue
+            if when_tag(item, state, soon)[0] == "Do now":
+                mine.append((str(item.get("id")), item.get("title", "")))
+    if not mine:
+        return []
+    refs = {t.get("ref", ""): render_desk.anchor(t.get("ref", "")) for t in tickets}
+    drawn = set(
+        re.findall(r'class="wd-n">(\d+)<', render_week.render(data, tickets, refs))
+    )
+    return [
+        f'job {ident} ("{title[:40]}") is Do now but has no place on the week '
+        f"strip, so the calendar does not show work he could start today"
+        for ident, title in mine
+        if ident not in drawn
+    ]
+
+
+def themes_keep_the_text() -> list[str]:
+    """No theme may move the text ramp, and every theme must move a surface.
+
+    Both halves have already broken once. The first themes tinted only a wash
+    behind the cards and left `--card` white, so picking one changed almost
+    nothing you could see. The obvious overcorrection is a theme that recolours
+    the type, which on a page read an hour before he speaks to Tokyo Gas is the
+    worse bug of the two.
+
+    So: a theme block may not set `--ink`, `--mut` or `--soft`, and must set at
+    least one of `--page` or `--card`. `yoru` is the exception on the first half
+    and says so, because a dark page needs its own ink to keep the contrast.
+    """
+    css = (ROOT / "static" / "base.css").read_text(encoding="utf-8")
+    bad = []
+    # Every declaration block belonging to each theme, gathered by name, because
+    # a theme is allowed more than one (the standup view gets its own).
+    blocks: dict[str, str] = {}
+    for match in re.finditer(r'body\[data-theme="(\w+)"\][^{:]*\{([^}]*)\}', css):
+        blocks[match.group(1)] = blocks.get(match.group(1), "") + match.group(2)
+    for name, body in sorted(blocks.items()):
+        if name != "yoru":
+            for var in ("--ink", "--mut", "--soft"):
+                if f"{var}:" in body:
+                    bad.append(
+                        f"theme {name} sets {var}, which changes how readable "
+                        "the page is. A theme may only move surfaces."
+                    )
+        if "--page:" not in body and "--card:" not in body:
+            bad.append(
+                f"theme {name} sets neither --page nor --card, so choosing it "
+                "would not visibly change anything"
+            )
+    seen = set(blocks)
+    # The picker and the stylesheet have to agree, or a theme is offered that
+    # does nothing, or exists and cannot be chosen.
+    try:
+        import render_dialogs
+
+        offered = {k for k, _, _ in render_dialogs.THEMES} - {"plain"}
+    except Exception as exc:
+        return bad + [f"could not read the theme list: {exc}"]
+    for name in sorted(offered - seen):
+        bad.append(f"Settings offers {name}, but base.css does not style it")
+    for name in sorted(seen - offered):
+        bad.append(f"base.css styles {name}, but Settings never offers it")
+    return bad
+
+
 RUBY = re.compile(r"\{([^|{}]+)\|([^|{}]+)\}")
 KANJI_RUN = re.compile(r"[一-鿿]+")
 
@@ -245,13 +339,13 @@ def furigana_present() -> list[str]:
     for t in data.get("tickets", []):
         ref = str(t.get("ref") or t.get("id") or "?")
         prep = t.get("prep") or {}
-        for block in prep.get("script", []):
+        for block in (prep.get("script") or []):
             head = block.get("heading", "現状")
             for line in block.get("lines", []):
                 scan(ref, f"script {head}", line.get("ja_ruby", ""))
-        for q in prep.get("open_questions", []):
+        for q in (prep.get("open_questions") or []):
             scan(ref, "question", q.get("ja_ruby", ""))
-        for p in prep.get("pushback", []):
+        for p in (prep.get("pushback") or []):
             scan(ref, "pushback", p.get("say_ja", ""))
     # The X-Workstream rollup is read out to the same room, so it is held to the
     # same rule as the standup script.
@@ -282,6 +376,8 @@ CHECKS = (
     ("The board is the shape the renderers expect", board_shape),
     ("Spoken lines carry furigana", furigana_present),
     ("Both pages render", pages_render),
+    ("A theme moves the paper, never the ink", themes_keep_the_text),
+    ("The week shows the work he could start", week_shows_his_work),
     ("The board is up to date", board_freshness),
 )
 

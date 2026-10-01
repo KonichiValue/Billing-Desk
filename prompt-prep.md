@@ -12,9 +12,9 @@ informed and specific, out loud, without rehearsing.
 You need the Asana and Slack tools. If they are missing, or answer with an
 authentication error, **stop immediately**, change nothing, and reply with one
 line naming what is missing. Never call those HTTP APIs yourself with `curl`,
-never invent an API token, and never start another agent (`cursor-agent`,
-`tg prep`, a subagent that runs either). A source you could not read is a source
-you do not write about.
+never invent an API token, and never start another agent: not the `Task` tool,
+not `claude`, not `cursor-agent`, not `tg prep`. A source you could not read is a
+source you do not write about.
 
 ## Half one: bring the board up to date
 
@@ -43,7 +43,11 @@ not rewrite `events` or `where_it_stands` beyond what the sweep already did.
 **Read the board for the script the same way the sweep does: once, and never by
 dumping it.** Writing the script needs the untruncated `where_it_stands`,
 `consequences`, `events` and `prepared` that the ordinary digest clips, so run
-`./digest.py --full` **once** and write from that. The hard rule in
+`./digest.py --full` **once, at the very start, in place of the plain
+`./digest.py` the sweep would run**, and use that one read for both halves. It
+has the SWEEP PLAN and the cheatsheet too. Reading the board twice, or reading
+`output/desk.md` on top of it, is the same board in context two or three times,
+and that is what made the 30 Sep prep take 34 minutes. The hard rule in
 `prompt-refresh.md` holds here too: no `help(board)`, and no `python3 -c "import
 board; ... for t in b['tickets']: print(...)"` to read a field back. You may only
 `import board` to *write* your `prep` block, using the WRITE CHEATSHEET forms.
@@ -67,6 +71,15 @@ sentence saying what the session is actually for, and, for anything that is not 
 standup, the `agenda` and what he has to `bring`. A standup that is not running
 stays in the list with `skipped` and a `reason`, because "no standup Wednesday"
 changes what has to move into Asana instead.
+
+**Wednesday has two rooms.** The 10:30 standup walks Top Priority and New, and
+the 13:00 **Billing Weekly** (`kind: weekly`) reviews the Other-priority tickets,
+which is where most of his are actually discussed. Once the 10:30 has passed,
+write for the weekly, and set `script.at` to `13:00` so the page picks it over the
+standup on the same date. A weekly gets onsite depth for a contested ticket
+(`decisions`, `pushback`), but it is an hour, not a day: three or four blocks at
+most, and a quiet ticket still gets one 現状. A ticket the morning standup did not
+reach is not settled by it; carry its question into the weekly unchanged.
 
 **When the session is an onsite**, four things change:
 

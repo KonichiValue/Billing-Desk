@@ -18,13 +18,18 @@ import json
 import os
 import re
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import render_standup
+import render_brief
+import render_dialogs
+import render_path
+import render_week
 from render import (
     stamp,
     asset,
+    sub_line,
     ASKED,
     SPARK,
     answered,
@@ -63,31 +68,6 @@ def anchor(ref: str) -> str:
     ascii_part = re.sub(r"[^0-9A-Za-z]+", "", ref)
     digest = hashlib.md5(ref.encode("utf-8")).hexdigest()[:6]
     return f"t-{ascii_part}{digest}" if ascii_part else f"t-{digest}"
-
-
-def sub_line(st: dict, item: dict | None = None) -> str:
-    """The one line under a title saying what has already happened to it.
-
-    A held item says what it is held for right here. That used to be a separate
-    amber box above the list, which meant reading two lists to find out that one
-    of the four things in front of him was not his to send yet.
-    """
-    bits = []
-    if st["state"] == "waiting":
-        who = st.get("who", "them")
-        since = st.get("at", "")
-        bits.append(
-            f"sent {since}, with {who}" if st.get("sent") else f"with {who} since {since}"
-        )
-    elif st["state"] == "hold" and item:
-        hold = item.get("hold") or {}
-        if hold.get("until"):
-            bits.append(f"do not send yet, waiting for {hold['until']}")
-    elif st["closed"]:
-        bits.append(f"{st['label'].lower()} {st.get('at', '')}")
-    if st.get("note"):
-        bits.append(st["note"])
-    return " &middot; ".join(esc(b) for b in bits)
 
 
 GROUPS = {"todo": "mine", "hold": "blocked", "waiting": "theirs"}
@@ -298,26 +278,18 @@ def event_li(r: dict, show_date: bool) -> str:
         </li>"""
 
 
-def render_events(rows: list[dict], ident: str = "") -> str:
-    """The timeline, one fold per day, oldest at the top so it reads forward.
+# How many days of timeline a card carries in the page itself. Everything older
+# is fetched from /api/events when he opens the fold.
+#
+# 323 events across ten tickets was 247KB of the markup, a quarter of the whole
+# page, every one of them inside a fold that is shut on load. That is the cost
+# of drawing history nobody asked to see. Six days covers "what moved since the
+# last standup", which is the only part of a timeline that gets read daily.
+TIMELINE_DAYS = 6
 
-    The day is the handle: press Yesterday and yesterday closes. The most recent
-    day is open because that is the one being asked about, and every other day
-    is a line saying how much is behind it.
 
-    The whole thing is shut to begin with. It was a quarter of the page, open on
-    every card, and it answers a question he asks once a week: how did this get
-    here. Its own summary line carries the only part he needs daily, which is
-    whether anything moved today, and the fold remembers being opened.
-    """
-    if not rows:
-        return ""
-    ordered = sorted(rows, key=lambda x: (x.get("on", ""), x.get("at", "")))
-    days: dict[str, list[dict]] = {}
-    for r in ordered:
-        days.setdefault(r.get("on", ""), []).append(r)
-    keys = list(days)
-
+def day_folds(days: dict[str, list[dict]], keys: list[str]) -> str:
+    """One fold per day, newest open, oldest at the top so it reads forward."""
     out = []
     for day in keys:
         moves = days[day]
@@ -331,346 +303,73 @@ def render_events(rows: list[dict], ident: str = "") -> str:
           <ol class="evs">{"".join(event_li(r, False) for r in moves)}</ol>
         </details>"""
         )
+    return "".join(out)
+
+
+def earlier_events(rows: list[dict]) -> str:
+    """Everything older than the days a card carries, for /api/events.
+
+    The same day folds the card draws, so what arrives looks like what was
+    already there rather than a different kind of list.
+    """
+    if not rows:
+        return ""
+    ordered = sorted(rows, key=lambda x: (x.get("on", ""), x.get("at", "")))
+    days: dict[str, list[dict]] = {}
+    for r in ordered:
+        days.setdefault(r.get("on", ""), []).append(r)
+    keys = list(days)
+    older = keys[: -TIMELINE_DAYS] if len(keys) > TIMELINE_DAYS else []
+    return day_folds(days, older) if older else ""
+
+
+def render_events(rows: list[dict], ident: str = "", ref: str = "") -> str:
+    """The timeline, one fold per day, oldest at the top so it reads forward.
+
+    The day is the handle: press Yesterday and yesterday closes. The most recent
+    day is open because that is the one being asked about, and every other day
+    is a line saying how much is behind it.
+
+    The whole thing is shut to begin with. It answers a question he asks once a
+    week, how did this get here, and its summary line carries the only part he
+    needs daily, which is whether anything moved today.
+
+    Only the last `TIMELINE_DAYS` days are in the page. Anything older is a
+    button that fetches the rest, because history nobody opened was a quarter of
+    a one-megabyte page. A card with no server behind it (a page opened from
+    disk) keeps everything inline instead, since there would be nothing to
+    fetch from.
+    """
+    if not rows:
+        return ""
+    ordered = sorted(rows, key=lambda x: (x.get("on", ""), x.get("at", "")))
+    days: dict[str, list[dict]] = {}
+    for r in ordered:
+        days.setdefault(r.get("on", ""), []).append(r)
+    keys = list(days)
+    shown = keys[-TIMELINE_DAYS:]
+    older = keys[: -len(shown)] if len(keys) > len(shown) else []
+
+    more = ""
+    if older:
+        n = sum(len(days[d]) for d in older)
+        more = (
+            f'<button type="button" class="ev-more" data-events="{esc(ref)}" '
+            f'data-ident="{esc(ident)}">Load the earlier '
+            f'{n} {"move" if n == 1 else "moves"}, '
+            f'{len(older)} {"day" if len(older) == 1 else "days"}</button>'
+            '<noscript><p class="empty">The earlier moves need JavaScript, or '
+            "read them in output/desk.md.</p></noscript>"
+        )
     latest = len(days[keys[-1]])
     return section(
         "Timeline",
-        "".join(out),
+        f'<div class="ev-in">{more}{day_folds(days, shown)}</div>',
         role="log",
         count=f"{latest} {'move' if latest == 1 else 'moves'} {day_words(keys[-1])}",
         hint=f"{len(keys)} {'day' if len(keys) == 1 else 'days'} in all",
         fold=True,
         remember=f"tl-{ident}",
-    )
-
-
-def render_draft(d: dict, st: dict | None = None) -> str:
-    """A draft to paste, or, once it has gone, a folded record of what went."""
-    if not d:
-        return ""
-    is_ja = d.get("language") == "ja"
-    # Two shapes of draft. A Japanese draft keeps its furigana text in body_ruby and
-    # body_en is the translation shown beneath it. An English draft (to a Kraken
-    # colleague) keeps its text in body_en and has no body_ruby. Reading body_ruby
-    # for both rendered every English draft blank -- the text was saved, never shown.
-    # Both branches fall back through the other body keys, so a draft whose text
-    # landed under body_ja or a bare body still renders instead of showing an empty
-    # box: furi() passes plain text through untouched, so the worst case is no ruby,
-    # never a blank card. board.check() refuses a draft with no body at all.
-    if is_ja:
-        body = d.get("body_ruby") or d.get("body_ja") or d.get("body", "")
-        rendered = furi(body)
-        trans = (
-            f'<p class="draft-en">{esc(d.get("body_en"))}</p>'
-            if d.get("body_en")
-            else ""
-        )
-    else:
-        body = d.get("body_en") or d.get("body_ruby") or d.get("body", "")
-        rendered = esc(body)
-        trans = ""
-    # The draft is the thing he most often wants changed rather than explained,
-    # and the box that changes it is at the foot of the card. This opens that box
-    # with the ask already started, so a rewrite is one click from the words.
-    inner = f"""
-          <div class="draft-head">
-            <span>{esc(d.get("target"))}</span>
-            {link_btn(d.get("link", ""), "Go there")}
-            <button class="copy" data-copy="{esc(plain(body))}">copy</button>
-            <button class="ask-here" type="button"
-                    data-ask-seed="Rewrite this draft: ">{SPARK}Rewrite or ask</button>
-          </div>
-          <div class="draft-body {"ja" if is_ja else ""}">{rendered}</div>
-          {trans}"""
-    gone = st and st["state"] != "todo" and st["state"] != "hold"
-    if gone:
-        when = f" at {esc(st.get('at'))}" if st.get("at") else ""
-        return f"""
-        <details class="act-draft sent">
-          <summary>What you sent{when}</summary>
-          {inner}
-        </details>"""
-    return f'<div class="act-draft">{inner}</div>'
-
-
-def cell(value: object) -> str:
-    """One cell of a prepared table, plain or carrying a verdict.
-
-    A four-column comparison where every cell is a sentence hides the row that
-    is the point of it. A cell written as {"text", "tone"} prints as a verdict
-    instead, so the answer is findable before the evidence is read.
-    """
-    if isinstance(value, dict):
-        tone = str(value.get("tone", "warn"))
-        tone = tone if tone in ("good", "gap", "warn") else "warn"
-        return f'<td class="pw-v"><span class="v-{tone}">{code(value.get("text"))}</span></td>'
-    return f"<td>{code(value)}</td>"
-
-
-def doc_btns(files: list) -> str:
-    """The documents an item hands him, opened from the page it sits on.
-
-    A handover sheet that lives only in the repo is a file he has to go and
-    find, and one pasted into the page as prose is not the thing he gives
-    anybody. The server carries docs/ at /doc/, so the button opens the real
-    file, in the form the reader gets it.
-
-    Some of what the work produces cannot live in `docs/` at all: a Miro board is
-    the product of an afternoon and belongs beside the file it explains, so an
-    entry may name a `url` instead of a `path`.
-    """
-    out = []
-    for f in files or []:
-        path = str(f.get("path", ""))
-        url = str(f.get("url", ""))
-        if not path and not url:
-            continue
-        label = f.get("label") or Path(path).name or url
-        out.append(link_btn(f"/doc/{Path(path).name}" if path else url, label))
-    return " ".join(o for o in out if o)
-
-
-def prepared_block(p: dict, meeting_href: str = "") -> str:
-    """Work that was already done for him, above the steps that remain.
-
-    If a step can be followed without judgement then following it was never his
-    job, so the page carries the product rather than the instruction. What is
-    left underneath is the part only he can do: check it, decide with it, say it.
-    """
-    if not p:
-        return ""
-    head = ""
-    tbl = p.get("table") or {}
-    if tbl.get("rows"):
-        cols = "".join(f"<th>{code(c)}</th>" for c in tbl.get("columns", []))
-        body = "".join(
-            "<tr>" + "".join(cell(c) for c in row) + "</tr>" for row in tbl["rows"]
-        )
-        head = f'<table class="pw-t"><thead><tr>{cols}</tr></thead><tbody>{body}</tbody></table>'
-    finds = "".join(f"<li>{code(f)}</li>" for f in p.get("findings", []))
-    notes = "".join(
-        f'<div class="pw-note"><b>{esc(n.get("heading"))}</b>'
-        f'{code(n.get("body"))}</div>'
-        for n in p.get("notes", [])
-        if n.get("heading") and n.get("body")
-    )
-    meeting = p.get("meeting_use") or {}
-    meeting_block = ""
-    if meeting and meeting_href:
-        meeting_block = (
-            '<div class="pw-meeting">'
-            f'<span>{esc(meeting.get("summary", "Use this in the next session."))}</span>'
-            f'<a class="btn" href="#{esc(meeting_href)}" data-goto="standup">'
-            f'{esc(meeting.get("label", "Open meeting version"))}</a></div>'
-        )
-    open_qs = "".join(f"<li>{code(q)}</li>" for q in p.get("unanswered", []))
-    docs = doc_btns(p.get("files", []))
-    srcs = " ".join(
-        link_btn(s.get("url", ""), s.get("label", "Source"))
-        for s in p.get("sources", [])
-        if s.get("url")
-    )
-    return f"""
-            <div class="act-prep">
-              <p class="act-lab done">Prepared for you{f' &middot; {esc(p.get("built_at"))}' if p.get("built_at") else ""}
-                <button class="ask-here" type="button"
-                        data-ask-seed="About the prepared work: ">{SPARK}Ask about this</button></p>
-              {f'<p class="pw-what">{code(p.get("what"))}</p>' if p.get("what") else ""}
-              {f'<p class="pw-answer"><b>Bottom line</b>{code(p.get("conclusion"))}</p>' if p.get("conclusion") else ""}
-              {head}
-              {f'<ul class="pw-f">{finds}</ul>' if finds else ""}
-              {notes}
-              {f'<div class="pw-open"><b>Still unanswered</b><ul>{open_qs}</ul></div>' if open_qs else ""}
-              {f'<div class="pw-src"><span>Files it made</span>{docs}</div>' if docs else ""}
-              {meeting_block}
-              {f'<div class="pw-src"><span>Built from</span>{srcs}</div>' if srcs else ""}
-            </div>"""
-
-
-def steps_block(r: dict, steps: str, active: bool) -> str:
-    """The steps, first thing inside the item, with somewhere to do them.
-
-    This block used to open with Why, which is the one question he never asks of
-    his own list: he knows why it is there, he wants to know what to type. So
-    the hands-on part comes first, numbered because they are in an order, with
-    the place to do it attached to the last step rather than floating below.
-    """
-    where = esc(r.get("where") or "")
-    go = link_btn(r.get("link", ""), "Open where this happens")
-    place = (
-        f'<div class="act-where">{f"<span>{where}</span>" if where else ""}{go}</div>'
-        if where or go
-        else ""
-    )
-    if not steps:
-        # A job with no steps is a job he has to work out from its title, which
-        # is the failure this block exists to prevent. Say so, rather than
-        # leaving a confident-looking gap.
-        if not active:
-            return place
-        return f"""
-            <p class="act-nosteps"><b>No steps written yet</b>Ask the chat to
-            break job {esc(r.get("id", "-"))} down.</p>{place}"""
-    return f"""
-            <div class="act-do">
-              <p class="act-lab">Do this</p>
-              <ol class="steps">{steps}</ol>
-              {place}
-            </div>"""
-
-
-def background(r: dict, quote: str) -> str:
-    """Why this job exists, folded, under the work it explains.
-
-    Why it matters, what already happened and the message it came out of are
-    three paragraphs he reads once, when the job first appears, and never again.
-    Open they pushed the next job off the screen; shut they are one line he can
-    press when a job has stopped making sense.
-    """
-    inside = "".join(
-        [
-            f'<p class="act-why"><b>Why it matters</b>{esc(r.get("why"))}</p>'
-            if r.get("why")
-            else "",
-            f'<p class="act-quote">Already happened: {esc(r.get("progress_note"))}</p>'
-            if r.get("progress_note")
-            else "",
-            f'<p class="act-quote">{esc(quote)} '
-            f'{link_btn(r.get("source_url", ""), "Source") if r.get("source_url") else ""}</p>'
-            if quote
-            else "",
-        ]
-    )
-    if not inside:
-        return ""
-    return f"""
-            <details class="act-more">
-              <summary>Why this is here<span class="fold-hint"></span></summary>
-              {inside}
-            </details>"""
-
-
-def render_items(
-    rows: list[dict],
-    raise_label: str = "Raise at standup",
-    sess: dict | None = None,
-    standup_href: str = "",
-    ticket_ref: str = "",
-    index: dict[str, dict] | None = None,
-) -> str:
-    if not rows:
-        return section(
-            "To do on this ticket",
-            '<p class="empty">Nothing on this one needs you. It is here because '
-            "it is still open in Asana.</p>",
-            role="now",
-        )
-    index = index if index is not None else {str(r.get("id")): r for r in rows}
-    out = []
-    for r in sorted(rows, key=lambda x: item_order(x, index)):
-        steps = "".join(f"<li>{code(b)}</li>" for b in r.get("steps", []))
-        mins = r.get("est_minutes")
-        committed = r.get("committed_to")
-        blocked = r.get("blocked_by")
-        quote = r.get("source_quote")
-        hold = r.get("hold") or {}
-        st = state_of(r)
-        done = st["closed"]
-        status_block = ""
-        if done:
-            note = f" {esc(st['note'])}" if st.get("note") else ""
-            status_block = (
-                f'<p class="closed"><b>{esc(st["label"])}</b>'
-                f'{esc(st.get("at", ""))}.{note}</p>'
-            )
-        elif st["state"] == "waiting":
-            note = f" {esc(st['note'])}." if st.get("note") else ""
-            waits = r.get("waits_on") or {}
-            owed = f" They owe: {esc(waits['what'])}." if waits.get("what") else ""
-            chase_line = (
-                f" {esc(due_words(waits['chase_on']))}" if waits.get("chase_on") else ""
-            )
-            sent = f"Sent {esc(st.get('at', ''))}" if st.get("sent") else "Not yours"
-            status_block = (
-                f'<p class="sent-note"><b>{sent}</b>'
-                f'Nothing further from you until {esc(st.get("who", "they"))} '
-                f"answers.{owed}{note}{chase_line}</p>"
-            )
-        elif hold:
-            revisit = hold.get("revisit")
-            status_block = f"""
-            <p class="hold"><b>Do not send this yet</b>{esc(hold.get("why"))}
-            <span class="hold-until">Wait for: {esc(hold.get("until"))}.</span>
-            {f'<span class="hold-until"> Chase on {esc(revisit)}.</span>' if revisit else ""}</p>"""
-        state_pill = pill(st["label"], st["tone"])
-        if r.get("at_standup") and not done:
-            state_pill += pill(raise_label, "amber")
-        due, due_kind = when_tag(r, st, sess)
-        when_chip = f'<span class="when {due_kind}">{esc(due)}</span>' if due else ""
-        chase = (r.get("waits_on") or {}).get("chase_on", "")
-        # Anything not sitting with Rei folds shut, so the page is only as long
-        # as the work he still has. Work queued behind another job folds for the
-        # same reason: it is not a decision until the one in front of it closes.
-        behind = blocked_on(r, index) if st["state"] in {"todo", "hold"} else ""
-        active = st["state"] in {"todo", "hold"} and not behind
-        tag, attrs = ("div", "") if active else ("details", "")
-        head_tag = "div" if active else "summary"
-        sub = sub_line(st) or (esc(due).lower() if chase and due else "")
-        if behind:
-            lead = index.get(behind) or {}
-            sub = f"after job {esc(behind)}"
-            status_block = (
-                f'<p class="act-block"><b>Queued behind job {esc(behind)}</b>'
-                f"Nothing to do here until "
-                f"&ldquo;{esc(lead.get('title', 'that one'))}&rdquo; closes.</p>"
-            ) + status_block
-            # A red "With you" on something he cannot start is the whole problem
-            # this field exists to fix, and a due date on it is a second lie.
-            state_pill = pill(f"After {behind}", "grey") + (
-                pill(raise_label, "amber") if r.get("at_standup") else ""
-            )
-            when_chip = ""
-        out.append(
-            f"""
-        <{tag} class="act {st["state"]} {"held" if hold and not done else ""} {"commit" if committed else ""}"{attrs}>
-          <{head_tag} class="act-head">
-            <span class="act-rank">{esc(r.get("id", "-"))}</span>
-            <span class="act-title">{esc(r.get("title"))}
-              {f'<span class="act-sub">{sub}</span>' if sub and not active else ""}</span>
-            {when_chip}
-            {state_pill}
-            <span class="act-min">{f"{esc(mins)} min" if mins and active else ""}</span>
-          </{head_tag}>
-          <div class="act-body">
-            {status_block}
-            {prepared_block(r.get("prepared") or {}, standup_href)}
-            {steps_block(r, steps, active)}
-            {render_draft(r.get("draft") or {}, st)}
-            {f'<p class="act-done"><b>Finished when</b>{code(r.get("done_when"))}</p>' if r.get("done_when") and not done else ""}
-            {f'<p class="act-commit">You committed this to {esc(committed)}</p>' if committed else ""}
-            {f'<p class="act-block">Blocked by: {esc(blocked)}</p>' if blocked else ""}
-            {background(r, quote)}
-            {ask_block(
-                f'item:{r.get("id")}',
-                f'job {r.get("id")}, {ticket_ref}' if ticket_ref else f'job {r.get("id")}',
-                ASKED.get(f'item:{r.get("id")}', []),
-                f'Read prompt-ask.md, then answer this about job {r.get("id")}'
-                f' on {ticket_ref} ("{r.get("title", "")}"):',
-                bool(r.get("draft")),
-            )}
-          </div>
-        </{tag}>"""
-        )
-    live = sum(1 for r in rows if not state_of(r)["closed"])
-    done = len(rows) - live
-    tally = f"{live} open" if live else "all done"
-    if done:
-        tally += f", {done} closed"
-    return section(
-        "To do on this ticket",
-        "".join(out),
-        role="now",
-        count=tally,
-        hint="each keeps its number until it closes",
     )
 
 
@@ -861,6 +560,43 @@ def render_closes(rows: list[dict], ident: str = "") -> str:
     )
 
 
+
+
+def background_drawer(t: dict, ident: str) -> str:
+    """How it got here, what the words mean, where it is discussed: one drawer.
+
+    Three folds that were three sections, and all three answer questions he asks
+    about once a week: how did this get here, what does 稼働確認 mean, which
+    thread was that in. Shut, they were still three rows of chrome on every card.
+    One drawer with a count is one row, and what is inside keeps its own shape.
+    """
+    inner = "".join(
+        [
+            render_events(t.get("events", []), ident, t.get("ref", "")),
+            render_terms(t.get("terms", [])),
+            render_threads(t.get("threads", [])),
+        ]
+    )
+    if not inner.strip():
+        return ""
+    bits = []
+    if t.get("events"):
+        n = len(t["events"])
+        bits.append(f"{n} move{'s' if n != 1 else ''}")
+    if t.get("terms"):
+        bits.append(f"{len(t['terms'])} terms")
+    if t.get("threads"):
+        n = len(t["threads"])
+        bits.append(f"{n} thread{'s' if n != 1 else ''}")
+    return f"""
+      <details class="sub ref bg-drawer" data-remember="bg-{esc(ident)}">
+        <summary><h3>Background{f'<span class="n">{esc(", ".join(bits))}</span>' if bits else ""}
+          <span class="hint">how it got here, the words, the threads</span></h3>
+          <span class="fold-hint"></span></summary>
+        <div class="bg-in">{inner}</div>
+      </details>"""
+
+
 def internal_btn(internal: dict) -> str:
     """The Kraken-side ticket, named on hover rather than in the row.
 
@@ -945,19 +681,16 @@ def render_ticket(
                role="key",
                hint="both sides" if internal.get("build") else "the short answer")}
 
-      {render_items(
-          t.get("items", []),
+      {render_path.render_path(
+          t,
+          ident,
           raise_label,
           sess,
           render_standup.anchor(ident),
-          t.get("ref", ""),
           index,
       )}
       {render_decisions(t.get("open_decisions", []))}
-      {render_closes(t.get("closes_when", []), ident)}
-      {render_events(t.get("events", []), ident)}
-      {render_terms(t.get("terms", []))}
-      {render_threads(t.get("threads", []))}
+      {background_drawer(t, ident)}
       {section("Ask or change on this ticket",
                ask_block(
                    f'ticket:{t.get("ref")}',
@@ -977,6 +710,7 @@ def shell(
     view: str = "desk",
     meeting_iso: str = "",
     meeting_label: str = "",
+    closed: str = "",
 ) -> str:
     # The manifest and icon are what let Chrome install this as its own app, with
     # its own Dock tile. They 404 harmlessly when the page is opened from disk.
@@ -990,7 +724,19 @@ def shell(
 <title>{esc(title)}</title>
 <style>{asset("base.css")}{asset("desk.css")}{asset("standup.css")}</style></head>
 <body data-view="{esc(view)}" data-meeting="{esc(meeting_iso)}"
-      data-meeting-label="{esc(meeting_label)}" data-stamp="{stamp()}">
+      data-meeting-label="{esc(meeting_label)}" data-stamp="{stamp()}" data-board="{stamp(False)}"
+      data-closed="{esc(closed)}">
+<script>
+/* The theme, before anything is drawn. Read from localStorage here rather than
+   in base.js at the end of the body, because a page that paints plain and then
+   repaints indigo is a flash on every single load. Wrapped in try/catch: a
+   browser with storage denied gets the plain theme, not a broken page. */
+(function(){{try{{
+var t=localStorage.getItem('desk-theme');
+if(t&&t!=='plain')document.body.dataset.theme=t;
+if(localStorage.getItem('desk-motion')==='off')document.body.dataset.motion='off';
+}}catch(e){{}}}})();
+</script>
 {body}
 <script>{asset("base.js")}</script></body></html>"""
 
@@ -1151,103 +897,14 @@ def news_rows(rows: list[dict]) -> str:
     </div>"""
 
 
-def first_line(tickets: list[dict], soon: dict) -> str:
-    """The first sentence on the page, worked out from the board itself.
-
-    This used to be a sentence an agent wrote about yesterday, and by the time
-    he read it the words were a recap of a conversation he had already had. The
-    only thing worth the top line is what needs him, so it is counted rather
-    than composed: the page cannot editorialise, and it cannot go stale.
-    """
-    index = index_items(tickets)
-    mine, held, waiting = [], [], []
-    for t in tickets:
-        for item in t.get("items", []):
-            st = state_of(item)
-            row = (t, item, st)
-            if st["state"] == "todo":
-                # Something queued behind another job is not one of the things
-                # that needs him, and counting it here is how the top line ends
-                # up naming work he cannot start.
-                if not blocked_on(item, index):
-                    mine.append(row)
-            elif st["state"] == "hold":
-                held.append(row)
-            elif st["state"] == "waiting":
-                waiting.append(row)
-
-    today = date.today().isoformat()
-    before = ""
-    if soon.get("date"):
-        when = when_words(soon.get("date", ""))
-        if when in ("today", "tomorrow"):
-            room = esc(soon.get("name", "standup")).lower()
-            before = (
-                f" Material for the {room} {when}."
-                if when == "tomorrow"
-                else f" The {room} is {when}."
-            )
-
-    if mine:
-        # The one to start on: something promised to a person outranks a
-        # deadline, and a deadline outranks the order the numbers happen to be
-        # in. Everything else is on its card.
-        def urgency(row: tuple) -> tuple:
-            _, item, _ = row
-            return (
-                0 if item.get("committed_to") else 1,
-                0 if item.get("at_standup") else 1,
-                item.get("id", 99),
-            )
-
-        ticket, item, _ = sorted(mine, key=urgency)[0]
-        mins = sum(i.get("est_minutes") or 0 for _, i, _ in mine)
-        n = len(mine)
-        clock = f", about {mins} min" if mins else ""
-        lead = (
-            f"<b>One thing needs you{clock}.</b>"
-            if n == 1
-            else f"<b>{n} things need you{clock} in total.</b>"
-        )
-        owed = (
-            f' You promised it to {esc(item["committed_to"])}.'
-            if item.get("committed_to")
-            else before
-        )
-        which = "Item" if n == 1 else "Start with item"
-        return (
-            f'{lead} {which} <b>{esc(item.get("id"))}</b> on '
-            f'{esc(ticket.get("ref"))}: {esc(item.get("title"))}.{owed}'
-        )
-
-    due = [
-        row
-        for row in held + waiting
-        if ((row[1].get("hold") or {}).get("revisit") or "") <= today
-        and ((row[1].get("hold") or {}).get("revisit") or "")
-        or ((row[1].get("waits_on") or {}).get("chase_on") or "") <= today
-        and ((row[1].get("waits_on") or {}).get("chase_on") or "")
-    ]
-    if due:
-        ticket, item, st = due[0]
-        return (
-            f"<b>Nothing is yours to write, but {len(due)} "
-            f'{"chase is" if len(due) == 1 else "chases are"} due.</b> '
-            f'<b>{esc(item.get("id"))}</b>, {esc(item.get("title"))}, has been '
-            f'with {esc(st.get("who") or "them")} since {esc(st.get("at", ""))}.'
-        )
-    if held or waiting:
-        n = len(held) + len(waiting)
-        return (
-            f"<b>Nothing needs you right now.</b> {n} "
-            f'{"thing is" if n == 1 else "things are"} sitting with other people, '
-            "none of them due a chase today."
-        )
-    return "<b>Nothing open across any ticket.</b> Enjoy it."
-
 
 def need_to_know(
-    board: dict, has_script: bool, news: list[dict], tickets: list[dict], soon: dict
+    board: dict,
+    has_script: bool,
+    news: list[dict],
+    tickets: list[dict],
+    soon: dict,
+    refs: dict[str, str] | None = None,
 ) -> str:
     """Everything he has to know before he starts, in one block he can shut.
 
@@ -1325,6 +982,15 @@ def need_to_know(
         for that meeting has to move into Asana.</span>
       </div>"""
 
+    # What is left under the brief: the detail behind its lines. The brief names
+    # the room and the biggest news; this is where the rest of the rooms, the
+    # alert and the other four news rows live, for when one of those lines makes
+    # him want the whole thing.
+    #
+    # The counted sentence that used to head this block is gone. "4 things need
+    # you, about 60 minutes in total" is arithmetic he can see on the cards, and
+    # above a brief that says what to start on it was one more line to read
+    # before the useful one.
     inside = []
     if alert_block:
         inside.append("something urgent")
@@ -1332,14 +998,15 @@ def need_to_know(
         inside.append("the next room")
     if news:
         inside.append(f"{len(news)} TG updates" if len(news) != 1 else "1 TG update")
+    if not (alert_block or next_block or news):
+        return ""
     return f"""
   <details class="nk{" hot" if alert_block else ""}" id="need"
-           data-remember="need" open>
+           data-remember="need">
     <summary>
-      <span class="nk-k">Need to know</span>
+      <span class="nk-k">The detail</span>
       <span class="nk-n">{esc(", ".join(inside))}</span>
       <span class="fold-hint"></span>
-      <span class="nk-sum">{first_line(tickets, soon)}</span>
     </summary>
     <div class="nk-in">
       {alert_block}
@@ -1427,150 +1094,6 @@ def finder(tickets: list[dict], refs: dict[str, str]) -> str:
     <span><kbd>enter</kbd> go</span><span><kbd>esc</kbd> close</span></div>
   </div>
 </div>"""
-
-
-def help_dialog() -> str:
-    """How to work the thing, one keystroke away from every view.
-
-    Three places do three different things, and the old version of this dialog
-    listed chat phrases without ever saying how to get a chat, which is the one
-    thing somebody reading it does not know.
-    """
-    ticks = [
-        ("tg", "Prints where everything is. No tokens."),
-        ("tg 4", "Job 4 is finished and nothing comes back."),
-        ("tg 2 -w Kevin", "Sent. Parks it with him, so it stops looking like yours."),
-        ("tg 2 --mine", "He answered. It is yours again."),
-        ("tg 5 --dropped", "It went away. Add <code>-n</code> and a reason."),
-        ("tg 1 --undo", "Forget that state entirely."),
-    ]
-    said = "".join(
-        f'<li><span class="said">{esc(a)}</span><span class="does">{b}</span></li>'
-        for a, b in ticks
-    )
-    return f"""
-<dialog class="help" id="help">
-  <div class="help-in">
-    <button class="help-close" type="button">Close</button>
-    <h2>How to use this</h2>
-    <p class="lead">Two tabs. <b>TG my work</b> is what you do, in one numbered
-    list. <b>TG what I say</b> is the words for the next meeting. Both read the
-    same file, so they can never disagree.</p>
-
-    <h3>Asking, and asking for changes</h3>
-    <p>Every job has <b>Ask or change</b> at the foot of its card, every ticket
-    has one under its threads, and every draft has <b>Rewrite or ask</b> in its
-    header. It is a chat box: type, press <kbd>enter</kbd>, and it answers on the
-    card in a minute or two. Both halves of the same conversation go in it, the
-    question and the instruction:</p>
-    <ul class="say-list">
-      <li><span class="said">what do you mean by 稼働確認?</span><span class="does">Answers on the card, and the answer stays there.</span></li>
-      <li><span class="said">rewrite this with the latest from the refinement thread, and tell Tanaka-san we are still checking</span><span class="does">Reads the thread, rewrites that draft in the ticket, says what it changed.</span></li>
-      <li><span class="said">is that true about refinement?</span><span class="does">Checks it and tells you when it cannot find the source.</span></li>
-      <li><span class="said">this is done, close it</span><span class="does">Moves the job, the same as <code>tg 29</code>, and says what it moved.</span></li>
-      <li><span class="said">I have sent this, it is with Ryan now</span><span class="does">Parks it with him, so it stops reading as yours.</span></li>
-    </ul>
-    <p>You never say which draft or which ticket you mean, because the question
-    goes off with the job attached: its draft, its prepared work, its threads and
-    everything you have already asked about it. That is the whole point of asking
-    from the card.</p>
-    <p><b>It moves a job only when you tell it to.</b> Deciding for itself that
-    something looks finished is the one thing it will not do, so a question that
-    happens to turn up "that looks done" gets told to you and left alone. And it
-    never sends a word to anybody, whatever you ask.</p>
-    <p>Several questions at once is fine. They queue and answer on their own
-    cards, one at a time, because an answer that rewrites a draft rewrites the
-    whole board. <b>Cancel</b> stops one that is running.</p>
-    <p>From a terminal it is the same ask, and the answer lands on the same card:
-    <code>tg ask 8 "is that true about refinement?"</code>, or a ticket tag
-    instead of a number.</p>
-    <p>The box above the tickets is the same thing for the questions that belong
-    to no card: what to start on, whether tomorrow is covered, what you are
-    forgetting. That one gets every open job at once and answers in job numbers.</p>
-    <p><b>Every answer takes another question.</b> <b>Ask about this answer</b> at
-    the foot of one opens a box inside it, and what you asked and what it said go
-    with the follow-up, so <span class="said">why?</span> is a whole question
-    there. The digging stays nested under the answer it is about. Answers shut to
-    one line each, newest open, and the <b>&times;</b> in the corner forgets one
-    for good.</p>
-
-    <h3>When a card is longer than you want</h3>
-    <p>Everything a card knows is on it, and most of it is shut. The words on a
-    fold say what is behind it, so <b>Timeline, 10 moves today</b> already
-    answers the only question you had. What is open is what needs you: where the
-    ticket stands, and the jobs. Press a fold and the page remembers it, on this
-    card only, until you press it again.</p>
-
-    <h3>Finishing something</h3>
-    <p>Not from the page. The page is a window on the board, so a tick on it
-    would be a lie, and an answer to a question is not a job done either. In a
-    terminal, instant and free:</p>
-    <ul class="say-list">{said}</ul>
-    <p><b>Sending a message is not finishing.</b> If a reply is coming, use
-    <code>-w</code> and the name, so the card sits with them rather than
-    pretending it is closed.</p>
-
-    <h3>When you want a real conversation</h3>
-    <p><code>tg chat</code> opens Cursor on this folder, and that is for the long
-    ones: work spanning three jobs, something you want to argue about, anything
-    where you will be reading code together. Same board, same rules, so
-    &ldquo;do 3&rdquo; or &ldquo;draft the reply to Kevin&rdquo; work there with
-    nothing else said. <b>Copy for a chat</b> on any ask box hands the job and
-    your words over for exactly that, and it is what <kbd>enter</kbd> does on a
-    page opened from disk, where there is no server to answer.</p>
-
-    <h3>The numbers</h3>
-    <p>The number to the left of a job is its own for life: job 3 is job 3 until
-    it closes, tomorrow and next week. That is why &ldquo;do 3&rdquo; needs
-    nothing else said, and why the list runs 3, 5, 2, 7 with gaps where closed
-    work used to be. On <b>TG what I say</b> the numbers are different: those are
-    each card's place on TG's own board, in the order the meeting works down
-    them.</p>
-
-    <h3>The buttons</h3>
-    <p><b>Refresh</b> is the only button this tab needs. It re-reads Asana and
-    every thread behind your open work, then rewrites everything here: what
-    moved, which jobs that changes, what is closed, and the drafts. A draft the
-    thread has overtaken gets rewritten, and one nobody needs to send any more is
-    deleted, so what is on this tab is what to do as of the last sweep. Two or
-    three minutes.</p>
-    <p><b>Update prep</b> lives on <b>TG what I say</b>, because the only thing
-    it adds is the words: what you say per ticket and what you need out of the
-    room. It does the same sweep first, so it is Refresh plus the script, never
-    less.</p>
-    <p><b>Why the words are a separate button.</b> They are written for one room
-    on one day, and some of them you have already read, cut or rehearsed. If
-    every sweep rewrote them, a refresh at 17:00 would throw away the script you
-    fixed at 16:00. So a refresh moves the work and leaves the script alone, then
-    says plainly that the script is older than the board: amber at the top of
-    <b>TG what I say</b>, and <b>Prep is older than the board</b> next to the
-    room on this one.</p>
-    <p><b>Meeting note</b> opens the last standup's Notion note.
-    <b>Japanese only</b> strips the prep tab back to the lines you read aloud,
-    and keeps <b>Rewrite or ask</b> on each of them, because reading a line out
-    is when you notice it is wrong.</p>
-
-    <h3>Where this page actually lives</h3>
-    <p>On this laptop, and nowhere else. It is a small server on
-    <code>127.0.0.1</code>, which is an address only this machine can reach, and
-    the URL carries a random key on top of that. Nothing is hosted, so there is
-    no address anyone else can type. The private GitHub repo holds the code and
-    the prompts, never <code>state/</code> or <code>output/</code>, so your
-    tickets, threads and drafts have never left the machine.</p>
-
-    <h3>On your phone</h3>
-    <p><code>tg phone</code> opens the page to your current wifi for an hour and
-    prints the address, then puts it back to laptop-only on its own. During that
-    hour anything on the same network needs the key to see anything, and the
-    laptop has to be awake. <code>tg phone 15</code> for a shorter window,
-    <code>tg stop</code> to end it now. On cafe or office wifi, prefer the short
-    window.</p>
-
-    <h3>Keys</h3>
-    <p><kbd>1</kbd> your work, <kbd>2</kbd> what you say, <kbd>/</kbd> find
-    anything, <kbd>s</kbd> Japanese only, <kbd>?</kbd> this.</p>
-  </div>
-</dialog>"""
 
 
 def ticket_group(t: dict) -> str:
@@ -1726,6 +1249,8 @@ def render(data: dict) -> str:
     {link_btn((data.get("meeting_note") or {}).get("url", ""), "Meeting note")}
     <button class="toggle" id="scriptonly">Japanese only</button>
     {controls(prep_label)}
+    <button class="toggle" data-settings type="button" aria-label="Settings"
+            title="Settings">&#9881;</button>
     <button class="toggle" data-help type="button" aria-label="How to use this"
             title="How to use this">?</button>
   </span>
@@ -1733,7 +1258,9 @@ def render(data: dict) -> str:
 <div class="wrap" id="top">
   <div id="view-desk" role="tabpanel">
     {jump_bar(tickets, refs, True)}
-    {need_to_know(data, has_script, news, tickets, soon)}
+    {render_brief.render(data, refs)}
+    {need_to_know(data, has_script, news, tickets, soon, refs)}
+    {render_week.render(data, tickets, refs)}
     {render_track(tickets, refs, soon)}
     <div class="howto">
       <span>{f"About <b>{total} min</b> of this is yours. " if total else ""}Every job takes questions and changes: <b>Ask or change</b> at the foot of its card, <kbd>enter</kbd> to send. Finishing one is the page's blind spot: run <code>tg 3</code> in a terminal.</span>
@@ -1751,9 +1278,26 @@ def render(data: dict) -> str:
   </div>
 </div>
 {finder(tickets, refs)}
-{help_dialog()}"""
+{render_dialogs.help_dialog()}
+{render_dialogs.settings_dialog()}"""
+    # Which items are closed right now. The page remembers this set, so when
+    # `./tick.py 45` in a terminal reloads it, the page can tell which number
+    # just fell rather than only that something did.
+    shut = ",".join(
+        sorted(
+            str(i.get("id"))
+            for t in tickets
+            for i in t.get("items", [])
+            if state_of(i)["closed"]
+        )
+    )
     return shell(
-        "Billing desk", body, opening_view(data, has_script), meeting, meeting_label
+        "Billing desk",
+        body,
+        opening_view(data, has_script),
+        meeting,
+        meeting_label,
+        shut,
     )
 
 

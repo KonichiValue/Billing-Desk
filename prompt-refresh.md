@@ -20,8 +20,8 @@ Three things are never a workaround, however reasonable they look:
 - Calling the Asana, Slack or Notion HTTP APIs yourself, with `curl` or
   anything else. There are no API tokens here, and naming an environment
   variable does not conjure one.
-- Starting another agent: no `cursor-agent`, no `tg refresh`, no subagent that
-  runs either. You are the refresh. A second one writes the board underneath
+- Starting another agent: not the `Task` tool, not `claude`, not `cursor-agent`,
+  not `tg refresh`. You are the refresh. A second one writes the board underneath
   you and can leave it half updated.
 - Guessing what a ticket or a thread now says. A source you could not read is a
   source you do not report on.
@@ -59,9 +59,10 @@ one is banned, not discouraged:
   `inspect.getsource(...)`, no opening `audit.py` or `board.py` to read the code.
   The docstring at the top of `board.py` is the only reference you may open, once.
   The cheatsheet already has the calls you need.
-- **No subagents, ever.** Do not "hand off to a subagent", do not spawn
-  `cursor-agent`, do not delegate a slice of the sweep. You are the whole sweep in
-  one process. A second agent writes the board underneath you and doubles the cost.
+- **No subagents, ever.** Do not use the `Task` tool, do not "hand off to a
+  subagent", do not spawn `claude` or `cursor-agent`, do not delegate a slice of
+  the sweep. You are the whole sweep in one process. A second agent writes the
+  board underneath you and doubles the cost.
 
 ## What the board is
 
@@ -76,8 +77,17 @@ history that has already happened.
 **Run `./digest.py`, once.** It prints the whole readable half of the board in
 one call: every ticket with where it stands, its gates, its threads with the time
 each was last read, its last events, and every open item with its steps, its
-draft and what it is queued behind. Add `--full` only if you need closed items or
-untruncated prose.
+draft and what it is queued behind. A ticket with nothing open prints as one
+line and is not worth reading further. `--full` unclips the prose of the open
+tickets (a prep reads that one instead, never both); `--everything` adds closed
+items and finished tickets and is almost never what a sweep needs.
+
+**Everything you read stays in context and is re-read on every later turn**, so
+what a sweep costs is mostly how much it has read, not how many calls it made.
+Keep Asana answers small: the gate query asks for
+`opt_fields=name,modified_at,assignee.name,completed` and nothing else, because
+`custom_fields` returns twenty fields per task and made one gate 250KB. Ask for
+`custom_fields` only on the handful of gids you deep-read.
 
 **The digest ends by printing a SWEEP PLAN: work it, do not rebuild it.** It is
 the worklist for this sweep, made from the watermarks already on the board so you
@@ -166,6 +176,26 @@ worked for a day, invisible here because only the incremental gate was run).
 The SWEEP PLAN names the incremental gate. It does not replace the census: run
 the census even when the plan does not mention it, because the plan is built from
 what is already on the board and cannot list a ticket the board has never seen.
+
+**The census is the only door onto the board. A ticket it did not return does not
+become one, however important the room made it.** This cuts both ways and the
+second way is the one that has actually gone wrong: a sweep read an unassigned
+incident that the standup had just made Top Priority, judged it important, and
+wrote it on as a ticket with an item asking Kraken to staff it. Nobody had given
+it to Rei, his name was nowhere on it in Asana, and the desk is his to-do list
+rather than the programme's. So:
+
+- **Assigned to him in the census, or it is not a ticket.** An unassigned ticket
+  is not his even when it is Top Priority, an incident, and the only thing the
+  room talked about. Neither is one assigned to somebody else, unless it is
+  already on the board with an open item of his on it.
+- **Important and not his is `news`, and that is the whole of it.** One row, the
+  route by which it reaches one of his tickets named, and off again when that
+  route closes. If the sweep did real work on it, a code trace, a count out of
+  prod, the finding goes in the `news` row's `what` so it is not lost. Never an
+  item, because an item is something he does.
+- **Chasing a Kraken queue is never his item.** "Get an engineer onto this" is
+  not work he owns, it is somebody else's resourcing, and step 6 already says so.
 
 Against that combined set:
 
@@ -345,6 +375,15 @@ actually posted, copy the sent text into the item's `history` as
 wiping the `draft` field. A sent draft is part of the record and must not be
 lost even when the item comes back to `todo`.
 
+Rewrite a prepared block, never append to it. A finding that starts
+`[30 Sep] Still true after re-reading` or `[30 Sep] Correction:` is a sweep's
+working notes left on his page: twelve of them on one card and he said he could
+not tell what mattered or what to act on. When something new is learned, fold it
+into the finding it changes and correct the wrong one in place, so the block
+reads as what is true now, four findings at most, each leading with its claim in
+one sentence and the evidence after it. The page shows that first sentence as
+the line and folds the rest, so a first sentence that is not the claim hides it.
+
 Prune what was prepared the same way. Take an `unanswered` question off once it
 has an answer, and drop a `prepared` note whose finding has been overtaken,
 rather than letting a card grow a history. Nothing stays because it was true
@@ -417,6 +456,29 @@ each group, so a `today` that is really next week is worse than no flag. Reserve
 `today` for work with a person or a room waiting on it, and use `monitor` for
 anything that only needs watching.
 
+**`urgency` is one of exactly three words: `today`, `this-week`, `monitor`.**
+Hyphen, not a space. Nothing else is a value, and this is not a style
+preference: the page reads these three to place a job on the week strip, so
+`this week` with a space is a job that loses its column. `./check.py` fails a
+board that carries anything else, and `./tick.py` will not save one, so a
+mistake here stops the sweep rather than quietly mis-sorting the page.
+
+**Every job he can act on needs a day, one way or the other.** The week strip is
+how he plans, and it gets a job's day from one of two places:
+
+- Work sitting with **somebody else** carries `waits_on.chase_on`, an ISO date:
+  the day their silence becomes his problem again. Always a real date, never a
+  sentence — `"chase_on": "Only if he raises it again"` is a job with no day,
+  and it is invisible on the strip. Put that sentence in `waits_on.what` and
+  give `chase_on` a date, or leave it out and set `urgency: monitor`.
+- Work sitting with **him** carries no date, only `urgency`, and the strip reads
+  it: `today` lands on today, `this-week` on the next working day, `monitor`
+  stays off. So an actionable job marked `monitor` is a job he will not see
+  coming, and that is the one mistake to avoid here.
+
+A job is therefore either somebody else's with a real `chase_on`, or his with an
+honest `urgency`. Anything else disappears from the week he plans against.
+
 **`at_standup` follows `sessions`, not habit.** The billing standup runs on the
 days in `config.json`, so check the next live session before you leave a flag
 on. If the next room is days away and the item is due today, or it is a session
@@ -464,6 +526,69 @@ is still true: the moment somebody has answered, or the thing has become an item
 with a number, take it off. Do not write a new one to fill the space. The line
 above it, what needs him and which item to start on, is counted from the board
 by the renderer, so never write a headline or a summary of the day anywhere.
+
+## 8b. Write the morning brief
+
+`brief` is the last thing you write and the first thing he reads: the five things
+a good secretary would tell him before the day starts. It is the one place on
+this board where a written sentence about the day is wanted, and it is bounded
+precisely so it cannot become the summary section 8 forbids.
+
+**Five lines maximum, and fewer is the normal answer.** Three good lines beat five
+padded ones. The cap is the point: everything on this board is already on a card,
+so a sixth line means one of the five had not earned its place. Never write a
+line to fill a slot, and never write one whose content is "nothing has changed" —
+leave the slot out.
+
+The test for every line: **would he be worse off not knowing this before 09:00
+today?** If the answer is no, it stays on its card and out of here.
+
+Each line is `{"kind", "what", "items", "ref", "source_url", "at"}`. `what` is
+one or two plain sentences that make sense to someone who has read nothing else,
+with no internal shorthand and no Asana ids he would have to look up. `items` are
+the numbers the line is about, so the page can link them; `ref` is the ticket tag.
+
+The five kinds, in the order they are drawn. **Two of them you normally leave
+alone**, because the page writes them off the board and a written copy would go
+stale beside a live one:
+
+- `room` — the next session and what he owes it. **The page writes this from
+  `sessions`**, so only write one yourself if you know something about today's
+  room that `sessions` does not, and then it replaces the drawn one.
+- `big` — **the page writes this from the newest `news` row.** Write one yourself
+  only when something is bigger than anything in `news`, and then also put it in
+  `news` if it has a route to one of his tickets.
+
+  This is the one line on the board that does not need that route. Something
+  moving across **TG or Kyuden** with enough people and enough consequence behind
+  it that not knowing would be worse than any of his own jobs: a platform
+  decision, a migration-wide freeze, a top-priority build, an incident heading
+  for billing. If you picked it up in any channel, any meeting note, any thread,
+  and it is genuinely big, it belongs here even with no ticket to hang it on.
+  Most days the newest `news` row is the right answer and you write nothing.
+
+The three you do write, every sweep:
+
+- `moved` — something that actually changed since the previous `brief.built_at`:
+  a reply landed, TG closed or moved a ticket, a flag went on, a ticket was
+  assigned to him. Not a restatement of where things stand. Read the previous
+  brief's `built_at` and only report what is newer than it.
+- `do` — the one thing to start on, by number, and why it is that one. One line.
+- `watch` — a clock he cannot act on: a hold window, someone away, a release
+  going out. One line at most.
+
+So a normal sweep writes two or three lines and the page makes five. Writing all
+five is the sign you have copied something the page already knew.
+
+Set `for_date` to today and `built_at` to `board.now()`, and rewrite the whole
+block every sweep rather than appending to it. The page refuses to draw a brief
+whose `for_date` has passed, so a stale one disappears rather than being read as
+this morning's.
+
+Two things this may never be. It is not a summary of the board: "four items need
+you, 60 minutes in total" is counted by the renderer and already on the page. And
+it is not where work goes. If a line describes something he has to do, that thing
+is an item with a number, and the line points at the number.
 
 ## 9. Keep the shorthand current
 
