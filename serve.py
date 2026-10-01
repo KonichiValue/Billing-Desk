@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import gzip
+import hashlib
 import json
 import os
 import queue
@@ -44,6 +45,12 @@ import render_desk
 
 ROOT = Path(__file__).resolve().parent
 KEY = secrets.token_urlsafe(16)
+# Which server drew the page, without giving away the key: /api/status answers
+# anyone, and in --lan mode that means anything on the wifi. A restart makes a new
+# key, so a page drawn by the last server has every button refused with "bad key"
+# while its status line looks perfectly healthy. The page compares this and
+# reloads, which is how it picks up the new key.
+BOOT = hashlib.blake2s(KEY.encode(), digest_size=4).hexdigest()
 # The port the desk itself answers on, and the only one that gets to write
 # state/serve.json. `tg`, the Dock icon and launchd all expect it here.
 DESK_PORT = 8787
@@ -1567,6 +1574,7 @@ class Handler(BaseHTTPRequestHandler):
             # from, so a `./tick.py 26` in a terminal reloads the browser rather
             # than sitting there being quietly wrong.
             state["stamp"] = render.stamp()
+            state["boot"] = BOOT
             self.json_out(200, state)
             return
         if path == "/manifest.webmanifest":
@@ -1611,7 +1619,7 @@ class Handler(BaseHTTPRequestHandler):
             with job_lock:
                 if job["state"] == "done":
                     job.update(state="idle", message=f"Last refreshed {job['at']}")
-            html = html.replace("__DESK_KEY__", KEY)
+            html = html.replace("__DESK_KEY__", KEY).replace("__DESK_BOOT__", BOOT)
             self.send(200, html.encode("utf-8"), "text/html; charset=utf-8")
             return
         self.send(404, b"not here", "text/plain")

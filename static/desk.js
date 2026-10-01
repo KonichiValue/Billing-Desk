@@ -86,6 +86,9 @@
   // page, and a desk quietly a version behind is the one failure this repo
   // exists to prevent.
   var drawnFrom = document.body.dataset.stamp || "";
+  // And the server that drew it. A restarted server has a new key, so this page's
+  // buttons would all be refused; reloading is how it gets the new one.
+  var boot = "__DESK_BOOT__";
   var changed = document.getElementById("changed");
   if (changed) changed.addEventListener("click", function () { location.reload(); });
 
@@ -105,9 +108,11 @@
   }
 
   function boardMoved(s) {
-    if (!s.stamp || !drawnFrom || s.stamp === drawnFrom) return false;
+    var restarted = s.boot && boot.indexOf("DESK_BOOT") < 0 && s.boot !== boot;
+    var moved = s.stamp && drawnFrom && s.stamp !== drawnFrom;
+    if (!restarted && !moved) return false;
     if (safeToReload()) {
-      say("The board changed, reloading");
+      say(restarted ? "The desk server restarted, reloading" : "The board changed, reloading");
       location.reload();
       return true;
     }

@@ -102,7 +102,8 @@ function makePage(options) {
     .readFileSync(path.join(ROOT, "static", "desk.js"), "utf8")
     // serve.py does this as it serves. Without it the script returns at line 3,
     // which is the whole point of that line, and the test would pass on nothing.
-    .replace("__DESK_KEY__", "test-key-not-a-real-one");
+    .replace("__DESK_KEY__", "test-key-not-a-real-one")
+    .replace("__DESK_BOOT__", "boot1");
 
   vm.runInNewContext(source, sandbox, { filename: "static/desk.js" });
   return { sandbox, reloads, timers, ids, textarea };
@@ -175,6 +176,25 @@ async function run() {
     await settle();
     check("no stamp from the server is not a change", page.reloads.count === 0,
       "a server with no stamp put the page in a reload loop");
+  }
+
+  // 7. The server restarted under an unchanged board. Its key is new, so every
+  //    button on this page would be refused until it reloads.
+  {
+    const page = makePage({ stamp: "AAA" });
+    page.sandbox.reply = { state: "idle", message: "", asks: {}, stamp: "AAA", boot: "boot2" };
+    await settle();
+    check("a restarted server reloads a clean page", page.reloads.count === 1,
+      `reloaded ${page.reloads.count} times, wanted once`);
+  }
+
+  // 8. The same server, same board: still quiet.
+  {
+    const page = makePage({ stamp: "AAA" });
+    page.sandbox.reply = { state: "idle", message: "", asks: {}, stamp: "AAA", boot: "boot1" };
+    await settle();
+    check("the same server is not a restart", page.reloads.count === 0,
+      "it reloaded with nothing changed");
   }
 
   const bad = results.filter((r) => !r.pass);
