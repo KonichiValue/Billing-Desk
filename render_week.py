@@ -104,7 +104,7 @@ def dated(item: dict, st: dict, today: date) -> str:
     to work from was the one thing missing.
 
     So urgency is read as a day. `today` means today, `this-week` means the next
-    working day he has not passed yet, and `monitor` is genuinely undated and
+    working day he has not passed yet (today, on a Friday), and `monitor` is genuinely undated and
     stays off the strip. It is an inference rather than a fact, so the row says
     so and the card stays the place the real state lives.
     """
@@ -122,6 +122,10 @@ def dated(item: dict, st: dict, today: date) -> str:
         d = today + timedelta(days=1)
         while d.weekday() >= 5:
             d += timedelta(days=1)
+        # On a Friday that is next week, off the strip he is looking at, and a
+        # job meant for this week is then a job for today.
+        if d.isocalendar()[:2] != today.isocalendar()[:2]:
+            return today.isoformat()
         return d.isoformat()
     return ""
 

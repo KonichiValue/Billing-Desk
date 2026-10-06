@@ -595,8 +595,19 @@ def render_path(
           {f'<div class="step-work">{work}</div>' if work else ""}
         </li>"""
 
-    live_rows = [r for r in rows if not is_settled(r)]
-    past = [r for r in rows if is_settled(r)]
+    # A finished job hanging on a gate that is still open is behind him all the
+    # same. Left on the gate it was drawn among the live work, struck through
+    # but in the way, so it goes into the fold and the gate stays on its own.
+    live_rows, past = [], []
+    for r in rows:
+        if is_settled(r):
+            past.append(r)
+            continue
+        shut = [i for i in r["items"] if state_of(i)["closed"]]
+        if shut:
+            r = {**r, "items": [i for i in r["items"] if not state_of(i)["closed"]]}
+            past.extend({"gate": None, "items": [i]} for i in shut)
+        live_rows.append(r)
     live_html = "".join(row_html(r) for r in live_rows)
     # What is still live comes first. The stretch behind him is a footnote under
     # it, not a preamble to it: he opens this section to find the next move.

@@ -142,6 +142,11 @@ ticket numbering. So:
   worse than saying nothing.
 - Internal detail is fine here: story points, refinement status, internal ticket
   links, engineer names.
+- Ask, don't propose, when AI did the technical reading. Each technical point is
+  a question built from what TG said, what Rei saw or what an engineer already
+  wrote. No function, list or file names and no code-derived answers in the
+  message; those go in `prepared` so he can check the reply against them.
+  `.claude/skills/ask-dont-propose/SKILL.md` has the rules and an example.
 
 **Tokyo Gas (Tanaka, Komiyama, Koume, Tamanoi, Murakami).** Japanese. They see
 the TG-shared Asana projects and the standup. They see nothing internal to
