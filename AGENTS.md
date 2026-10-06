@@ -206,7 +206,12 @@ but cannot change it; the board is the only truth about what is closed.
  write the English plainly and add any missing term to `glossary` rather than
  writing the brackets by hand. An answer in a chat or on a card is not glossed
  for you, so gloss it yourself there: 閉栓翌日開栓 (open the day after close).
-8. **Respect a hold.** When an item says "do not send this yet", do not draft
+8. **Ask, don't propose, to engineers when AI did the reading.** A draft or
+   ticket for CE, IE or any technical reader asks each technical point as a
+   question from what TG said, what Rei saw or what an engineer already wrote.
+   Function, list and file names and code-derived answers go in `prepared`, not
+   the message. Follow `.claude/skills/ask-dont-propose/SKILL.md`.
+9. **Respect a hold.** When an item says "do not send this yet", do not draft
    around it or send it because Rei asked casually. Say what it is waiting on and
    confirm he wants to override.
 
@@ -262,8 +267,49 @@ drawn from, add it to `SOURCES` or the page will not notice it changing.
 
 It holds the reload back for one thing only: something half-written in a
 composer, where taking the words away would be worse than the staleness. Then it
-shows the amber Board changed button and waits. `tests/reload.js` is what keeps
-that true, and `./check.py` runs it.
+shows the amber Board changed button and waits, and for an Undo still on
+screen after a circle was pressed. `tests/reload.js` is what keeps that true,
+and `./check.py` runs it.
+
+## Many writers, one board
+
+A sweep, a prep, several asks from the page and a terminal `./tick.py` can all
+be running at once, and they all write `state/board.json`. **`board.save()` is
+the only safe way to write it.** It takes a lock on `state/board.lock`, reads
+what is on disk, and merges field by field against the copy `board.load()` handed
+out, so an ask that finished mid-sweep keeps its answer and the sweep keeps its
+events. Items and tickets merge by id, `events`, `history` and `earlier` keep
+both sides' additions, and two writers that each made a new item get two
+numbers. So never edit the file with an edit tool, `sed` or a string replace,
+and never `json.dump` it: that is the one write the merge cannot see, and it is
+how good work used to vanish from the page.
+
+Two more things `save()` holds for every model, whichever one is running:
+
+- **An item never disappears.** A save that loses an item from a ticket still on
+  the board raises. Close it with `./tick.py <n> --dropped -n "why"` instead.
+- **Condensing never loses detail.** A finding or note taken out of a
+  `prepared` block moves to `prepared.earlier`, dated, and the card shows it
+  under an *Earlier detail* fold. Nobody writes `earlier` by hand.
+
+Only sweeps exclude each other (`state/refresh.lock`). Asks run alongside a
+sweep, four at a time, each with its own live progress line.
+
+## The circle, and what the page remembers
+
+Every job on the page starts with a round checkbox, Todoist's idea: the ring is
+the priority (red his today, orange his this week, blue with someone else, grey
+held or queued), and pressing it posts `/api/tick`, which runs `./tick.py` like
+the terminal does. That is Rei saying the job moved, so it is allowed; an agent
+inferring it is still not. A job with a draft or a reply expected opens a small
+menu (sent and waiting on who, done, dropped), because sending is not finishing.
+Undo puts back exactly the fields the tick moved. `j` `k` `x` `u` and Enter work
+the To do list from the keyboard.
+
+Theme, motion and which folds are open live in `state/prefs.json`, written by
+`/api/prefs` and embedded in the page, so the desk looks the same in every
+browser and on every port. localStorage is only a cache of it. `prefs.json` is
+deliberately not in `render.SOURCES`: opening a fold should not reload the page.
 
 ## Which agent runs a button
 

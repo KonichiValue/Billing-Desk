@@ -712,6 +712,29 @@ def stamp(conversation: bool = True) -> str:
     return hashlib.blake2s("-".join(marks).encode(), digest_size=6).hexdigest()
 
 
+PREFS = ROOT / "state" / "prefs.json"
+
+
+def prefs() -> dict:
+    """How he likes the page, from the server rather than the browser.
+
+    The theme and the folds used to live in localStorage only, which belongs to
+    one origin in one browser profile. Opened on 127.0.0.1 rather than
+    localhost, on the preview port, or in another Chrome profile, the page came
+    up plain with every fold at its default, and that read as the app having
+    gone backwards. `state/prefs.json` is the same for every one of them, and
+    localStorage is only the cache for a page opened from disk.
+
+    Deliberately not in SOURCES: the page that writes a pref is already showing
+    it, and a reload every time he shuts a fold would be absurd.
+    """
+    try:
+        data = json.loads(PREFS.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 def asset(name: str) -> str:
     """One stylesheet or script, from a file rather than a Python string literal.
 
@@ -859,6 +882,48 @@ def section(
             f'<span class="fold-hint"></span></summary>{body}</details>'
         )
     return f'<section class="sub {role}">{head}{body}</section>'
+
+
+def priority(item: dict, st: dict, due_kind: str = "") -> str:
+    """Todoist's four colours, read off what the board already says.
+
+    p1 red is his and due today, or somebody else's with a chase that is due;
+    p2 orange is his this week; p3 blue is with somebody else; p4 grey is held
+    or only being watched. The colour is on the ring of the checkbox, so the
+    list reads by priority before a single word of it is read.
+    """
+    if st["closed"]:
+        return "done"
+    if st["state"] == "todo":
+        return {"today": "p1", "this-week": "p2"}.get(urgency_of(item), "p4")
+    if st["state"] == "waiting":
+        return "p1" if due_kind == "now" else "p3"
+    return "p4"
+
+
+def check_box(item: dict, st: dict, due_kind: str = "", queued: bool = False) -> str:
+    """The round checkbox in front of a job: press it and the job moves.
+
+    It carries what the page needs to decide whether one press is enough. A job
+    with a draft still to send, or one sitting with somebody, asks what happened
+    rather than closing, because "sent" usually means waiting on a reply and a
+    tick that closes it would hide the reply he is owed.
+    """
+    n = esc(item.get("id", ""))
+    prio = "p4" if queued and not st["closed"] else priority(item, st, due_kind)
+    draft = item.get("draft") or {}
+    unsent = bool(draft) and not draft.get("sent") and not draft.get("posted")
+    who = (item.get("waits_on") or {}).get("who", "")
+    label = (f"Open job {n} again" if st["closed"] else f"Complete job {n}")
+    who_attr = f' data-who="{esc(who)}"' if who else ""
+    return (
+        f'<button type="button" class="ck {prio}" data-tick="{n}" '
+        f'data-state="{esc(st["state"])}"{" data-draft" if unsent else ""}'
+        f'{who_attr} '
+        f'data-title="{esc(item.get("title", ""))}" aria-label="{label}" '
+        f'title="{label} (x)"><svg viewBox="0 0 16 16" aria-hidden="true">'
+        f'<path d="M4 8.4l2.6 2.6L12 5.6"/></svg></button>'
+    )
 
 
 def pill(label: str, tone: str) -> str:

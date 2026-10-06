@@ -353,18 +353,47 @@ An item with a `prepared` block has steps that start after it: read this, take
 it into the room, send it. Never steps that redo it.
 
 Only `tick.py` and the agents write here. Renderers read it and never change it.
+
+**Every write goes through `save()`, and `save()` is safe to call from anywhere
+at once.** A refresh, two asks and a `./tick.py` in a terminal can all hold the
+board in memory at the same time. Each `load()` remembers the file it read, and
+`save()` takes `state/board.lock`, reads the file again, and if somebody else
+wrote it in between, merges: their change and this one both land, field by
+field, and only a field both of them changed is decided by this writer. Items
+are matched by number and tickets by gid, so a sweep adding an event never
+erases the draft an ask rewrote a minute earlier. Never edit `board.json` with
+a text editor or a string replace: that skips the lock, the merge and the check.
+
+`save()` also keeps what a writer throws away. A `prepared` finding or note that
+a rewrite drops moves into `prepared.earlier` with the time it went, so a sweep
+condensing twelve findings into four costs nothing he can not get back, and an
+item may never vanish from a ticket that is still on the board. Close it as
+`dropped` instead, because the number is how he refers to it.
+
+    "earlier": [{"at": "ISO", "text": "a finding or 'Heading: body'"}]
 """
 
 from __future__ import annotations
 
+import copy
+import fcntl
 import json
 import os
 import re
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 BOARD = ROOT / "state" / "board.json"
+LOCKFILE = ROOT / "state" / "board.lock"
+
+# What each loaded board looked like on disk, so save() can tell what this writer
+# changed from what somebody else wrote meanwhile. Keyed by the object, bounded
+# because the server loads the board on every timeline request and never saves.
+_BASES: dict[int, tuple[dict, str]] = {}
+_BASES_KEPT = 8
+EARLIER_KEPT = 40
 
 OPEN_STATES = ("todo", "hold", "waiting")
 CLOSED_STATES = ("done", "sent", "dropped")
@@ -374,11 +403,41 @@ def now() -> str:
     return datetime.now().astimezone().isoformat(timespec="seconds")
 
 
+def _remember(board: dict, text: str) -> None:
+    # The board object itself is held beside its text, so its id() cannot be
+    # handed to a new dict while the entry is here and match the wrong base.
+    _BASES[id(board)] = (board, text)
+    while len(_BASES) > _BASES_KEPT:
+        _BASES.pop(next(iter(_BASES)))
+
+
 def load(path: Path | None = None) -> dict:
     path = path or BOARD
     if not path.exists():
         return {"version": 1, "checked_at": "", "next_id": 1, "tickets": []}
-    return json.loads(path.read_text(encoding="utf-8"))
+    text = path.read_text(encoding="utf-8")
+    board = json.loads(text)
+    if path == BOARD:
+        _remember(board, text)
+    return board
+
+
+@contextmanager
+def locked():
+    """Hold `state/board.lock` for one read-merge-write.
+
+    An flock rather than a file that exists, so a writer that dies lets go of it
+    with its process and nothing ever has to decide a lock is stale. Held for the
+    write only, which is milliseconds, never for a whole sweep: that is what lets
+    an ask and a refresh run side by side.
+    """
+    LOCKFILE.parent.mkdir(parents=True, exist_ok=True)
+    with LOCKFILE.open("a") as fh:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(fh, fcntl.LOCK_UN)
 
 
 def save(board: dict, path: Path | None = None) -> None:
@@ -398,14 +457,190 @@ def save(board: dict, path: Path | None = None) -> None:
 
     path = path or BOARD
     path.parent.mkdir(parents=True, exist_ok=True)
-    # Write to a sibling temp file and rename it into place. The rename is atomic
-    # on the same filesystem, so a crash or a full disk mid-write leaves the old
-    # board intact rather than truncating the one durable file to nothing.
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(
-        json.dumps(board, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
-    os.replace(tmp, path)
+    with locked():
+        disk_text = path.read_text(encoding="utf-8") if path.exists() else ""
+        disk = json.loads(disk_text) if disk_text else None
+        entry = _BASES.get(id(board))
+        base_text = entry[1] if entry and entry[0] is board else None
+        merged = board
+        # Somebody wrote the board after this writer read it. Their change and
+        # this one both land; see the module docstring.
+        if disk is not None and base_text is not None and base_text != disk_text:
+            merged = merge(json.loads(base_text), board, disk)
+            _renumber_collisions(merged, disk)
+        if disk is not None:
+            vanished(disk, merged)
+            keep_earlier(disk, merged)
+        problems = check(merged)
+        if problems:
+            raise ValueError(
+                "the board was not written, because merging it with what another "
+                "writer saved meanwhile would not render:\n  " + "\n  ".join(problems)
+            )
+        text = json.dumps(merged, ensure_ascii=False, indent=2) + "\n"
+        # Write to a sibling temp file and rename it into place. The rename is
+        # atomic on the same filesystem, so a crash or a full disk mid-write
+        # leaves the old board intact rather than truncating it to nothing.
+        tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+        tmp.write_text(text, encoding="utf-8")
+        os.replace(tmp, path)
+    # The caller goes on holding what is now on disk, so a second save from the
+    # same writer merges against this one rather than undoing the other writer.
+    if merged is not board:
+        board.clear()
+        board.update(merged)
+    if path == BOARD:
+        _remember(board, text)
+
+
+# ---------------------------------------------------------------- the merge
+#
+# Three versions of one board: what a writer loaded (base), what it now holds
+# (mine) and what is on disk because somebody else saved first (theirs). A field
+# only one side changed takes that side's value; a field both changed takes mine,
+# because this writer is the one saving now. Tickets and items are matched by id,
+# so two writers on two different jobs never touch each other at all.
+
+_MISSING = object()
+KEYED = {"tickets", "items"}            # lists of records with an "id"
+LOGS = {"events", "history", "earlier"}  # append-mostly: keep both sides' additions
+
+
+def merge(base, mine, theirs, field: str = ""):
+    if mine == base:
+        return theirs
+    if theirs == base or mine == theirs:
+        return mine
+    if isinstance(mine, dict) and isinstance(theirs, dict):
+        base = base if isinstance(base, dict) else {}
+        out = {}
+        for key in list(mine) + [k for k in theirs if k not in mine]:
+            value = merge(base.get(key, _MISSING), mine.get(key, _MISSING),
+                          theirs.get(key, _MISSING), key)
+            if value is not _MISSING:
+                out[key] = value
+        return out
+    if isinstance(mine, list) and isinstance(theirs, list):
+        base = base if isinstance(base, list) else []
+        if field in KEYED:
+            return _merge_keyed(base, mine, theirs, field)
+        if field in LOGS:
+            gone = [x for x in base if x not in theirs]
+            kept = [x for x in mine if x not in gone]
+            return kept + [x for x in theirs if x not in base and x not in kept]
+    return mine
+
+
+def _merge_keyed(base: list, mine: list, theirs: list, field: str) -> list:
+    def by_id(rows):
+        return {str(r.get("id")): r for r in rows if isinstance(r, dict)}
+
+    b, m, t = by_id(base), by_id(mine), by_id(theirs)
+    out = []
+    for row in mine:
+        key = str(row.get("id")) if isinstance(row, dict) else None
+        if key is None:
+            out.append(row)
+        elif key in t and key not in b and row != t[key]:
+            # Both writers added a record under the same id. They are two
+            # different things, so both stay, and the renumbering below gives
+            # this writer's the next free number.
+            out += [t[key], row]
+        elif key in t:
+            out.append(merge(b.get(key, _MISSING), row, t[key], ""))
+        elif key not in b or row != b[key]:
+            out.append(row)   # new here, or they removed what this writer changed
+    for key, row in t.items():
+        if key in m:
+            continue
+        if key not in b or row != b[key]:
+            out.append(row)   # new there, or this writer removed what they changed
+    return out
+
+
+def _renumber_collisions(board: dict, theirs: dict) -> None:
+    """Two writers that each took board.next_id() got the same number.
+
+    Theirs is already on disk and may already be on the page, so it keeps the
+    number and this writer's item takes the next free one.
+    """
+    on_disk = {str(i.get("id")): i for _, i in items(theirs)}
+    rows = [i for _, i in items(board)]
+    count: dict[str, int] = {}
+    for item in rows:
+        count[str(item.get("id"))] = count.get(str(item.get("id")), 0) + 1
+    top = max((int(i.get("id")) for i in rows if str(i.get("id", "")).isdigit()), default=0)
+    top = max(top, int(theirs.get("next_id", 1)) - 1, int(board.get("next_id", 1)) - 1)
+    for key in [k for k, n in count.items() if n > 1]:
+        twins = [i for i in rows if str(i.get("id")) == key]
+        keeper = next((i for i in twins if i == on_disk.get(key)), twins[0])
+        for item in twins:
+            if item is not keeper:
+                top += 1
+                item["id"] = top
+    board["next_id"] = top + 1
+
+
+def vanished(before: dict, after: dict) -> None:
+    """Refuse a save that loses an item from a ticket still on the board."""
+    tickets = {str(t.get("id")) for t in after.get("tickets", [])}
+    now_ids = {str(i.get("id")) for _, i in items(after)}
+    lost = [
+        f"item {i.get('id')} on {t.get('ref')}"
+        for t, i in items(before)
+        if str(i.get("id")) not in now_ids and str(t.get("id")) in tickets
+    ]
+    if lost:
+        raise ValueError(
+            "the board was not written, because it would lose "
+            + ", ".join(lost)
+            + ". An item keeps its number until it closes: close it with "
+            "./tick.py <n> --dropped -n 'why' rather than deleting it."
+        )
+
+
+def _note_text(note) -> str:
+    if isinstance(note, dict):
+        return f"{note.get('heading', '')}: {note.get('body', '')}".strip(": ")
+    return str(note)
+
+
+def keep_earlier(before: dict, after: dict) -> None:
+    """Move whatever a rewrite dropped from `prepared` into `prepared.earlier`.
+
+    A sweep is told to keep a prepared block short, and it should be: four
+    findings he can act on beat sixteen he cannot. But the detail it condensed
+    away was real work, a line reference or a comment id he may need in the
+    room, and a model deciding what to forget is how good work went missing. So
+    nothing is forgotten. The page shows it under one fold, newest first, and
+    `earlier` itself can only grow until it reaches EARLIER_KEPT.
+    """
+    old = {str(i.get("id")): i for _, i in items(before)}
+    stamp = now()
+    for _, item in items(after):
+        was = (old.get(str(item.get("id"))) or {}).get("prepared")
+        if not isinstance(was, dict):
+            continue
+        new = item.get("prepared") if isinstance(item.get("prepared"), dict) else {}
+        earlier = [e for e in new.get("earlier") or [] if isinstance(e, dict)]
+        known = {e.get("text") for e in earlier}
+        # What was already kept stays kept, whoever rewrote the block.
+        carried = [e for e in was.get("earlier") or []
+                   if isinstance(e, dict) and e.get("text") not in known]
+        known |= {e.get("text") for e in carried}
+        dropped = []
+        for field in ("findings", "notes"):
+            now_there = new.get(field) or []
+            for entry in was.get(field) or []:
+                text = _note_text(entry)
+                if entry not in now_there and text and text not in known:
+                    dropped.append({"at": stamp, "text": text})
+                    known.add(text)
+        if not dropped and not carried:
+            continue
+        new = dict(new)
+        new["earlier"] = (dropped + earlier + carried)[:EARLIER_KEPT]
+        item["prepared"] = new
 
 
 def items(board: dict) -> list[tuple[dict, dict]]:
@@ -514,6 +749,9 @@ def check(board: dict) -> list[str]:
 
         prepared = item.get("prepared")
         if isinstance(prepared, dict):
+            for n, entry in enumerate(prepared.get("earlier") or [], 1):
+                if not isinstance(entry, dict) or not isinstance(entry.get("text"), str):
+                    bad.append(f"{where}: prepared.earlier[{n}] should be {{at, text}}")
             for field in PREPARED_TEXT:
                 for n, entry in enumerate(prepared.get(field) or [], 1):
                     if not isinstance(entry, (str, dict)):

@@ -25,6 +25,7 @@ from render import (
     apply_glossary,
     ask_block,
     blocked_on,
+    check_box,
     code,
     due_words,
     esc,
@@ -269,7 +270,31 @@ def prepared_block(p: dict, meeting_href: str = "") -> str:
               {f'<div class="pw-src"><span>Files it made</span>{docs}</div>' if docs else ""}
               {meeting_block}
               {built_from}
+              {earlier_block(p.get("earlier") or [])}
             </div>"""
+
+
+def earlier_block(rows: list) -> str:
+    """What a rewrite condensed away, kept by board.save() and shown under a fold.
+
+    A sweep is asked to keep the block to four findings, and that is right for
+    reading it. But a line reference or a comment id it dropped is exactly what
+    he may need in the room, so it is kept, newest first, one click down.
+    """
+    rows = [r for r in rows if isinstance(r, dict) and r.get("text")]
+    if not rows:
+        return ""
+    lines = "".join(
+        f'<li><span class="pw-when">{esc(str(r.get("at", ""))[5:16].replace("T", " "))}</span>'
+        f"{code(r['text'])}</li>"
+        for r in rows
+    )
+    return f"""
+              <details class="pw-ev pw-earlier">
+                <summary>Earlier detail: {len(rows)} line{'' if len(rows) == 1 else 's'} a later
+                rewrite took out<span class="fold-hint"></span></summary>
+                <ul class="pw-f">{lines}</ul>
+              </details>"""
 
 
 def steps_block(r: dict, steps: str, active: bool) -> str:
@@ -437,8 +462,9 @@ def render_items(
             when_chip = ""
         out.append(
             f"""
-        <{tag} class="act {st["state"]} {"held" if hold and not done else ""} {"commit" if committed else ""}"{attrs}>
+        <{tag} class="act {st["state"]} {"held" if hold and not done else ""} {"commit" if committed else ""}" data-job="{esc(r.get("id", ""))}"{attrs}>
           <{head_tag} class="act-head">
+            {check_box(r, st, due_kind, bool(behind))}
             <span class="act-rank">{esc(r.get("id", "-"))}</span>
             <span class="act-title">{esc(r.get("title"))}
               {f'<span class="act-sub">{sub}</span>' if sub and not active else ""}</span>

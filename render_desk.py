@@ -29,6 +29,9 @@ import render_week
 from render import (
     stamp,
     asset,
+    prefs,
+    check_box,
+    urgency_of,
     sub_line,
     ASKED,
     SPARK,
@@ -92,7 +95,8 @@ def track_row(
     hot = not st["closed"] and (due_kind == "now" or "today" in (due or "").lower())
     classes = " ".join(c for c in ("tr", group, "tr-hot" if hot else "") if c)
     return f"""
-      <li class="{classes}">
+      <li class="{classes}" data-job="{esc(item.get("id", ""))}">
+        {check_box(item, st, due_kind, bool(queued_behind))}
         <span class="tr-rank" title="Job {esc(item.get("id", "-"))}. It keeps this
         number until it closes, so &ldquo;done {esc(item.get("id", "-"))}&rdquo; in
         a chat is enough.">{esc(item.get("id", "-"))}</span>
@@ -116,7 +120,9 @@ def render_track(
 
     counts = {"todo": 0, "hold": 0, "waiting": 0, "closed": 0}
     index = index_items(tickets)
-    live, waiting_cold, queued, shut = [], [], [], []
+    waiting_cold, queued, shut = [], [], []
+    today_rows, week_rows, later_rows = [], [], []
+    done_today = 0
     for ref, item, st in rows:
         # Only work that would otherwise read "with you" diverts into the queue.
         # An item waiting on someone is already described by who holds it.
@@ -125,6 +131,7 @@ def render_track(
         if st["closed"]:
             counts["closed"] += 1
             shut.append(row)
+            done_today += str(item.get("closed_at", ""))[:10] == date.today().isoformat()
             continue
         if behind:
             queued.append(row)
@@ -136,8 +143,16 @@ def render_track(
         _, due_kind = when_tag(item, st, sess)
         if st["state"] == "waiting" and due_kind == "none":
             waiting_cold.append(row)
+        elif st["state"] == "todo":
+            # His own work goes by the urgency he gave it, the same reading the
+            # week strip makes; every job of his reads "Do now", which says it
+            # is his rather than when.
+            {"today": today_rows, "this-week": week_rows}.get(
+                urgency_of(item), later_rows).append(row)
+        elif due_kind == "now":
+            today_rows.append(row)     # a chase that is due is today's work
         else:
-            live.append(row)
+            later_rows.append(row)
 
     summary = ", ".join(
         f"{n} {word}"
@@ -186,13 +201,44 @@ def render_track(
         if shut
         else ""
     )
+    # Today, then the rest of the week, then what is moving without him: the
+    # order Todoist draws a day in, so the top of the list is always the next
+    # thing to press. Every row is still the same row, with its number.
+    def group(title: str, rows: list[str], hint: str = "", empty: str = "") -> str:
+        if not rows:
+            if not empty:
+                return ""
+            return (
+                f'<li class="tr-sec empty"><b>{esc(title)}</b><span>0</span></li>'
+                f'<li class="tr-empty">{esc(empty)}</li>'
+            )
+        return (
+            f'<li class="tr-sec"><b>{esc(title)}</b><span>{len(rows)}</span>'
+            f'{f"<i>{esc(hint)}</i>" if hint else ""}</li>' + "".join(rows)
+        )
+
+    open_now = len(today_rows)
+    total_day = open_now + done_today
+    pct = round(100 * done_today / total_day) if total_day else 0
+    progress = (
+        f'<div class="track-day" title="Closed today, out of what was due today">'
+        f'<span class="track-bar"><i style="width:{pct}%"></i></span>'
+        f'<span><b>{done_today}</b> of {total_day} done today</span></div>'
+        if total_day
+        else ""
+    )
     return f"""
   <div class="track" id="todo">
     <div class="track-head"><h2>To do</h2>
-    <span class="track-key">Every job keeps the number on its left until it
-    closes</span>
+    <span class="track-key">Press the circle to finish a job. <kbd>j</kbd>
+    <kbd>k</kbd> move, <kbd>x</kbd> completes, <kbd>u</kbd> undoes</span>
     <span>{esc(summary)}</span></div>
-    <ul style="list-style:none;margin:0;padding:0">{"".join(live)}</ul>
+    {progress}
+    <ul class="track-list" style="list-style:none;margin:0;padding:0">
+      {group("Today", today_rows, "due now, or chase due", "Nothing due today. Pick from this week, or chase.")}
+      {group("This week", week_rows)}
+      {group("With others, or held", later_rows, "each has a chase date or a room to raise it in")}
+    </ul>
     {waiting_block}
     {queued_block}
     {closed_block}
@@ -726,19 +772,27 @@ def shell(
 <body data-view="{esc(view)}" data-meeting="{esc(meeting_iso)}"
       data-meeting-label="{esc(meeting_label)}" data-stamp="{stamp()}" data-board="{stamp(False)}"
       data-closed="{esc(closed)}">
+<script id="prefs" type="application/json">{prefs_json()}</script>
 <script>
-/* The theme, before anything is drawn. Read from localStorage here rather than
-   in base.js at the end of the body, because a page that paints plain and then
-   repaints indigo is a flash on every single load. Wrapped in try/catch: a
-   browser with storage denied gets the plain theme, not a broken page. */
-(function(){{try{{
-var t=localStorage.getItem('desk-theme');
+/* The theme, before anything is drawn, so a page never paints plain and then
+   repaints indigo. The server's copy (state/prefs.json, in the tag above) wins,
+   because it is the same in every browser, port and profile; localStorage is
+   only what a page opened from disk falls back on. base.js keeps both. */
+(function(){{var p={{}};try{{p=JSON.parse(document.getElementById('prefs').textContent)||{{}}}}catch(e){{}}
+window.deskPrefs=p;
+try{{
+var t=p['desk-theme']||localStorage.getItem('desk-theme');
 if(t&&t!=='plain')document.body.dataset.theme=t;
-if(localStorage.getItem('desk-motion')==='off')document.body.dataset.motion='off';
+if((p['desk-motion']||localStorage.getItem('desk-motion'))==='off')document.body.dataset.motion='off';
 }}catch(e){{}}}})();
 </script>
 {body}
 <script>{asset("base.js")}</script></body></html>"""
+
+
+def prefs_json() -> str:
+    """The prefs as a script body: `</` escaped, so no value can close the tag."""
+    return json.dumps(prefs(), ensure_ascii=False).replace("</", "<\\/")
 
 
 # The buttons only appear when serve.py is behind the page, because a file://

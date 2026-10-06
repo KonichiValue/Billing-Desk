@@ -315,6 +315,11 @@ def render_ticket(t: dict, index: dict[str, dict] | None = None) -> list[str]:
                 for q in prep["unanswered"]:
                     actions.append(f"- {q}")
                 actions.append("")
+            earlier = [e for e in prep.get("earlier") or [] if isinstance(e, dict)]
+            if earlier:
+                actions += ["**Earlier detail** (taken out by a later rewrite, kept by board.save)", ""]
+                actions += [f"- {e.get('at', '')[:16]}: {e.get('text', '')}" for e in earlier]
+                actions.append("")
             files = [f for f in prep.get("files", []) if f.get("path") or f.get("url")]
             if files:
                 actions += [

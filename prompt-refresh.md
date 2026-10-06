@@ -72,6 +72,15 @@ those tickets. Items keep their number until they are closed, so "do 4" means
 the same thing next week. Never renumber, never reuse a number, never rewrite
 history that has already happened.
 
+**Every write goes through `board.save()`, `./tick.py` or `./note.py`.** Never
+open `state/board.json` with an edit tool, `sed`, or a string replace, and never
+write it with `json.dump`. Questions from the page run while you sweep and write
+the same file, so `save()` takes a lock and merges what they wrote with what you
+wrote, field by field. A write that goes round it overwrites their answer, and
+that is what made the page look like it had gone back a day. Never delete an
+item, either: close it with `./tick.py <n> --dropped -n "why"`. `save()` refuses
+a board that has lost one.
+
 ## 1. Read where things stand
 
 **Run `./digest.py`, once.** It prints the whole readable half of the board in
@@ -383,6 +392,13 @@ into the finding it changes and correct the wrong one in place, so the block
 reads as what is true now, four findings at most, each leading with its claim in
 one sentence and the evidence after it. The page shows that first sentence as
 the line and folds the rest, so a first sentence that is not the claim hides it.
+
+Condensing never loses anything. `board.save()` compares the block with what was
+on disk and moves every finding or note you took out into `prepared.earlier`,
+dated, where the card shows it under a fold. So cut freely, and never paste
+dropped detail back into `findings` to keep it safe: that is the twelve-finding
+card again. Never write `prepared.earlier` yourself either; it is the record of
+what was cut, and only `save()` keeps it.
 
 Prune what was prepared the same way. Take an `unanswered` question off once it
 has an answer, and drop a `prepared` note whose finding has been overtaken,

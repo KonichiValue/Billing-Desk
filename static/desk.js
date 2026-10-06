@@ -63,9 +63,11 @@
       tail.hidden = false;
       return;
     }
-    var secs = s.seconds || 0;
+    // Its own run's progress, not the header's: several can think at once.
+    var run = (s.live || {})[id] || {};
+    var secs = run.seconds || 0;
     t.textContent = secs ? "Thinking, " + clock(secs) : "Thinking";
-    var word = s.last || (secs > 150
+    var word = run.last || (secs > 150
       ? "Still going. Anything that reads a thread takes a few minutes."
       : secs > 40 ? "Reading the ticket, the threads and what you asked before." : "");
     tail.textContent = word;
@@ -110,7 +112,7 @@
     var pal = document.getElementById("pal");
     var help = document.getElementById("help");
     var over = (pal && !pal.hidden) || (help && help.open);
-    return !half && !open && !over;
+    return !half && !open && !over && !ticking();
   }
 
   // The board alone, without the conversation. When only the conversation
@@ -137,6 +139,10 @@
       touched = {};
       return false;
     }
+    // A job he has just pressed, with its Undo still on screen. The row already
+    // shows the move; reloading would take the Undo away. The poll comes back
+    // the moment the toast goes.
+    if (!restarted && ticking()) return false;
     if (safeToReload()) {
       say(restarted ? "The desk server restarted, reloading" : "The board changed, reloading");
       location.reload();
@@ -672,6 +678,223 @@
       var k = row.querySelector(".qa-acts-k");
       if (k) { k.textContent = err.message; k.classList.add("bad"); }
     });
+  });
+
+
+  // The circle on every job. Pressing it is him saying the job moved, on the
+  // job he means, so it runs ./tick.py like the terminal does and the move is in
+  // the item's history. A job with a draft or a reply expected is not simply
+  // done: sending is not finishing, so the circle asks which it was. Everything
+  // else completes on the press, and Undo puts back exactly what was there.
+  var menu = null, toastEl = null, toastTimer = null, last = null;
+  function ticking() { return !!(menu || toastEl); }
+
+  function jobEls(n) {
+    return [].slice.call(document.querySelectorAll('[data-job="' + n + '"]'));
+  }
+  function mark(n, going) {
+    jobEls(n).forEach(function (el) {
+      el.classList.toggle("going", going);
+      // A row on the list folds away once the strike has drawn, the way a
+      // finished task leaves Todoist. The card below keeps it, struck through.
+      if (!going) el.classList.remove("gone");
+      else if (el.classList.contains("tr")) {
+        setTimeout(function () { if (el.classList.contains("going")) el.classList.add("gone"); }, 700);
+      }
+    });
+    [].forEach.call(document.querySelectorAll('.ck[data-tick="' + n + '"]'), function (c) {
+      c.classList.toggle("on", going);
+      c.setAttribute("aria-busy", going ? "true" : "false");
+    });
+  }
+
+  function closeToast() {
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = null;
+    if (toastEl) toastEl.remove();
+    toastEl = null;
+    later(0);
+  }
+  function toast(text, undo, bad) {
+    if (toastEl) toastEl.remove();
+    if (toastTimer) clearTimeout(toastTimer);
+    toastEl = document.createElement("div");
+    toastEl.className = "toast" + (bad ? " err" : "");
+    toastEl.setAttribute("role", "status");
+    var t = document.createElement("span");
+    t.textContent = text;
+    toastEl.appendChild(t);
+    if (undo) {
+      var u = document.createElement("button");
+      u.type = "button";
+      u.textContent = "Undo";
+      u.title = "Put it back (u)";
+      u.addEventListener("click", undo);
+      toastEl.appendChild(u);
+    }
+    var x = document.createElement("button");
+    x.type = "button";
+    x.textContent = "×";
+    x.setAttribute("aria-label", "Dismiss");
+    x.addEventListener("click", closeToast);
+    toastEl.appendChild(x);
+    document.body.appendChild(toastEl);
+    toastTimer = setTimeout(closeToast, undo ? 6000 : 3500);
+  }
+
+  function tick(n, verb, who, before) {
+    return fetch("/api/tick?k=" + encodeURIComponent(key), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ n: n, verb: verb, who: who || "", before: before || null })
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        if (!r.ok) throw new Error(j.error || "the desk server said no");
+        return j;
+      });
+    });
+  }
+
+  function undoLast() {
+    if (!last) return;
+    var was = last;
+    last = null;
+    mark(was.n, !was.going);
+    toast("Putting " + was.n + " back…");
+    tick(was.n, "undo", "", was.before).then(function () {
+      mark(was.n, false);
+      toast(was.n + " is back where it was");
+    }).catch(function (err) {
+      mark(was.n, was.going);
+      toast("Could not undo " + was.n + ": " + err.message, null, true);
+    });
+  }
+
+  function move(n, verb, who) {
+    closeMenu();
+    var going = verb !== "mine";
+    mark(n, going);
+    tick(n, verb, who).then(function (j) {
+      last = { n: n, before: j.before, going: going };
+      toast(j.said || n + " moved", undoLast);
+    }).catch(function (err) {
+      mark(n, false);
+      toast("Could not move " + n + ": " + err.message, null, true);
+    });
+  }
+
+  function closeMenu() {
+    if (menu) menu.remove();
+    menu = null;
+  }
+  function option(label, small, fn) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.textContent = label;
+    if (small) {
+      var s = document.createElement("small");
+      s.textContent = small;
+      b.appendChild(s);
+    }
+    b.addEventListener("click", function (e) { e.stopPropagation(); fn(); });
+    return b;
+  }
+  function openMenu(c) {
+    closeMenu();
+    var n = c.dataset.tick, st = c.dataset.state, who = c.dataset.who || "";
+    menu = document.createElement("div");
+    menu.className = "ck-menu";
+    menu.setAttribute("role", "menu");
+    if (c.hasAttribute("data-draft") && st !== "waiting") {
+      var row = document.createElement("form");
+      row.className = "who";
+      var input = document.createElement("input");
+      input.value = who;
+      input.placeholder = "Sent, waiting on who?";
+      input.setAttribute("aria-label", "Sent, waiting on who");
+      var go = document.createElement("button");
+      go.type = "submit";
+      go.textContent = "Sent";
+      row.appendChild(input);
+      row.appendChild(go);
+      row.addEventListener("submit", function (e) {
+        e.preventDefault();
+        if (input.value.trim()) move(n, "waiting", input.value.trim());
+        else input.focus();
+      });
+      menu.appendChild(row);
+    }
+    if (st === "waiting") {
+      menu.appendChild(option("They replied", "it is yours again", function () { move(n, "mine"); }));
+    }
+    menu.appendChild(option("Done", "nothing comes back", function () { move(n, "done"); }));
+    menu.appendChild(option("Dropped", "no longer needed", function () { move(n, "dropped"); }));
+    document.body.appendChild(menu);
+    var r = c.getBoundingClientRect();
+    var left = Math.min(r.left + window.scrollX, window.scrollX + document.documentElement.clientWidth - menu.offsetWidth - 12);
+    menu.style.left = Math.max(8, left) + "px";
+    menu.style.top = (r.bottom + window.scrollY + 6) + "px";
+    var first = menu.querySelector("input,button");
+    if (first) first.focus();
+  }
+
+  function press(c) {
+    if (c.getAttribute("aria-busy") === "true") return;
+    var n = c.dataset.tick, st = c.dataset.state;
+    if (st === "done" || st === "sent" || st === "dropped") return move(n, "mine");
+    if (c.hasAttribute("data-draft") || st === "waiting" || st === "hold") return openMenu(c);
+    move(n, "done");
+  }
+
+  // Capture, so the press never reaches the summary it sits in and opens the
+  // card instead.
+  document.addEventListener("click", function (e) {
+    var c = e.target.closest && e.target.closest(".ck");
+    if (!c) {
+      if (menu && !(e.target.closest && e.target.closest(".ck-menu"))) closeMenu();
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    press(c);
+  }, true);
+
+  // j and k walk the list, x completes, Enter opens, u undoes. The list is the
+  // To do list on the desk; a row that is folded away is not in the walk.
+  var focusAt = -1;
+  function walk() {
+    var list = document.querySelector("#todo .track-list");
+    if (!list) return [];
+    return [].slice.call(list.querySelectorAll("[data-job]")).filter(function (el) {
+      return el.offsetParent !== null && !el.classList.contains("going");
+    });
+  }
+  function focusRow(rows, i) {
+    rows.forEach(function (el) { el.classList.remove("kfocus"); });
+    if (!rows.length) return;
+    focusAt = Math.max(0, Math.min(i, rows.length - 1));
+    rows[focusAt].classList.add("kfocus");
+    rows[focusAt].scrollIntoView({ block: "nearest" });
+  }
+  document.addEventListener("keydown", function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
+    var tag = (e.target.tagName || "").toLowerCase();
+    if (tag === "input" || tag === "textarea" || e.target.isContentEditable) return;
+    if (document.querySelector("dialog[open]")) return;
+    if (e.key === "Escape" && menu) { closeMenu(); return; }
+    if (document.body.dataset.view === "standup") return;
+    var rows = walk();
+    var cur = document.querySelector("#todo .kfocus");
+    var at = cur ? rows.indexOf(cur) : -1;
+    if (e.key === "j") { focusRow(rows, at + 1); e.preventDefault(); }
+    else if (e.key === "k") { focusRow(rows, at < 0 ? 0 : at - 1); e.preventDefault(); }
+    else if ((e.key === "x" || e.key === "e") && cur) {
+      var c = cur.querySelector(".ck");
+      if (c) { press(c); e.preventDefault(); }
+    } else if ((e.key === "Enter" || e.key === "o") && cur) {
+      var a = cur.querySelector("a.tr-title,a[href]");
+      if (a) { a.click(); e.preventDefault(); }
+    } else if (e.key === "u" && last) { undoLast(); e.preventDefault(); }
   });
 
   // Coming back to the tab is the moment worth checking. The usual way the board

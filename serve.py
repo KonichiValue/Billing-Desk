@@ -96,23 +96,30 @@ job_lock = threading.Lock()
 # for all of it is indistinguishable from one that has broken. The agent prints
 # as it goes, so the page can show the last thing it said and how long it has
 # been going, which is the difference between waiting and wondering.
-live = {"since": 0.0, "last": "", "chars": 0}
+# One entry per run, keyed like `procs`: "sweep" for a refresh or prep, the ask id
+# for a question. A single shared slot meant two questions at once showed each
+# other's progress, and the first to finish blanked the line for the rest.
+live: dict[str, dict] = {}
 live_lock = threading.Lock()
 
 # Questions wait in a line rather than being turned away. Asking about one job
 # and then noticing something on the next card is the normal way to read the
 # page, and "something is already running, ask again" makes him hold the second
-# question in his head until the first lands. They still run one at a time: an
-# answer that rewrites a draft is a read-modify-write of the whole board, so two
-# at once would have one of them silently overwrite the other.
+# question in his head until the first lands.
 ask_queue: "queue.Queue[tuple[str, str, str, str]]" = queue.Queue()
 
-# Questions run a small pool at a time, so asking on a second card does not wait
-# out the first. Cancel needs the process per question, not one shared slot, or
-# cancelling B would reach for A's process. A sweep (refresh/prep) still runs
-# alone: it is a read-modify-write of the whole board, so it claims the lock,
-# waits for in-flight questions to finish, and new questions wait on it.
-ASK_WORKERS = 2
+# Questions run a pool at a time, so asking on a second card does not wait out
+# the first. Cancel needs the process per question, not one shared slot, or
+# cancelling B would reach for A's process.
+#
+# Nothing here waits for anything else any more. A question used to wait up to
+# five minutes for a sweep, and a sweep for every question, because each was a
+# read-modify-write of the whole board and the later save erased the earlier.
+# board.save() now merges under a lock, field by field, so a question answered
+# mid-refresh and the refresh itself both land. Only two sweeps exclude each
+# other, through state/refresh.lock, since two of them would both take the
+# same event onto the same ticket.
+ASK_WORKERS = 4
 procs: dict[str, "subprocess.Popen[str]"] = {}   # ask_id (or "sweep") -> live process
 asks_running = 0                                  # questions in their agent run right now
 cancelled: set[str] = set()
@@ -180,19 +187,30 @@ def pending_asks() -> dict[str, str]:
     }
 
 
-def set_live(last: str = "", add: int = 0, start: bool = False) -> None:
+def set_live(key: str, last: str = "", add: int = 0, start: bool = False) -> None:
     with live_lock:
-        if start:
-            live.update(since=time.time(), last="", chars=0)
-            return
+        if start or key not in live:
+            live[key] = {"since": time.time(), "last": "", "chars": 0}
+            if start:
+                return
         if last:
-            live["last"] = last
-        live["chars"] += add
+            live[key]["last"] = last
+        live[key]["chars"] += add
 
 
-def clear_live() -> None:
+def clear_live(key: str) -> None:
     with live_lock:
-        live.update(since=0.0, last="", chars=0)
+        live.pop(key, None)
+
+
+def live_view() -> dict[str, dict]:
+    """Each run's progress as the page reads it: seconds, last words, size."""
+    with live_lock:
+        return {
+            k: {"seconds": int(time.time() - v["since"]), "last": v["last"],
+                "written": v["chars"]}
+            for k, v in live.items()
+        }
 
 
 BOARD = ROOT / "state" / "board.json"
@@ -276,11 +294,25 @@ def rebuild() -> str:
         return html.read_text(encoding="utf-8")
 
 
-def set_job(state: str, message: str = "", url: str = "") -> None:
+def set_job(state: str, message: str = "", url: str = "", kind: str = "sweep") -> None:
     with job_lock:
         job.update(
-            state=state, message=message, url=url, at=datetime.now().strftime("%H:%M")
+            state=state, message=message, url=url, kind=kind,
+            at=datetime.now().strftime("%H:%M"),
         )
+
+
+def ask_job(state: str, message: str = "", url: str = "") -> None:
+    """The header line, from a question, unless a sweep is using it.
+
+    Each card shows its own question's progress, so the header is only a
+    courtesy for asks. A refresh running beside them owns it: "Answered in 40s"
+    over a sweep still going would read as the sweep being finished.
+    """
+    with job_lock:
+        if job.get("kind") == "sweep" and job["state"] == "running":
+            return
+    set_job(state, message, url, kind="ask")
 
 
 def guarded(work: Callable[[], None], what: str) -> Callable[[], None]:
@@ -372,7 +404,7 @@ def mmss(secs: float) -> str:
 def read_events(stream, said: list[str], noise: list[str], calls: list[str],
                 began: float, beat: list[float], fh=None,
                 kind: agent.Kind | None = None,
-                thinking: list[bool] | None = None) -> None:
+                thinking: list[bool] | None = None, key: str = "sweep") -> None:
     """Turn the agent's event stream into progress, and into a readable log.
 
     Three things come out of one pass: the final message, whatever the CLI said
@@ -396,7 +428,7 @@ def read_events(stream, said: list[str], noise: list[str], calls: list[str],
             beat[0] = time.time()   # any line from the agent is a sign of life
             if not clean.startswith("{"):
                 noise.append(clean)
-                set_live(last=clean[-200:])
+                set_live(key, last=clean[-200:])
                 if fh is not None:
                     fh.write(clean + "\n")
                     fh.flush()
@@ -411,16 +443,16 @@ def read_events(stream, said: list[str], noise: list[str], calls: list[str],
                 thinking[0] = what == "model"
             elif what == "said":
                 said.append(text)
-                set_live(add=len(text))
+                set_live(key, add=len(text))
                 tail = "".join(said)[-200:].replace("\n", " ").strip()
                 if tail:
-                    set_live(last=tail)
+                    set_live(key, last=tail)
             elif what == "call":
                 # The tool runs now, not the model, so a hung MCP call gets
                 # the ordinary stall window rather than the model's.
                 thinking[0] = False
                 calls.append(text)
-                set_live(last=plain_phrase(text))
+                set_live(key, last=plain_phrase(text))
                 if fh is not None:
                     fh.write(f"  [{mmss(time.time() - began)}] {text}\n")
                     fh.flush()
@@ -489,10 +521,10 @@ def run_stream(cmd: list[str], payload: str, timeout: int, fh=None, key: str = "
     """One agent run, reported as it goes."""
     runner = kind or agent.KINDS[0]
     began = time.time()
-    set_live(start=True)
+    set_live(key, start=True)
     # The CLI takes some seconds to come up before it says anything, and a blank
     # progress line in that gap reads as a hang.
-    set_live(last="Starting the agent")
+    set_live(key, last="Starting the agent")
     # The prompt goes in on stdin rather than as an argument. A refresh prompt is
     # 30KB and a prep prompt 25KB, which is a large fraction of the shell's
     # argument limit and pointless to spend when the CLI reads stdin.
@@ -523,7 +555,7 @@ def run_stream(cmd: list[str], payload: str, timeout: int, fh=None, key: str = "
     thinking = [False]  # a model request is in flight; read_events keeps it
     reader = threading.Thread(
         target=read_events,
-        args=(proc.stdout, said, noise, calls, began, beat, fh, runner, thinking),
+        args=(proc.stdout, said, noise, calls, began, beat, fh, runner, thinking, key),
         daemon=True,
     )
     reader.start()
@@ -808,15 +840,7 @@ JOBS = {
 }
 
 ASK_TIMEOUT_SECS = 420
-# How long an ask will wait for a running sweep or prep to finish before it gives
-# up. A refresh runs up to 15 minutes and a prep up to 20, but blocking the queue
-# that long helps no one; wait a few minutes, then fail with the question kept so
-# Send retries it.
-LOCK_WAIT_SECS = 300
-# How long a sweep waits for in-flight questions to finish before it gives up and
-# asks him to retry. A question answers in well under this; blocking a refresh
-# forever behind one that hung helps no one.
-SWEEP_WAIT_SECS = 180
+
 
 def ask_model() -> str:
     """Which model answers a question from a card.
@@ -896,6 +920,116 @@ def forget_ask(ident: str) -> int:
             encoding="utf-8",
         )
         return len(rows) - len(left)
+
+
+prefs_lock = threading.Lock()
+PREF_KEY = re.compile(r"(desk|fold)-[\w@.:-]{1,80}")
+
+
+def save_prefs(changes: dict) -> int:
+    """Fold a batch of pref changes into state/prefs.json. None deletes one."""
+    with prefs_lock:
+        now_set = render.prefs()
+        n = 0
+        for k, v in changes.items():
+            if not PREF_KEY.fullmatch(str(k)):
+                continue
+            if v is None:
+                now_set.pop(k, None)
+            else:
+                now_set[str(k)] = str(v)[:200]
+            n += 1
+        # A fold is remembered by name, and names come and go with the board, so
+        # the oldest go first once there are more than anyone could have opened.
+        folds = [k for k in now_set if k.startswith("fold-")]
+        for k in folds[:-400]:
+            now_set.pop(k, None)
+        tmp = render.PREFS.with_name("prefs.json.tmp")
+        tmp.write_text(json.dumps(now_set, ensure_ascii=False, indent=1) + "\n",
+                       encoding="utf-8")
+        os.replace(tmp, render.PREFS)
+        return n
+
+
+# What the checkbox on a job may do. The same moves tick.py already has, and
+# nothing that takes free text other than a note and a name.
+TICKS = {
+    "done": lambda n, who, note: [n] + (["-n", note] if note else []),
+    "sent": lambda n, who, note: [n, "--sent"] + (["-n", note] if note else []),
+    "dropped": lambda n, who, note: [n, "--dropped"] + (["-n", note] if note else []),
+    "waiting": lambda n, who, note: [n, "-w", who] + (["-n", note] if note else []),
+    "mine": lambda n, who, note: [n, "--mine"],
+    "undo": lambda n, who, note: [n, "--undo"],
+}
+
+
+def tick_from_page(body: dict) -> tuple[int, dict]:
+    """The checkbox: move one job by pressing it, the way ./tick.py does.
+
+    He presses it himself, on the job he means, so this is him saying it is
+    done rather than an agent inferring it. Undo puts back exactly what was
+    there before, from the copy keep.py took, rather than guessing.
+    """
+    n = str(body.get("n", "")).strip()
+    verb = str(body.get("verb", "done"))
+    who = str(body.get("who", "")).strip()[:80]
+    note = str(body.get("note", "")).strip()[:300]
+    if not n.isdigit() or verb not in TICKS:
+        return 400, {"error": "say which job and what happened to it"}
+    if verb == "waiting" and not who:
+        return 400, {"error": "say who it is with"}
+    _, item = board.by_id(board.load(), n)
+    if item is None:
+        return 404, {"error": f"there is no job {n}"}
+    if verb == "undo" and body.get("before"):
+        return undo_tick(n, body["before"])
+    before = {k: item.get(k) for k in TICK_FIELDS if k in item}
+    done = subprocess.run(
+        [sys.executable, str(ROOT / "tick.py"), *TICKS[verb](n, who, note)],
+        cwd=ROOT, capture_output=True, text=True, timeout=60,
+    )
+    if done.returncode:
+        return 500, {"error": (done.stderr or done.stdout).strip()[-300:] or "tick.py failed"}
+    said = {
+        "done": f"{n} done", "sent": f"{n} sent", "dropped": f"{n} dropped",
+        "waiting": f"{n} is with {who}", "mine": f"{n} is yours again",
+        "undo": f"{n} is back with you",
+    }[verb]
+    return 200, {"said": said, "before": before}
+
+
+# The fields a tick moves, so Undo can put exactly these back.
+TICK_FIELDS = ("state", "state_at", "state_note", "waits_on", "hold", "closed_at",
+               "sent_by_you")
+
+
+def undo_tick(n: str, before: dict) -> tuple[int, dict]:
+    """Put a job back the way it was a moment ago, and say so in its history."""
+    if not isinstance(before, dict):
+        return 400, {"error": "nothing to put back"}
+    b = board.load()
+    _, item = board.by_id(b, n)
+    if item is None:
+        return 404, {"error": f"there is no job {n}"}
+    for k in TICK_FIELDS:
+        if k in before and before[k] is not None:
+            item[k] = before[k]
+        else:
+            item.pop(k, None)
+    if item.get("state") not in board.OPEN_STATES + board.CLOSED_STATES:
+        item["state"] = "todo"
+    item.setdefault("history", []).append(
+        {"at": board.now(), "state": item.get("state", "todo"), "note": "undone from the page"}
+    )
+    keep.keep("undo")
+    try:
+        board.save(b)
+    except ValueError as exc:
+        return 409, {"error": str(exc)[:300]}
+    # desk.md too, which a chat reads; the page itself redraws on its own.
+    subprocess.run([sys.executable, str(ROOT / "tick.py"), "--rebuild"], cwd=ROOT,
+                   capture_output=True, timeout=60)
+    return 200, {"said": f"{n} put back"}
 
 
 def act_on(body: dict) -> tuple[int, dict]:
@@ -1232,64 +1366,31 @@ def run_ask(ask_id: str, ref: str, question: str, parent: str = "") -> None:
     if not prompt.exists():
         row.update(state="failed", answer="prompt-ask.md is missing.")
         save_ask(row)
-        set_job("failed", "prompt-ask.md is missing")
+        ask_job("failed", "prompt-ask.md is missing")
         return
     left, message = blockers()
     if left:
         row.update(state="failed", answer=message)
         save_ask(row)
-        set_job("needs_login", f"{message} Press Log in and approve each one.")
+        ask_job("needs_login", f"{message} Press Log in and approve each one.")
         return
-    # A refresh or prep writing the board must not be read out from under it: an
-    # answer is a read-modify-write of the whole file. But the answer to "something
-    # is running" is to wait for it, not to make him ask again -- the queue already
-    # runs one at a time, and the card already says "it starts on its own". So hold
-    # here until the sweep clears, then go, checking Cancel each time round. Only
-    # give up if it runs so long that something is likely wrong, and then the card
-    # keeps its question so Send retries it in one click.
-    # Wait out a running sweep, then claim a slot. Questions run alongside each
-    # other; only a sweep (refresh/prep) is exclusive, so we wait on the sweep
-    # lock, not on the other questions. Claim a slot, then re-check the lock: if a
-    # sweep grabbed the board in the gap, drop the slot and wait again. Give up
-    # only if a sweep runs so long that something is likely wrong, keeping the
-    # question so Send retries it in one click.
-    waited = 0
-    while True:
-        while lock_held():
-            with cancel_lock:
-                if ask_id in cancelled:
-                    row.update(state="cancelled", answer="You called this one off.")
-                    save_ask(row)
-                    set_job("idle", "Cancelled")
-                    return
-            if waited >= LOCK_WAIT_SECS:
-                row.update(
-                    state="failed",
-                    answer="A sweep or prep has been running for a while, so your question "
-                           "could not start yet. Press Send to try it again.",
-                )
-                save_ask(row)
-                set_job("failed", "a sweep was still running; the question did not start")
-                return
-            set_job("running", "Waiting for the current sweep to finish, then your question runs")
-            time.sleep(3)
-            waited += 3
-        with cancel_lock:
-            asks_running += 1
-        if lock_held():                      # a sweep claimed the board in the gap
-            with cancel_lock:
-                asks_running -= 1
-            continue
-        break
+    # No waiting on a sweep: board.save() merges, so this answer and a refresh
+    # running beside it both land. See ASK_WORKERS.
+    with cancel_lock:
+        if ask_id in cancelled:
+            row.update(state="cancelled", answer="You called this one off.")
+            save_ask(row)
+            return
+        asks_running += 1
 
     which = ref.replace("item:", "job ").replace("ticket:", "")
-    set_job("running", f"Thinking about {which}")
+    ask_job("running", f"Thinking about {which}")
     model = ask_model()
     kind = agent.pick()
     if kind is None:
         row.update(state="failed", answer="No agent is installed to answer with.")
         save_ask(row)
-        set_job("failed", "no agent is installed")
+        ask_job("failed", "no agent is installed")
         with cancel_lock:
             asks_running -= 1
         return
@@ -1309,7 +1410,7 @@ def run_ask(ask_id: str, ref: str, question: str, parent: str = "") -> None:
             if called_off or not waits or not connection_lost(ran):
                 break
             wait = waits.pop(0)
-            set_job("running", f"The connection to the model dropped. Trying {which} "
+            ask_job("running", f"The connection to the model dropped. Trying {which} "
                                f"again in {wait}s")
             for _ in range(wait):
                 with cancel_lock:
@@ -1321,7 +1422,7 @@ def run_ask(ask_id: str, ref: str, question: str, parent: str = "") -> None:
             # and must not be reported to him as one.
             row.update(state="cancelled", answer="You called this one off.")
             save_ask(row)
-            set_job("idle", "Cancelled")
+            ask_job("idle", "Cancelled")
             return
         if ran.code is None:
             if ran.stalled:
@@ -1332,7 +1433,7 @@ def run_ask(ask_id: str, ref: str, question: str, parent: str = "") -> None:
                 msg = "The question ran past seven minutes and was stopped."
             row.update(state="failed", answer=msg)
             save_ask(row)
-            set_job("failed", msg)
+            ask_job("failed", msg)
             return
         answer, took = ran.text, ran.took
         # Logged with the model, the wait and the number of steps, so "this is
@@ -1345,7 +1446,7 @@ def run_ask(ask_id: str, ref: str, question: str, parent: str = "") -> None:
         if connection_lost(ran):
             row.update(state="failed", answer=CONNECTION_NOTE)
             save_ask(row)
-            set_job("failed", "could not reach the model; check Zscaler, then press Send")
+            ask_job("failed", "could not reach the model; check Zscaler, then press Send")
             return
         if ran.code != 0 or not answer:
             row.update(
@@ -1353,26 +1454,22 @@ def run_ask(ask_id: str, ref: str, question: str, parent: str = "") -> None:
                 answer=answer or f"The agent exited {ran.code} without answering.",
             )
             save_ask(row)
-            set_job("failed", f"the question came back empty. See {log.name}")
+            ask_job("failed", f"the question came back empty. See {log.name}")
             return
         row.update(state="answered", answer=answer, took_secs=took, model=model)
         save_ask(row)
-        set_job("done", f"Answered in {took}s")
+        ask_job("done", f"Answered in {took}s")
     except (OSError, ValueError) as exc:
         # ValueError covers a JSONDecodeError from reading the board mid-write:
         # without it the exception escapes the thread and the card spins on
         # "running" for good.
         row.update(state="failed", answer=f"Could not run the question: {exc}")
         save_ask(row)
-        set_job("failed", f"could not run the question: {exc}")
+        ask_job("failed", f"could not run the question: {exc}")
     finally:
         with cancel_lock:
             asks_running -= 1
-            still_asking = asks_running
-        # Only blank the live line when nothing else of ours is still running,
-        # or one question finishing would wipe the progress of another.
-        if not still_asking:
-            clear_live()
+        clear_live(ask_id)
 
 
 def agent_model(kind: str) -> str:
@@ -1416,23 +1513,6 @@ def run_agent(kind: str) -> None:
     model = agent_model(kind)
     cmd = runner.command(model, effort=agent.effort_for(kind), job=kind)
     LOCK.write_text(f"{os.getpid()} desk-server {kind} {datetime.now():%H:%M}\n")
-
-    # The board is ours alone for a sweep. The lock is set now, so new questions
-    # wait on it; give any question already mid-run a moment to finish before we
-    # start reading and writing the whole file under it.
-    waited = 0
-    while True:
-        with cancel_lock:
-            busy = asks_running
-        if not busy:
-            break
-        if waited >= SWEEP_WAIT_SECS:
-            LOCK.unlink(missing_ok=True)
-            set_job("failed", "questions are still running against the board; let them finish, then press Refresh.")
-            return
-        set_job("running", "Waiting for open questions to finish, then starting")
-        time.sleep(3)
-        waited += 3
 
     timeout = PREP_TIMEOUT_SECS if kind == "prep" else TIMEOUT_SECS
     waits = list(RECONNECT_WAITS)
@@ -1498,7 +1578,7 @@ def run_agent(kind: str) -> None:
             set_job("failed", failure_note(kind, ran, log.name))
             return
     finally:
-        clear_live()
+        clear_live("sweep")
         LOCK.unlink(missing_ok=True)
 
 
@@ -1637,11 +1717,13 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/status":
             with job_lock:
                 state = dict(job)
-            with live_lock:
-                if live["since"]:
-                    state["seconds"] = int(time.time() - live["since"])
-                    state["last"] = live["last"]
-                    state["written"] = live["chars"]
+            runs = live_view()
+            sweep = runs.pop("sweep", None)
+            if sweep and state.get("kind") == "sweep":
+                state.update(sweep)
+            # Each question's own progress, so two cards thinking at once each
+            # say what they are doing rather than sharing one line.
+            state["live"] = runs
             state["asks"] = pending_asks()
             with health_lock:
                 if health["state"] != "cold":
@@ -1708,9 +1790,13 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path in ("/api/refresh", "/api/prep"):
             with job_lock:
-                if job["state"] == "running":
+                if job["state"] == "running" and job.get("kind") == "sweep":
                     self.json_out(409, dict(job))
                     return
+            if lock_held():
+                self.json_out(409, {"state": "running",
+                                    "message": "a refresh or prep is already running"})
+                return
             kind = path.rsplit("/", 1)[1]
             set_job("running", "Starting")
             threading.Thread(
@@ -1751,7 +1837,7 @@ class Handler(BaseHTTPRequestHandler):
             ahead = ask_queue.qsize()
             ask_queue.put((ask_id, ref, question, parent))
             if not ahead:
-                set_job("running", "Starting")
+                ask_job("running", "Starting")
             self.json_out(202, {"state": "queued", "id": ask_id, "ahead": ahead})
             return
         if path == "/api/cancel":
@@ -1766,6 +1852,28 @@ class Handler(BaseHTTPRequestHandler):
                 self.json_out(400, {"error": "no question named"})
                 return
             self.json_out(200, {"state": "cancelled", "how": cancel_ask(ask_id)})
+            return
+        if path == "/api/prefs":
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+                body = json.loads(self.rfile.read(length) or b"{}")
+            except (ValueError, OSError):
+                self.json_out(400, {"error": "unreadable"})
+                return
+            if not isinstance(body, dict):
+                self.json_out(400, {"error": "prefs are a map"})
+                return
+            self.json_out(200, {"saved": save_prefs(body)})
+            return
+        if path == "/api/tick":
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+                body = json.loads(self.rfile.read(length) or b"{}")
+            except (ValueError, OSError):
+                self.json_out(400, {"error": "unreadable"})
+                return
+            code, reply = tick_from_page(body)
+            self.json_out(code, reply)
             return
         if path == "/api/act":
             try:

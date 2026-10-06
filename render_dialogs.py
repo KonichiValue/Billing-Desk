@@ -137,6 +137,17 @@ def help_dialog() -> str:
     <p><kbd>1</kbd> your work, <kbd>2</kbd> what you say, <kbd>/</kbd> find
     anything, <kbd>s</kbd> Japanese only, <kbd>,</kbd> settings,
     <kbd>?</kbd> this.</p>
+    <p>On the To do list: <kbd>j</kbd> <kbd>k</kbd> move down and up,
+    <kbd>x</kbd> completes the job you are on, <kbd>enter</kbd> opens its card,
+    <kbd>u</kbd> undoes the last one.</p>
+
+    <h3>The circle</h3>
+    <p>Every job starts with one. Press it and the job is done, the same as
+    <code>./tick.py</code> in a terminal, with an Undo for six seconds. A job
+    with a draft asks whether you sent it and who you are waiting on, because
+    sending is not finishing. A finished job's circle reopens it. The ring
+    says who holds it: red is yours today, orange yours this week, blue with
+    someone else, grey held or queued.</p>
   </div>
 </dialog>"""
 

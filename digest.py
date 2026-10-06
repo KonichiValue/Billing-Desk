@@ -297,7 +297,11 @@ Item STATE is ./tick.py (never hand-edit it):
 
 For the rest -- a draft to rewrite, a new item, a news row -- load once, mutate, save once.
 board.save refuses a shape no renderer can survive, so a clean return is the confirmation;
-do not read the file back:
+do not read the file back. board.save also locks and MERGES with whatever an ask wrote
+while you worked, so it is the ONLY way to write: never Edit/sed/str-replace board.json,
+never json.dump it, never delete an item (close it: ./tick.py <n> --dropped -n "why").
+Findings or notes you cut from "prepared" are archived to prepared.earlier for you;
+do not paste them back and do not write "earlier" yourself:
 
   import board
   b = board.load()

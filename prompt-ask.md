@@ -91,6 +91,13 @@ step, add a condition, fix something you got wrong. Make it, in
 line what you changed, so the answer on the card explains the card he is looking
 at.
 
+You may be running while a sweep or another question is writing the board.
+That is fine as long as you write through `board.save()` or `./tick.py`: the save
+locks the file and merges your change with theirs. Never edit
+`state/board.json` with an edit tool or a string replace, never `json.dump` it,
+and never delete an item; close it as dropped. Text you cut from a prepared
+block is kept for you in `prepared.earlier`, so do not paste it back.
+
 **Make it in one step, because he is watching a spinner while you work.** The
 board is over 250KB of JSON and the item you want is somewhere in the middle of
 it, so find it by its number and never by its line number:
@@ -230,7 +237,10 @@ Keep that text under 90 characters.
    anything addressed to Tokyo Gas. Write エンジニア, not CE.
 4. **Write for what the reader can see.** Kraken engineers do not attend the TG
    standup and cannot open TG's Asana. Never cite a TG ticket or "the standup" to
-   them as if they could look it up.
+   them as if they could look it up. And when AI read the code behind a point,
+   ask it rather than propose it: no function, list or file names in the
+   message, the code reading goes in `prepared`. `.claude/skills/ask-dont-propose/SKILL.md`
+   has the rules and an example.
 5. **Japanese to TG follows the house style.** ですます, complete sentences of
    roughly 25 to 50 characters, the team's own vocabulary, furigana as
    `{漢字|かんじ}` on the whole word.

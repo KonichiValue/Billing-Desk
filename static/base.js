@@ -1,5 +1,39 @@
 
 (function(){
+  // His preferences: the theme, the folds, which view opens. The server's copy
+  // (state/prefs.json, drawn into the page) is the truth, because localStorage
+  // belongs to one origin in one browser profile and the page is opened from
+  // more than one. localStorage stays as the copy a page opened from disk uses.
+  var P=window.deskPrefs||{};
+  var KEY='__DESK_KEY__';
+  var sendTimer=null,unsent={};
+  function getPref(k){
+    if(Object.prototype.hasOwnProperty.call(P,k))return P[k];
+    try{return localStorage.getItem(k)}catch(e){return null}
+  }
+  function setPref(k,v){
+    if(v==null)delete P[k];else P[k]=v;
+    try{if(v==null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(e){}
+    unsent[k]=v==null?null:v;
+    if(location.protocol!=='http:')return;
+    // Batched, so shutting four folds in a row is one write, not four.
+    clearTimeout(sendTimer);
+    sendTimer=setTimeout(function(){
+      var body=JSON.stringify(unsent);unsent={};
+      fetch('/api/prefs?k='+encodeURIComponent(KEY),{method:'POST',headers:{'Content-Type':'application/json'},body:body})
+        .catch(function(){});
+    },400);
+  }
+  window.deskPref={get:getPref,set:setPref};
+  // A browser that remembered things before the server did hands them over
+  // once, so the first load after this change keeps his theme and his folds.
+  try{
+    for(var li=0;li<localStorage.length;li++){
+      var lk=localStorage.key(li);
+      if(lk&&(lk.indexOf('desk-')===0||lk.indexOf('fold-')===0)&&lk!=='desk-place'
+         &&!Object.prototype.hasOwnProperty.call(P,lk))setPref(lk,localStorage.getItem(lk));
+    }
+  }catch(e){}
   var el=document.getElementById('countdown');
   var target=new Date(document.body.dataset.meeting);
   var what=(document.body.dataset.meetingLabel||'standup').toLowerCase();
@@ -123,14 +157,21 @@
 
   // A fold he shut stays shut. Reopening the page every hour and closing the
   // same three sections again is how a page stops being used.
+  //
+  // A fold that is drawn shut is the other way round: he opened it to look at
+  // one thing, and remembering that forever is how The detail and the finished
+  // work came back open on every page. So an open one is remembered against the
+  // board it was opened on. A reload for an answer or a restart keeps it open;
+  // a board that moved draws it shut again.
+  var board=document.body.dataset.board||'';
   [].forEach.call(document.querySelectorAll('details[data-remember]'),function(d){
     var key='fold-'+d.dataset.remember;
-    try{
-      var was=localStorage.getItem(key);
-      if(was!==null)d.open=was==='1';
-    }catch(e){}
+    var shut=!d.open;
+    var was=getPref(key);
+    if(was==='0')d.open=false;
+    else if(shut&&board&&was==='1@'+board)d.open=true;
     d.addEventListener('toggle',function(){
-      try{localStorage.setItem(key,d.open?'1':'0')}catch(e){}
+      setPref(key,!d.open?'0':shut?'1@'+board:'1');
     });
   });
 
@@ -309,9 +350,8 @@
     if(x)x.addEventListener('click',function(){help.close()});
   }
 
-  // Settings: the theme and whether anything moves. Both are this browser's
-  // business only, so both live in localStorage and neither goes near the
-  // board. The theme is already on the body by now (set by the inline script in
+  // Settings: the theme and whether anything moves. Both are kept with the
+  // prefs (see getPref at the top) and neither goes near the board. The theme is already on the body by now (set by the inline script in
   // the head, so the page never paints one theme and then another); this only
   // has to keep the buttons in step and write the choice down.
   var settings=document.getElementById('settings');
@@ -328,9 +368,7 @@
     var themeBtns=[].slice.call(settings.querySelectorAll('[data-theme-set]'));
     var motionBtns=[].slice.call(settings.querySelectorAll('[data-motion-set]'));
     var openBtns=[].slice.call(settings.querySelectorAll('[data-open-set]'));
-    function stored(key,fallback){
-      try{return localStorage.getItem(key)||fallback}catch(e){return fallback}
-    }
+    function stored(key,fallback){return getPref(key)||fallback}
     function mark(){
       var now=document.body.dataset.theme||'plain';
       var moving=document.body.dataset.motion!=='off';
@@ -347,7 +385,7 @@
     }
     openBtns.forEach(function(b){
       b.addEventListener('click',function(){
-        try{localStorage.setItem('desk-open',b.dataset.openSet)}catch(e){}
+        setPref('desk-open',b.dataset.openSet);
         mark();
       });
     });
@@ -359,13 +397,12 @@
     var forgetSaid=settings.querySelector('[data-forget-said]');
     if(forget)forget.addEventListener('click',function(){
       try{
-        var drop=[];
-        for(var i=0;i<localStorage.length;i++){
-          var k=localStorage.key(i);
-          if(k&&k.indexOf('desk-')===0&&k!=='desk-theme'&&k!=='desk-motion'
-             &&k!=='desk-open')drop.push(k);
-        }
-        drop.forEach(function(k){localStorage.removeItem(k)});
+        var keep={'desk-theme':1,'desk-motion':1,'desk-open':1};
+        var drop=Object.keys(P);
+        for(var i=0;i<localStorage.length;i++)drop.push(localStorage.key(i));
+        drop.forEach(function(k){
+          if(k&&!keep[k]&&(k.indexOf('desk-')===0||k.indexOf('fold-')===0))setPref(k,null);
+        });
         sessionStorage.removeItem('desk-view');
         if(forgetSaid)forgetSaid.textContent='Forgotten. Reload to see it.';
       }catch(e){
@@ -375,7 +412,7 @@
     themeBtns.forEach(function(b){
       b.addEventListener('click',function(){
         document.body.dataset.theme=b.dataset.themeSet;
-        try{localStorage.setItem('desk-theme',b.dataset.themeSet)}catch(e){}
+        setPref('desk-theme',b.dataset.themeSet);
         mark();
       });
     });
@@ -384,7 +421,7 @@
         var off=b.dataset.motionSet==='off';
         if(off)document.body.dataset.motion='off';
         else delete document.body.dataset.motion;
-        try{localStorage.setItem('desk-motion',off?'off':'on')}catch(e){}
+        setPref('desk-motion',off?'off':'on');
         mark();
       });
     });
@@ -432,7 +469,7 @@
     // because coming back to this page inside one session should not move him.
     var start=document.body.dataset.view;
     try{
-      var pref=localStorage.getItem('desk-open');
+      var pref=getPref('desk-open');
       if(pref==='desk'||pref==='standup')start=pref;
       var saved=sessionStorage.getItem('desk-view');
       if(saved)start=saved;
