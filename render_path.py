@@ -25,7 +25,7 @@ from render import (
     apply_glossary,
     ask_block,
     blocked_on,
-    check_box,
+    status_button,
     code,
     due_words,
     esc,
@@ -432,7 +432,7 @@ def render_items(
             <p class="hold"><b>Do not send this yet</b>{esc(hold.get("why"))}
             <span class="hold-until">Wait for: {esc(hold.get("until"))}.</span>
             {f'<span class="hold-until"> Chase on {esc(revisit)}.</span>' if revisit else ""}</p>"""
-        state_pill = pill(st["label"], st["tone"])
+        state_pill = status_button(r, st)
         if r.get("at_standup") and not done:
             state_pill += pill(raise_label, "amber")
         due, due_kind = when_tag(r, st, sess)
@@ -456,7 +456,7 @@ def render_items(
             ) + status_block
             # A red "With you" on something he cannot start is the whole problem
             # this field exists to fix, and a due date on it is a second lie.
-            state_pill = pill(f"After {behind}", "grey") + (
+            state_pill = status_button(r, st, f"After {behind}", "grey") + (
                 pill(raise_label, "amber") if r.get("at_standup") else ""
             )
             when_chip = ""
@@ -464,7 +464,6 @@ def render_items(
             f"""
         <{tag} class="act {st["state"]} {"held" if hold and not done else ""} {"commit" if committed else ""}" data-job="{esc(r.get("id", ""))}"{attrs}>
           <{head_tag} class="act-head">
-            {check_box(r, st, due_kind, bool(behind))}
             <span class="act-rank">{esc(r.get("id", "-"))}</span>
             <span class="act-title">{esc(r.get("title"))}
               {f'<span class="act-sub">{sub}</span>' if sub and not active else ""}</span>
@@ -576,6 +575,7 @@ def render_path(
     sess: dict | None,
     standup_href: str,
     index: dict[str, dict] | None,
+    fold: bool = False,
 ) -> str:
     """The path to closing this ticket: every gate, with his work hanging on it.
 
@@ -677,6 +677,10 @@ def render_path(
         role="now",
         count=count,
         hint=hint,
+        # Nothing on him: the count and the next gate are the fact, the rows
+        # behind them are a click away. Open, this was a 1,000px card each.
+        fold=fold,
+        remember=f"path-{ident}" if fold else "",
     )
 
 

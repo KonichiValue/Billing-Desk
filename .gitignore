@@ -12,3 +12,6 @@ docs/*.pdf
 .DS_Store
 __pycache__/
 *.pyc
+
+# A sweep writes its findings here and ./apply.py reads them
+tmp/

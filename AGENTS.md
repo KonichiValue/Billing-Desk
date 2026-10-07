@@ -124,8 +124,11 @@ closed and numbers never change.
 `./tick.py` on its own prints the same status without spending a single token,
 so use that when he only wants to know where he is. `./digest.py` prints the
 whole readable board in one call, which is how a sweep should read it rather than
-opening `state/board.json` a dozen times. `./tick.py --rebuild` redraws both
-pages without moving anything.
+opening `state/board.json` a dozen times. It holds itself under 27k characters
+so it stays inline, and `--item N` / `--ticket REF` print one record whole. A
+sweep writes everything it found as one `tmp/patch.json` and applies it with
+`./apply.py`, which goes through `board.save()`; the runner rebuilds afterwards.
+`./tick.py --rebuild` redraws both pages without moving anything.
 
 **Learning something in a chat is not a reason to leave the board stale.**
 Whenever work in a chat turns up something that belongs on the page, a ticket
@@ -268,7 +271,7 @@ drawn from, add it to `SOURCES` or the page will not notice it changing.
 It holds the reload back for one thing only: something half-written in a
 composer, where taking the words away would be worse than the staleness. Then it
 shows the amber Board changed button and waits, and for an Undo still on
-screen after a circle was pressed. `tests/reload.js` is what keeps that true,
+screen after a status was moved. `tests/reload.js` is what keeps that true,
 and `./check.py` runs it.
 
 ## Many writers, one board
@@ -295,16 +298,17 @@ Two more things `save()` holds for every model, whichever one is running:
 Only sweeps exclude each other (`state/refresh.lock`). Asks run alongside a
 sweep, four at a time, each with its own live progress line.
 
-## The circle, and what the page remembers
+## The status, and what the page remembers
 
-Every job on the page starts with a round checkbox, Todoist's idea: the ring is
-the priority (red his today, orange his this week, blue with someone else, grey
-held or queued), and pressing it posts `/api/tick`, which runs `./tick.py` like
-the terminal does. That is Rei saying the job moved, so it is allowed; an agent
-inferring it is still not. A job with a draft or a reply expected opens a small
-menu (sent and waiting on who, done, dropped), because sending is not finishing.
-Undo puts back exactly the fields the tick moved. `j` `k` `x` `u` and Enter work
-the To do list from the keyboard.
+Every job's status on the page is a button, Jira's idea rather than Todoist's:
+a checkbox can only say done, and half of these jobs end in "sent, now waiting
+on somebody". Pressing it lists the moves open from where the job stands (with
+you: sent and waiting on who, done, with someone else, dropped; waiting: they
+replied, done, handed on, dropped; held: start it now; closed: open it again),
+and each one posts `/api/tick`, which runs `./tick.py` like the terminal does.
+That is Rei saying the job moved, so it is allowed; an agent inferring it is
+still not. Undo puts back exactly the fields the tick moved. `j` `k` `x` `u` and
+Enter work the To do list from the keyboard, `x` opening the status.
 
 Theme, motion and which folds are open live in `state/prefs.json`, written by
 `/api/prefs` and embedded in the page, so the desk looks the same in every

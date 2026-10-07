@@ -18,6 +18,8 @@ import sys
 from datetime import date, datetime
 from pathlib import Path
 
+import render_milestone
+
 from render import item_state as state_of
 from render import proposed
 from render import (
@@ -185,6 +187,9 @@ def closes_lines(rows: list[dict]) -> list[str]:
     return block(f"What is left before this closes ({done} of {len(rows)} done)", lines)
 
 
+TIMELINE = 8
+
+
 def render_ticket(t: dict, index: dict[str, dict] | None = None) -> list[str]:
     index = index if index is not None else {
         str(i.get("id")): i for i in t.get("items", [])
@@ -228,7 +233,17 @@ def render_ticket(t: dict, index: dict[str, dict] | None = None) -> list[str]:
     out += block("Words and shorthand on this ticket", terms)
 
     changed = []
-    for c in sorted(t.get("events", []), key=lambda x: (x.get("on", ""), x.get("at", ""))):
+    # The newest moves only. The whole history is 48 moves on one ticket, and a
+    # chat reading this file wants where it is, not how it got here.
+    events = sorted(t.get("events", []), key=lambda x: (x.get("on", ""), x.get("at", "")))
+    if len(events) > TIMELINE:
+        changed.append(
+            f"_{len(events) - TIMELINE} earlier moves are on the board: "
+            "`./digest.py --everything`._"
+        )
+        changed.append("")
+        events = events[-TIMELINE:]
+    for c in events:
         when = f"{c.get('on', '')} {c.get('at', '')}".strip()
         changed.append(f"- **{when} {c.get('who', '')}** {c.get('what', '')}")
         if c.get("so_what"):
@@ -248,6 +263,12 @@ def render_ticket(t: dict, index: dict[str, dict] | None = None) -> list[str]:
         active = st["state"] in {"todo", "hold"} and not behind
         label = f"AFTER {behind}" if behind else st["label"].upper()
         head = f"{a.get('id', '-')}. {a.get('title', '')} [{label}{mins}]"
+        if st["closed"]:
+            # Finished is finished: the number and how it ended, nothing more.
+            # Printed whole these were most of a 600KB file. --item N has the rest.
+            note = f" {st['note']}" if st.get("note") else ""
+            actions.append(f"- {head} {st.get('at', '')}.{note}")
+            continue
         if active:
             actions += [f"#### {head}", ""]
         else:
@@ -260,9 +281,7 @@ def render_ticket(t: dict, index: dict[str, dict] | None = None) -> list[str]:
                 f"\u201c{lead.get('title', 'that one')}\u201d closes.",
                 "",
             ]
-        if st["closed"]:
-            actions += [f"> {st['label']} {st.get('at', '')}.{note}", ""]
-        elif st["state"] == "waiting":
+        if st["state"] == "waiting":
             waits = a.get("waits_on") or {}
             owed = f" They owe: {waits['what']}." if waits.get("what") else ""
             chase = f" {due_words(waits['chase_on'])}" if waits.get("chase_on") else ""
@@ -317,9 +336,8 @@ def render_ticket(t: dict, index: dict[str, dict] | None = None) -> list[str]:
                 actions.append("")
             earlier = [e for e in prep.get("earlier") or [] if isinstance(e, dict)]
             if earlier:
-                actions += ["**Earlier detail** (taken out by a later rewrite, kept by board.save)", ""]
-                actions += [f"- {e.get('at', '')[:16]}: {e.get('text', '')}" for e in earlier]
-                actions.append("")
+                actions += [f"_{len(earlier)} earlier details, taken out by later rewrites: "
+                            "under Earlier detail on the card._", ""]
             files = [f for f in prep.get("files", []) if f.get("path") or f.get("url")]
             if files:
                 actions += [
@@ -609,6 +627,8 @@ def render(data: dict) -> str:
             "",
         ]
         for ref, a, st in rows:
+            if st["closed"]:
+                continue
             bits = []
             if st["state"] == "waiting":
                 who, since = st.get("who", "them"), st.get("at", "")
@@ -649,14 +669,26 @@ def render(data: dict) -> str:
                 )
             out.append("")
 
+    milestones = render_milestone.markdown(data)
+    if milestones:
+        out += milestones.splitlines() + [""]
+
     asked = render_asks("board")
     if asked:
         out += ["## Asked about the desk", "",
                 "Questions about the day rather than one job, and what came back.",
                 ""] + asked + [""]
 
+    done = [t for t in tickets if (t.get("asana") or {}).get("completed") or t.get("closed")]
     for t in tickets:
-        out += render_ticket(t, index)
+        if t not in done:
+            out += render_ticket(t, index)
+    if done:
+        out += ["## Closed on both sides", "",
+                "Finished in Asana. `./digest.py --everything` has the record.", ""]
+        out += [f"- {t.get('ref', '')}: {t.get('title_en', '')} {link('Asana', t.get('asana_url', ''))}"
+                for t in done]
+        out.append("")
 
     news = data.get("news") or data.get("watch") or []
     if news:
@@ -671,9 +703,12 @@ def render(data: dict) -> str:
             out.append(f"{line} {link('source', w.get('source_url', ''))}")
         out.append("")
 
-    if data.get("gaps"):
+    gaps = data.get("gaps") or []
+    if gaps:
         out += ["## Open gaps", ""]
-        out += [f"- {g}" for g in data["gaps"]]
+        if len(gaps) > 5:
+            out += [f"_{len(gaps) - 5} older gaps are on the board._", ""]
+        out += [f"- {g}" for g in gaps[-5:]]
         out.append("")
 
     return "\n".join(out).rstrip() + "\n"

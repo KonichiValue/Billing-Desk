@@ -23,6 +23,7 @@ from pathlib import Path
 
 import render_standup
 import render_brief
+import render_milestone
 import render_dialogs
 import render_path
 import render_week
@@ -30,7 +31,7 @@ from render import (
     stamp,
     asset,
     prefs,
-    check_box,
+    status_button,
     urgency_of,
     sub_line,
     ASKED,
@@ -96,7 +97,6 @@ def track_row(
     classes = " ".join(c for c in ("tr", group, "tr-hot" if hot else "") if c)
     return f"""
       <li class="{classes}" data-job="{esc(item.get("id", ""))}">
-        {check_box(item, st, due_kind, bool(queued_behind))}
         <span class="tr-rank" title="Job {esc(item.get("id", "-"))}. It keeps this
         number until it closes, so &ldquo;done {esc(item.get("id", "-"))}&rdquo; in
         a chat is enough.">{esc(item.get("id", "-"))}</span>
@@ -104,7 +104,7 @@ def track_row(
         <a class="tr-title" href="#{esc(refs.get(ref, anchor(ref)))}">{esc(item.get("title"))}
           {f'<span class="tr-note">{sub}</span>' if sub else ""}</a>
         <span class="when {due_kind}">{esc(due)}</span>
-        {pill(st["label"], st["tone"])}
+        {status_button(item, st, tone="grey" if queued_behind and not st["closed"] else "")}
         <span class="tr-min">{f"{esc(mins)} min" if mins and not st["closed"] else ""}</span>
       </li>"""
 
@@ -230,8 +230,6 @@ def render_track(
     return f"""
   <div class="track" id="todo">
     <div class="track-head"><h2>To do</h2>
-    <span class="track-key">Press the circle to finish a job. <kbd>j</kbd>
-    <kbd>k</kbd> move, <kbd>x</kbd> completes, <kbd>u</kbd> undoes</span>
     <span>{esc(summary)}</span></div>
     {progress}
     <ul class="track-list" style="list-style:none;margin:0;padding:0">
@@ -699,7 +697,6 @@ def render_ticket(
       <header class="tk-head">
         <div class="tk-id">
           <span class="tag">{esc(t.get("ref"))}</span>
-          <span class="tk-kind">{"Work in hand" if t.get("no_ticket_yet") else "Asana ticket"}</span>
           {posture}
         </div>
         <h2>{esc(t.get("title_en"))}</h2>
@@ -734,19 +731,17 @@ def render_ticket(
           sess,
           render_standup.anchor(ident),
           index,
+          fold=not mine,
       )}
       {render_decisions(t.get("open_decisions", []))}
       {background_drawer(t, ident)}
-      {section("Ask or change on this ticket",
-               ask_block(
-                   f'ticket:{t.get("ref")}',
-                   t.get("ref", "this ticket"),
-                   ASKED.get(f'ticket:{t.get("ref")}', []),
-                   "Read prompt-ask.md, then answer this about the "
-                   f'{t.get("ref", "")} ticket:',
-               ),
-               role="ask",
-               hint="when it is not about one job")}
+      <section class="sub ask">{ask_block(
+          f'ticket:{t.get("ref")}',
+          t.get("ref", "this ticket"),
+          ASKED.get(f'ticket:{t.get("ref")}', []),
+          "Read prompt-ask.md, then answer this about the "
+          f'{t.get("ref", "")} ticket:',
+      )}</section>
     </article>"""
 
 
@@ -894,190 +889,17 @@ def opening_view(board: dict, has_script: bool) -> str:
     return "standup" if (now.hour, now.minute) < (hour, minute) else "desk"
 
 
-def timetable(rows: list[dict]) -> str:
-    """The running order of a day, when the session is a day rather than a slot.
-
-    A standup is a time. An onsite is a building at 09:45, two standups at 11:00
-    and the discussion he came for at 13:00, and getting that wrong is the one
-    mistake the page can save him from.
-    """
-    if not rows:
-        return ""
-    out = []
-    for r in rows:
-        if not r.get("what"):
-            continue
-        mine = ' class="mine"' if r.get("mine") else ""
-        out.append(f'<li{mine}><b>{esc(r.get("at"))}</b>{esc(r["what"])}</li>')
-    return f'<ul class="nk-plan">{"".join(out)}</ul>' if out else ""
-
-
-def news_rows(rows: list[dict]) -> str:
-    """What is moving around TG that is not one of his tickets.
-
-    A ticket page answers "what do I do". It does not answer "what has changed
-    around me", and that is the thing he walks into a room not knowing.
-    """
-    if not rows:
-        return ""
-    out = []
-    for r in rows:
-        when = r.get("on", "")
-        # The first sentence and the route are the row. The four sentences of
-        # detail behind them are why this block was a wall of grey: they are the
-        # answer to "and what exactly", which he asks about one row in five.
-        said = (r.get("what") or "").strip()
-        lead, rest = said, ""
-        cut = re.split(r"(?<=[.。])\s+", said, maxsplit=1)
-        if len(cut) == 2 and len(cut[0]) < len(said) - 20:
-            lead, rest = cut[0], cut[1]
-        out.append(
-            f"""
-      <li>
-        <span class="n-what"><b>{esc(r.get("topic"))}</b>
-          {f'&mdash; {esc(lead)}' if lead else ""}
-          {f'<span class="n-why">{esc(r.get("why"))}</span>' if r.get("why") else ""}
-          {f'''<details class="n-more"><summary>The rest of it<span class="fold-hint"></span></summary>
-          <span class="n-rest">{esc(rest)}</span></details>''' if rest else ""}
-        </span>
-        <span class="n-when">{esc(short_when(when) if when else "")}</span>
-        {link_btn(r.get("source_url", ""), "Source")}
-      </li>"""
-        )
-    return f"""
-    <div class="nk-news">
-      <h3>TG news <span class="q">not your tickets, but they move them</span></h3>
-      <ul>{"".join(out)}</ul>
-    </div>"""
-
-
-
-def need_to_know(
-    board: dict,
-    has_script: bool,
-    news: list[dict],
-    tickets: list[dict],
-    soon: dict,
-    refs: dict[str, str] | None = None,
-) -> str:
-    """Everything he has to know before he starts, in one block he can shut.
-
-    The first line is always what needs him, and it stays visible folded, so the
-    top of the page answers the only question he opens it with. Underneath, the
-    things he has to know but cannot act on: anything flagged as needing him
-    inside the hour, the next room, and what moved around him.
-    """
-    rows = sessions(board)
-    live = next((s for s in rows if not s.get("skipped")), {})
-    skipped = [s for s in rows if s.get("skipped")]
-    alert = board.get("alert") or {}
-    if isinstance(alert, str):
-        alert = {"what": alert}
-    alert_block = ""
-    if alert.get("what"):
-        alert_block = f"""
-      <p class="nk-alert"><b>Needs you now</b>{esc(alert["what"])}
-      {link_btn(alert.get("source_url", ""), "Source")}</p>"""
-
-    next_block = ""
-    if live:
-        covered = has_script and script_meta(board).get("for_date") == live.get("date")
-        # A sweep moves the work and deliberately leaves the words alone, so the
-        # script can be right about the room and behind on the facts. The
-        # speaking view says so at the top; this is the same fact on the work
-        # view, where he is standing when he decides whether to rewrite it.
-        behind = covered and script_meta(board).get("built_at", "") < board.get(
-            "checked_at", ""
-        )
-        if behind:
-            note = (
-                '<span class="tk-chip warn">Prep is older than the board</span>'
-                '<a class="btn" href="#top" data-goto="standup">Read it anyway</a>'
-            )
-        elif covered:
-            note = '<a class="btn" href="#top" data-goto="standup">Read the prep</a>'
-        elif has_script:
-            for_day = when_words(script_meta(board).get("for_date", ""))
-            note = f'<span class="tk-chip warn">Prep is for {esc(for_day)}, not this</span>'
-        else:
-            note = '<span class="tk-chip warn">No prep written yet</span>'
-        next_block = f"""
-      <div class="nk-next">
-        <span class="nk-tag">Next room</span>
-        <strong>{esc(live.get("title") or live.get("name"))}</strong>
-        <span class="nk-when">{esc(when_words(live.get("date", ""), live.get("at", "")))}</span>
-        {f'<span class="nk-where">{esc(live.get("place"))}</span>' if live.get("place") else ""}
-        {note}
-        {f'<span class="nk-focus">{esc(live.get("focus"))}</span>' if live.get("focus") else ""}
-        {timetable(live.get("timetable", []))}
-      </div>"""
-    # Rooms after the next one. A session two days out changes what has to be
-    # ready today, so the board holding it is not enough: it has to be on the page.
-    for s in rows:
-        if s.get("skipped") or s is live:
-            continue
-        bring = s.get("bring") or []
-        next_block += f"""
-      <div class="nk-next later">
-        <span class="nk-tag">After that</span>
-        <strong>{esc(s.get("title") or s.get("name"))}</strong>
-        <span class="nk-when">{esc(when_words(s.get("date", ""), s.get("at", "")))}</span>
-        {f'<span class="nk-where">{esc(s.get("place"))}</span>' if s.get("place") else ""}
-        {f'<span class="nk-focus">{esc(s.get("focus"))}</span>' if s.get("focus") else ""}
-        {f'<span class="nk-focus">Bring: {esc("; ".join(bring))}</span>' if bring else ""}
-      </div>"""
-    for s in skipped:
-        next_block += f"""
-      <div class="nk-next off">
-        <span class="nk-tag">Not running</span>
-        <strong>No {esc(s.get("name", "standup")).lower()}
-        {esc(when_words(s.get("date", "")))}</strong>
-        <span class="nk-focus">{esc(s.get("reason"))} Anything that was waiting
-        for that meeting has to move into Asana.</span>
-      </div>"""
-
-    # What is left under the brief: the detail behind its lines. The brief names
-    # the room and the biggest news; this is where the rest of the rooms, the
-    # alert and the other four news rows live, for when one of those lines makes
-    # him want the whole thing.
-    #
-    # The counted sentence that used to head this block is gone. "4 things need
-    # you, about 60 minutes in total" is arithmetic he can see on the cards, and
-    # above a brief that says what to start on it was one more line to read
-    # before the useful one.
-    inside = []
-    if alert_block:
-        inside.append("something urgent")
-    if next_block:
-        inside.append("the next room")
-    if news:
-        inside.append(f"{len(news)} TG updates" if len(news) != 1 else "1 TG update")
-    if not (alert_block or next_block or news):
-        return ""
-    return f"""
-  <details class="nk{" hot" if alert_block else ""}" id="need"
-           data-remember="need">
-    <summary>
-      <span class="nk-k">The detail</span>
-      <span class="nk-n">{esc(", ".join(inside))}</span>
-      <span class="fold-hint"></span>
-    </summary>
-    <div class="nk-in">
-      {alert_block}
-      {next_block}
-      {news_rows(news)}
-    </div>
-  </details>"""
-
-
 def jump_bar(tickets: list[dict], refs: dict[str, str], has_news: bool) -> str:
     """The sections and every ticket, one click away, wherever you are."""
     chips = []
     if has_news:
-        chips.append('<a href="#need">Need to know</a>')
+        chips.append('<a href="#brief">This morning</a>')
     chips.append('<a href="#todo">To do</a>')
     chips.append('<a href="#tickets">Tickets</a>')
     for t in tickets:
+        # A ticket with nothing open is a line in the finder, not a stop here.
+        if ticket_group(t) != "live":
+            continue
         ref = t.get("ref", "")
         mine = sum(1 for i in t.get("items", []) if state_of(i)["state"] == "todo")
         count = f'<span class="c">{mine}</span>' if mine else ""
@@ -1164,34 +986,6 @@ def ticket_group(t: dict) -> str:
     return "clear"
 
 
-def tickets_bar(groups: dict[str, list[dict]], refs: dict[str, str]) -> str:
-    """The section header for the cards, with where each ticket stands on it."""
-    chips = []
-    for t in groups["live"] + groups["clear"] + groups["closed"]:
-        ref = t.get("ref", "")
-        mine = sum(1 for i in t.get("items", []) if state_of(i)["state"] == "todo")
-        open_n = sum(1 for i in t.get("items", []) if not state_of(i)["closed"])
-        if mine:
-            tone, what = "mine", f"{mine} with you"
-        elif open_n:
-            tone, what = "theirs", "nothing on you"
-        else:
-            tone, what = "clear", "clear"
-        chips.append(
-            f'<a class="tb-chip {tone}" href="#{esc(refs[ref])}">'
-            f'<span class="dot"></span>{esc(ref)}<span class="s">{esc(what)}</span></a>'
-        )
-    total = sum(len(v) for v in groups.values())
-    return f"""
-  <section class="tickets-bar" id="tickets">
-    <div class="tb-head">
-      <h2>Open Asana tickets</h2>
-      <span class="tb-n">{total} in your name</span>
-    </div>
-    <div class="tb-chips">{"".join(chips)}</div>
-  </section>"""
-
-
 def render(data: dict) -> str:
     pretty = date.today().strftime("%a %-d %b")
     item_index = index_items(data.get("tickets", []))
@@ -1237,13 +1031,13 @@ def render(data: dict) -> str:
         )
 
     cards = cards_for(groups["live"])
+    # Closed on both sides is finished: desk.md and the finder still have it.
     for key, title, why in (
         (
             "clear",
             "Done your part, still open in Asana",
             "Nothing here needs you. It stays because Asana has not closed it.",
         ),
-        ("closed", "Closed on both sides", "Kept for the record."),
     ):
         if groups[key]:
             cards += f"""
@@ -1253,28 +1047,25 @@ def render(data: dict) -> str:
       {cards_for(groups[key])}
     </details>"""
 
-    total = sum(
-        i.get("est_minutes") or 0
-        for t in tickets
-        for i in t.get("items", [])
-        if state_of(i)["state"] == "todo"
-    )
-
-    # `watch` was the old name for the same thing, so a board written before the
-    # rename still shows its rows rather than dropping them silently.
-    news = data.get("news") or data.get("watch") or []
-
-    gaps = data.get("gaps", [])
-    gap_block = ""
-    if gaps:
-        items = "".join(f"<li>{esc(g)}</li>" for g in gaps)
-        gap_block = f'<section class="gaps"><h2>Open gaps</h2><ul>{items}</ul></section>'
-
     mine = sum(
         1
         for t in tickets
         for i in t.get("items", [])
         if state_of(i)["state"] == "todo"
+    )
+
+    # What a run could not reach. One shut line: most of it is history, and a
+    # lapsed login still needs to be seen, so it stays rather than going.
+    gaps = data.get("gaps", [])
+    gap_block = (
+        f"""
+    <details class="gaps" data-remember="gaps">
+      <summary>Open gaps <span class="n">{len(gaps)}</span>
+      <span class="q">what a run could not reach</span><span class="fold-hint"></span></summary>
+      <ul>{"".join(f"<li>{esc(g)}</li>" for g in gaps)}</ul>
+    </details>"""
+        if gaps
+        else ""
     )
 
     meta = script_meta(data)
@@ -1313,17 +1104,13 @@ def render(data: dict) -> str:
   <div id="view-desk" role="tabpanel">
     {jump_bar(tickets, refs, True)}
     {render_brief.render(data, refs)}
-    {need_to_know(data, has_script, news, tickets, soon, refs)}
+    {render_milestone.render(data, refs)}
     {render_week.render(data, tickets, refs)}
     {render_track(tickets, refs, soon)}
-    <div class="howto">
-      <span>{f"About <b>{total} min</b> of this is yours. " if total else ""}Every job takes questions and changes: <b>Ask or change</b> at the foot of its card, <kbd>enter</kbd> to send. Finishing one is the page's blind spot: run <code>tg 3</code> in a terminal.</span>
-      <button class="more" data-help type="button">How to use this</button>
-    </div>
     {ask_block("board", "the desk", ASKED.get("board", []),
                "Read prompt-ask.md, then answer this about the billing desk as a "
                "whole rather than one job:")}
-    {tickets_bar(groups, refs)}
+    <span id="tickets"></span>
     {cards}
     {gap_block}
   </div>
@@ -1331,7 +1118,7 @@ def render(data: dict) -> str:
     {render_standup.render(data, refs, built, stale)}
   </div>
 </div>
-{finder(tickets, refs)}
+{finder([t for t in tickets if ticket_group(t) != "closed"], refs)}
 {render_dialogs.help_dialog()}
 {render_dialogs.settings_dialog()}"""
     # Which items are closed right now. The page remembers this set, so when

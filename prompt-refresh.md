@@ -26,43 +26,46 @@ Three things are never a workaround, however reasonable they look:
 - Guessing what a ticket or a thread now says. A source you could not read is a
   source you do not report on.
 
-## The board reads and writes in two calls, so do not go looking
+## The shape of a fast sweep: read once, call in parallel, write once
 
-This is the one rule that decides whether a refresh takes five minutes or
-fifteen. **Almost everything a sweep needs is printed by `./digest.py` once, and
-written back by the WRITE CHEATSHEET it ends with.** So, without exception:
+A sweep is almost all model time, and model time is set by two things: how many
+turns you take and how much is in context on each one. So a sweep has exactly
+this shape, and a sweep that keeps it finishes in a few minutes:
 
-- **Never run `help(board)`, and never open `state/board.json` to see a current
-  value.** The digest already printed it, and dumping a 300KB file into the
-  conversation to read one field is the single most expensive thing a sweep does
-  and the reason past runs cost what they did. If you need the shape, the
-  docstring at the top of `board.py` is the contract; read it at most once.
-- **Never re-run `./digest.py`, and never write it to `/tmp` and read it back.**
-  Read it once, at the start. If you have lost a value from it, you are about to
-  spend more recovering it than it is worth; work from what the one read gave you.
-- **The digest ends with a WRITE CHEATSHEET.** It is the whole of a sweep's
-  writing: add an event, move an item, bump a watermark, add a news row, set
-  `checked_at`, save. Use those forms. You do not need to reconstruct the schema
-  to write the board, and reconstructing it is how a sweep loses its time.
+1. **Turn 1: `./digest.py`, once.** It is the whole readable board plus a SWEEP
+   PLAN and a WRITE block. Never re-run it, never send it to a file and read it
+   back, never open `state/board.json`.
+2. **Turn 2: every independent source call, in one message.** The census, the
+   gate and the milestone search do not depend on each other, so they go out
+   together as parallel tool calls in a single message. Then every
+   `get_task`/`get_task_stories` the gate earns, and every Slack thread the plan
+   names, together in the next message. One call per turn is the slow shape:
+   each turn re-reads the whole context.
+3. **Then write once.** Put every finding of the sweep into one JSON patch with
+   the Write tool at `tmp/patch.json`, and apply it with one `./apply.py
+   tmp/patch.json`. The WRITE block at the end of the digest has every key. If
+   apply refuses, it says why and writes nothing: fix that line of the patch and
+   run it again.
+4. **Then `./check.py`, fix what it prints with a second small patch, and report.**
 
-These are the exact detours that have made real sweeps take fifteen minutes. Each
-one is banned, not discouraged:
+Banned outright, because each one is a detour a real sweep has taken:
 
-- **No writing the digest to `/tmp` and reading it back.** Read `./digest.py`
-  once, in the conversation. A sweep that read `/tmp/digest_full.txt` four times
-  is a sweep re-reading its own notes instead of talking to Asana.
-- **No `git` at all** — not `git status`, not `git log`, not `git diff`, not
-  `git check-ignore` on `state/board.json`. Whether the board is tracked is not
-  your concern; `board.save` and `./tick.py` handle the file. This is pure
-  wandering and it costs minutes.
-- **No reading source to re-learn the tools.** No `help(board)`, no
-  `inspect.getsource(...)`, no opening `audit.py` or `board.py` to read the code.
-  The docstring at the top of `board.py` is the only reference you may open, once.
-  The cheatsheet already has the calls you need.
-- **No subagents, ever.** Do not use the `Task` tool, do not "hand off to a
-  subagent", do not spawn `claude` or `cursor-agent`, do not delegate a slice of
-  the sweep. You are the whole sweep in one process. A second agent writes the
-  board underneath you and doubles the cost.
+- **No Python against the board.** No `python3 -c`, no `import board`, no
+  `help(board)`, no reading `board.py`, `audit.py` or any other source to learn
+  the tools. The WRITE block is the whole of the writing. The `board.py`
+  docstring is the schema, and you open it at most once and only if stuck.
+- **No reading `output/` or any `.py` file for a value.** A record the digest
+  clipped (a stale `prepared` block, a draft to rewrite) is one call:
+  `./digest.py --item 42 52` or `--ticket 保安閉栓`, which prints it whole as JSON
+  and is also its shape. Grepping `desk.md` and `board.py` for it cost one real
+  sweep a dozen turns.
+- **No `git` at all.**
+- **No subagents, ever.** Do not use the `Task` tool, do not hand off to a
+  subagent, do not spawn `claude` or `cursor-agent`, do not delegate a slice of
+  the sweep. You are the whole sweep in one process; a second agent writes the
+  board underneath you.
+- **No `./tick.py --rebuild` from a run.** The page redraws itself from the board
+  on every load, and serve.py redraws `output/desk.md` when the run ends.
 
 ## What the board is
 
@@ -72,75 +75,46 @@ those tickets. Items keep their number until they are closed, so "do 4" means
 the same thing next week. Never renumber, never reuse a number, never rewrite
 history that has already happened.
 
-**Every write goes through `board.save()`, `./tick.py` or `./note.py`.** Never
-open `state/board.json` with an edit tool, `sed`, or a string replace, and never
-write it with `json.dump`. Questions from the page run while you sweep and write
-the same file, so `save()` takes a lock and merges what they wrote with what you
-wrote, field by field. A write that goes round it overwrites their answer, and
-that is what made the page look like it had gone back a day. Never delete an
-item, either: close it with `./tick.py <n> --dropped -n "why"`. `save()` refuses
-a board that has lost one.
+**Every write goes through `./apply.py`** (or `./tick.py` for one item), both of
+which save through `board.save()`. Never touch `state/board.json` with an edit
+tool, `sed`, a string replace or `json.dump`. Questions from the page run while
+you sweep and write the same file, so `save()` takes a lock and merges what they
+wrote with what you wrote, field by field; a write that goes round it overwrites
+their answer. Never delete an item: set its `state` to `dropped` with a `note`.
+`save()` refuses a board that has lost one.
 
 ## 1. Read where things stand
 
-**Run `./digest.py`, once.** It prints the whole readable half of the board in
-one call: every ticket with where it stands, its gates, its threads with the time
-each was last read, its last events, and every open item with its steps, its
-draft and what it is queued behind. A ticket with nothing open prints as one
-line and is not worth reading further. `--full` unclips the prose of the open
-tickets (a prep reads that one instead, never both); `--everything` adds closed
-items and finished tickets and is almost never what a sweep needs.
+**`./digest.py`, once.** Every ticket with where it stands, its open gates, its
+last events, and every open item with its first steps, its draft and what it is
+queued behind. A ticket with nothing open is one line. `--full` unclips the prose;
+a sweep does not need it.
 
 **Everything you read stays in context and is re-read on every later turn**, so
-what a sweep costs is mostly how much it has read, not how many calls it made.
-Keep Asana answers small: the gate query asks for
+keep source answers small. The gate asks for
 `opt_fields=name,modified_at,assignee.name,completed` and nothing else, because
-`custom_fields` returns twenty fields per task and made one gate 250KB. Ask for
-`custom_fields` only on the handful of gids you deep-read.
+`custom_fields` returns twenty fields per task. Ask for `custom_fields` only on
+the census and on the gids you deep-read.
 
-**The digest ends by printing a SWEEP PLAN: work it, do not rebuild it.** It is
-the worklist for this sweep, made from the watermarks already on the board so you
-do not have to derive it: the one Asana gate query to run, every thread with the
-timestamp to read *forward from*, the build tickets to re-check, and every open
-item number with who it sits with. Read exactly the threads it names, from the
-times it names. Working this list is the difference between a five-minute sweep
-and a fifteen-minute one; deriving it yourself by dumping the board is the thing
-the section above forbids.
+**Work the SWEEP PLAN, do not rebuild it.** It names the census, the gate, the
+milestone search, every thread to read with the time to read forward from, and
+the build tickets to re-check. Read exactly what it names.
 
-That is the only read of the board you need before the sweep. To write, `import
-board`, mutate, `board.save(b)` — the WRITE CHEATSHEET at the end of the digest
-has every form. To redraw both pages, `./tick.py --rebuild`. Neither needs
-discovering.
+**The `OUT OF DATE` block at the top of the digest is a worklist, not a
+warning.** A passed chase date, prepared work older than its ticket, a thread
+whose watermark is older than its events: fix every line in this sweep's patch.
 
-**The `OUT OF DATE` block at the top of the digest is a worklist, not a warning.**
-Every line in it is something a previous sweep should have done and did not: a
-chase date that has passed, prepared work older than the ticket it sits on, a
-thread whose watermark is older than the events taken out of it. Fix all of them
-in this sweep. They are cheap, they are why the page drifts, and nobody else is
-going to do them.
+Two thread watermarks, never confused:
 
-The thread watermarks matter most, because they are self-inflicted, and they are
-two different facts you must not confuse:
-
-- `last_at` (with `last_from`) is the **newest message in the thread**. It stays
-  old and honest when the thread is quiet. Move it only when a genuinely newer
-  message is there. Never stamp it to "today" to look current: that is the
-  fabrication the last sweep rightly refused, and it hides real messages.
-- `checked` is **when you last looked at the thread**. Set it to `board.now()`
-  every single time you open or search a thread, even when nothing was said. This
-  is not a claim about the thread's contents, only a record that you looked.
-
-The audit and the SWEEP PLAN both key off `checked`: a thread looked at since the
-ticket's newest event is not re-read next time. **A sweep that reads a thread and
-leaves `checked` alone has signed the next sweep up to read it all over again**,
-which is most of what made past sweeps slow. So the rule is simple: open a thread
-→ stamp it with `./note.py checked <ticket>` (add `--thread <url>` to stamp one,
-`--last-at`/`--last-from` when a newer message was there); the SWEEP PLAN then
-lists only the threads not yet looked at since the last event, so if you work it
-honestly the list shrinks every sweep instead of staying at two dozen. Use
-`./note.py` for the repetitive writes (stamping threads, adding an event,
-`./note.py swept` for `checked_at`) rather than hand-writing a board script —
-that hand-writing is what sends a sweep reading `board.py` and dumping the board.
+- `last_at` (with `last_from`) is the **newest message in the thread**. Move it
+  only when a genuinely newer message is there. Never stamp it to today to look
+  current: that hides real messages.
+- `checked` is **when you last looked**. Every thread you open or search goes in
+  the patch's `"checked"` key (`{"保安閉栓": "*"}` for all of a ticket's threads,
+  or a list of url fragments), even when nothing was said. A thread with a newer
+  message goes in `"threads"` instead, with its `last_at` and `last_from`, which
+  stamps `checked` too. A thread read and left unstamped is a thread the next
+  sweep reads all over again.
 
 ## 2. Sweep every open ticket
 
@@ -340,10 +314,10 @@ changes what he does.
 - The thing an item was held for has happened: drop the `hold`, set `todo`.
 - He sent something and the board did not know: `state` becomes `waiting` with
   `waits_on` filled in, or `sent` when nothing comes back.
-- Genuinely new work takes `next_id` and increments it.
+- Genuinely new work goes in the patch's `new_items`; apply numbers it.
 - Nothing moved on an item: leave it exactly as it is.
 
-Set `checked_at` to now, in ISO 8601 with the offset.
+End the patch with `"swept": true`, which sets `checked_at` to now.
 
 **When part of an item is done, rewrite the title to what is left.** Writing the
 fact into `progress_note` is not the job; `progress_note` is additive and safe,
@@ -439,8 +413,9 @@ build** (an engineer building it, a PR promised, a fix queued), it has to land
 inside the cycle, so give it a **concrete date, on or before the cycle end**. The
 current cycle's end is in the Asana section name (e.g. "This Cycle's Priority
 (8/31-9/16)" → 2026-09-16), so a build with no other deadline is chased by then,
-sooner if something was promised sooner. Set it with `./tick.py <n> -w "<who>"
---chase <date>`, or `./tick.py <n> --chase <date>` on an item already waiting.
+sooner if something was promised sooner. In the patch that is
+`"items": {"<n>": {"state": "waiting", "who": "<who>", "chase_on": "<date>"}}`,
+or just `"chase_on"` on an item already waiting.
 
 Two things TG need in one place go in one comment, on the older number, not two
 comments an hour apart. Drop the number that got folded in with a note saying
@@ -534,6 +509,32 @@ be quoted back at one of his. Add a row only when you can name the route by
 which it reaches him, and take a row off once that route has closed. Five at the
 outside. Each row carries `topic`, `what`, `why`, `on` and `source_url`.
 
+## 7b. Keep the milestone current
+
+`milestones` is a programme he leads, drawn like a Jira epic: a target date, a
+status, the phases from here to done, and the tickets under it. It owns no work
+of its own; his jobs on it are items on ticket cards, listed by number in its
+`items`.
+
+- The SWEEP PLAN's `M.` search finds its child tickets in Asana. Bring the
+  milestone's `tickets` rows up to date from it: `ref`, `title`, `asana_url`,
+  `assignee`, and `state` from the Status field. The digest prints each row as
+  `tickets.<n> gid=...`: match a search hit by gid and write
+  `"milestones.<id>.tickets.<n>.state"`; append a new child with
+  `"milestones.<id>.tickets+": [{...}]`. A row with no ref has none; `none` in
+  the digest is not a value to copy.
+- **A child assigned to Rei in the census becomes a ticket card** (`new_tickets`,
+  with its first items), and its row stays on the milestone pointing at it. A
+  child assigned to anyone else, or nobody, stays a row and never becomes a card
+  or an item: the board is assigned-only.
+- Move a phase's `state` (`done`, `now`, `next`, `blocked`) only on an event you
+  can quote, and say what in its `note`. Address phases by position:
+  `"board": {"milestones.<id>.phases.2.state": "done"}`. Add any item that is
+  work on the milestone with `"milestones.<id>.items+": [<n>]`.
+- `status` is `on-track` unless something you can quote puts the target at
+  risk (`at-risk`) or past saving (`off-track`). Never mark it `done` until
+  every phase is.
+
 ## 8. Clear the alert, or leave it alone
 
 `alert` is the red strip at the top of the page, for something that needs him
@@ -596,7 +597,7 @@ The three you do write, every sweep:
 So a normal sweep writes two or three lines and the page makes five. Writing all
 five is the sign you have copied something the page already knew.
 
-Set `for_date` to today and `built_at` to `board.now()`, and rewrite the whole
+Set `for_date` to today and `built_at` to now, and rewrite the whole
 block every sweep rather than appending to it. The page refuses to draw a brief
 whose `for_date` has passed, so a stale one disappears rather than being read as
 this morning's.
@@ -621,36 +622,23 @@ what puts the English meaning in brackets after a Japanese term in every English
 line on the page. **Every Japanese term you write into an English sentence must
 be in it.** Write the English plainly and let the page add the meaning: putting
 the brackets in by hand is how a term ends up explained twice in one sentence.
-Check after the sweep with `python3 -c` over the board rather than by eye, since
-one missed term is a line he reads without knowing what it says.
+Add them in the patch's `"glossary"` key. One missed term is a line he reads
+without knowing what it says.
 
-## 10. Check your own work, then rebuild
+## 10. Check your own work
 
 ```
 ./check.py
 ```
 
-This runs the audit, and around it the checks that catch a board no renderer can
-survive: a field holding the wrong type, a page that throws, a number used twice.
-The audit half is the same list the digest printed at the start, run against the
-board you have just written. It is mechanical: passed dates, records that disagree with
-each other, sequencing that points at something closed, prepared work older than
-the ticket under it. **Fix everything it prints and run it again.** A sweep is
-not finished while it prints anything, and "I found nothing new in Asana" is not
-a reason to leave it printing, because none of what it catches comes from Asana.
+The audit, and around it the checks that catch a board no renderer can survive.
+**Fix everything it prints with a second small patch and run it again.** A sweep
+is not finished while it prints anything, and "nothing new in Asana" is not a
+reason to leave it, because none of what it catches comes from Asana. If a line
+is genuinely wrong, the check is wrong and belongs in `audit.py`; say so in the
+report. `FAIL` rather than `note` is a broken board, and it is yours.
 
-If a line is genuinely wrong, the check is wrong and belongs in `audit.py`. Do
-not leave it standing and mention it in the report.
-
-Anything printed as `FAIL` rather than `note` is not a stale board, it is a
-broken one, and it is yours: nothing else wrote the board this run.
-
-```
-./tick.py --rebuild
-```
-
-One call, both pages. `tg refresh` and the Refresh button open the page
-themselves, so do not open it again.
+Do not rebuild and do not open the page: the runner does both.
 
 ## 11. Say what changed, briefly
 

@@ -163,6 +163,7 @@ PY
 run_agent() {
   # $1 is the prompt file, $2 is what to print while it works.
   local job="${1:t:r}"   # prompt-refresh.md -> refresh, matching config.json
+  rm -f tmp/*.json(N)    # a dead run's unapplied patch; see serve.run_agent
   job="${job#prompt-}"
 
   # Everything standing between here and a real run, asked before a token is
@@ -246,10 +247,10 @@ case "${1:-}" in
   s|st|status)   python3 tick.py ;;
   refresh|r)
     run_agent prompt-refresh.md "Looking for what moved since the page was built..." || exit 1
-    page ;;
+    python3 tick.py --rebuild >/dev/null; page ;;
   prep|p)
     run_agent prompt-prep.md "Sweeping everything, then writing today's script..." || exit 1
-    page ;;
+    python3 tick.py --rebuild >/dev/null; page ;;
   ask|a)         shift; ask "$@" ;;
   chat)
     # An interactive Claude Code session, where AGENTS.md is read on startup and

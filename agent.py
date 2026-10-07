@@ -101,6 +101,24 @@ NEVER = (
 # a context the question is a few thousand of.
 ASK_NEVER = ("mcp__google__*", "mcp__notion__*")
 
+# The detours the 7 Oct sessions took, made impossible rather than discouraged.
+# A sweep that reads state/board.json whole is 300KB of context it re-reads on
+# every turn after; one that writes it skips the lock and the merge; `git` and
+# `python3 -c` were how runs went looking for a field name the digest already
+# gave them. The board is read with ./digest.py and written with ./apply.py.
+STRUCTURAL_NEVER = (
+    "Read(state/board.json)", "Read(./state/board.json)",
+    "Write(state/**)", "Edit(state/**)", "Write(./state/**)", "Edit(./state/**)",
+    "Edit(*.py)", "Write(*.py)", "Edit(static/**)", "Write(static/**)",
+    "Bash(git:*)", "Bash(python3 -c:*)", "Bash(cat state/board.json:*)",
+    # desk.md is the board again, as prose: the 7 Oct 15:12 sweep read it five
+    # times for a record `./digest.py --item` prints in one call.
+    "Read(output/**)", "Read(./output/**)",
+)
+# Prep does the refresh half from its own short brief and never needs the 40KB
+# refresh prompt; reading it was 12k tokens on every turn of every prep.
+PREP_NEVER = ("Read(prompt-refresh.md)", "Read(./prompt-refresh.md)")
+
 # The built-ins a run is given at all, as distinct from the ones it may use
 # without asking. The default set carries Cron, worktrees, Workflow, WebFetch
 # and a dozen others nobody headless has a use for, at about 10k tokens a turn.
@@ -158,6 +176,7 @@ class Claude(Kind):
         for tool in (*(f"mcp__{s}__*" for s in MCP_ALLOW), *BUILTIN_TOOLS):
             cmd += ["--allowedTools", tool]
         cmd += self.profile(job)
+        cmd += ["--settings", json.dumps(self.settings(job))]
         if model != "auto":
             cmd += ["--model", model]
         if effort:
@@ -177,9 +196,38 @@ class Claude(Kind):
         flags = ["--tools", ",".join(given)]
         for tool in NEVER + (ASK_NEVER if job == "ask" else ()):
             flags += ["--disallowedTools", tool]
+        if job in ("refresh", "prep"):
+            for tool in STRUCTURAL_NEVER + (PREP_NEVER if job == "prep" else ()):
+                flags += ["--disallowedTools", tool]
         if job == "ask":
             flags += ["--setting-sources", "user"]
         return flags
+
+    @staticmethod
+    def settings(job: str) -> dict:
+        """Settings layered over the user's for this one run.
+
+        `apiKeyHelper` is what stopped the prompts that kept coming back. The
+        user's helper shells out to 1Password, and Claude Code re-runs it every
+        few minutes, so a long sweep asked for Touch ID again and again and sat
+        still until somebody answered: the 195s and 331s gaps in the 7 Oct
+        sessions. The key is already resolved once and pinned in `env()`, so
+        the helper this run sees just reads it back, and the vault is asked
+        exactly once, before the run starts.
+
+        The PostToolUse hook is `compact.py`, which shrinks every Asana, Slack
+        and Notion answer before the model reads it. An ask reads one card's
+        threads and keeps them whole.
+        """
+        conf: dict = {"apiKeyHelper": "printenv ANTHROPIC_API_KEY"}
+        if job in ("refresh", "prep", "post"):
+            conf["hooks"] = {"PostToolUse": [{
+                "matcher": "mcp__.*",
+                "hooks": [{"type": "command",
+                           "command": f"python3 {ROOT / 'compact.py'}",
+                           "timeout": 20}],
+            }]}
+        return conf
 
     # stream-json refuses to run without --verbose, and the pair is what makes a
     # tool call visible the moment it starts rather than at the end.

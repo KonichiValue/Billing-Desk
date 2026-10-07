@@ -187,14 +187,17 @@ def pending_asks() -> dict[str, str]:
     }
 
 
-def set_live(key: str, last: str = "", add: int = 0, start: bool = False) -> None:
+def set_live(key: str, last: str = "", add: int = 0, start: bool = False,
+             step: bool = False) -> None:
     with live_lock:
         if start or key not in live:
-            live[key] = {"since": time.time(), "last": "", "chars": 0}
+            live[key] = {"since": time.time(), "last": "", "chars": 0, "steps": 0}
             if start:
                 return
         if last:
             live[key]["last"] = last
+        if step:
+            live[key]["steps"] = live[key].get("steps", 0) + 1
         live[key]["chars"] += add
 
 
@@ -208,7 +211,7 @@ def live_view() -> dict[str, dict]:
     with live_lock:
         return {
             k: {"seconds": int(time.time() - v["since"]), "last": v["last"],
-                "written": v["chars"]}
+                "written": v["chars"], "steps": v.get("steps", 0)}
             for k, v in live.items()
         }
 
@@ -362,6 +365,8 @@ URL_IN = re.compile(r"https://\S+")
 # "mcp asana: get_task_stories" tells him nothing he wanted to know. Tested
 # against the raw phrase in order, so the specific cases come before the general.
 PLAIN = (
+    ("apply.py", "Writing what it found"),
+    ("note.py", "Writing what it found"),
     ("tick.py", "Moving the job"),
     ("audit.py", "Checking what is out of date"),
     ("board.save", "Writing the change"),
@@ -444,15 +449,19 @@ def read_events(stream, said: list[str], noise: list[str], calls: list[str],
             elif what == "said":
                 said.append(text)
                 set_live(key, add=len(text))
+                # A sweep narrates between calls ("Now let me check the..."), and
+                # half a sentence of that is noise on the progress line. It shows
+                # the step it is on instead; an ask, which makes few calls, keeps
+                # the tail of what it is writing.
                 tail = "".join(said)[-200:].replace("\n", " ").strip()
-                if tail:
+                if tail and key != "sweep":
                     set_live(key, last=tail)
             elif what == "call":
                 # The tool runs now, not the model, so a hung MCP call gets
                 # the ordinary stall window rather than the model's.
                 thinking[0] = False
                 calls.append(text)
-                set_live(key, last=plain_phrase(text))
+                set_live(key, last=plain_phrase(text), step=True)
                 if fh is not None:
                     fh.write(f"  [{mmss(time.time() - began)}] {text}\n")
                     fh.flush()
@@ -951,7 +960,7 @@ def save_prefs(changes: dict) -> int:
         return n
 
 
-# What the checkbox on a job may do. The same moves tick.py already has, and
+# What the status button on a job may do. The same moves tick.py already has, and
 # nothing that takes free text other than a note and a name.
 TICKS = {
     "done": lambda n, who, note: [n] + (["-n", note] if note else []),
@@ -964,7 +973,7 @@ TICKS = {
 
 
 def tick_from_page(body: dict) -> tuple[int, dict]:
-    """The checkbox: move one job by pressing it, the way ./tick.py does.
+    """The status button: move one job from the page, the way ./tick.py does.
 
     He presses it himself, on the job he means, so this is him saying it is
     done rather than an agent inferring it. Undo puts back exactly what was
@@ -1487,6 +1496,11 @@ def agent_model(kind: str) -> str:
 def run_agent(kind: str) -> None:
     """One agent pass over a prompt, then the page reloads itself."""
     prompt_name, running_note = JOBS[kind]
+    # A patch left by a run that died before applying it would block this run's
+    # Write (the tool will not overwrite a file it has not read) and could be
+    # applied by mistake. It is unapplied work from a dead run, so it goes.
+    for stale in (ROOT / "tmp").glob("*.json"):
+        stale.unlink(missing_ok=True)
     prompt = ROOT / prompt_name
     if not prompt.exists():
         set_job("failed", f"{prompt_name} is missing")
@@ -1507,6 +1521,10 @@ def run_agent(kind: str) -> None:
         return
 
     set_job("running", running_note)
+    # Which button is running, so the progress line can say "Refresh" or
+    # "Prep" as a title rather than repeating the long running note.
+    with job_lock:
+        job["job"] = kind
     keep.keep(kind)
     log = ROOT / "logs" / f"{kind}-{datetime.now():%Y-%m-%d}.log"
     log.parent.mkdir(exist_ok=True)
@@ -1555,6 +1573,10 @@ def run_agent(kind: str) -> None:
             # as "Refreshed" is the worst of the outcomes: he walks into the room
             # on a board that nobody swept.
             if ran.code == 0 and ran.text:
+                # The run writes the board and nothing else; desk.md, which a
+                # chat reads, is redrawn here so a run never spends a turn on it.
+                subprocess.run([sys.executable, str(ROOT / "tick.py"), "--rebuild"],
+                               cwd=ROOT, capture_output=True, timeout=60)
                 set_job("done", "Refreshed" if kind == "refresh" else "Script written")
                 return
             # Worth running again only when it cannot have changed anything. No

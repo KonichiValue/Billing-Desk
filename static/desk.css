@@ -168,6 +168,7 @@ color:inherit;text-decoration:none}
 .tr-title:hover{color:var(--accent)}
 /* An owner pill may shrink and clip; the row it is on may not grow. */
 .tr>.pill{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.tr>.stat,.act-head>.stat{flex:0 1 auto;max-width:240px}
 /* Below this the row cannot hold a title and a long owner on one line, so it
    wraps deliberately: title on its own line, then the status chips under it.
    Left to itself flexbox squeezed the title to a two-word column instead. */
@@ -887,6 +888,17 @@ animation:moved-in .25s ease-out}
 @keyframes moved-in{from{opacity:0;transform:translateY(-2px)}to{opacity:1}}
 @media (prefers-reduced-motion:reduce){.refresh.moved{animation:none}}
 .refresh-note{font-size:11.5px;color:#93a4bd;max-width:280px}
+.refresh-note.run{display:inline-flex;align-items:center;gap:8px;max-width:420px;
+padding:5px 11px 5px 9px;border-radius:99px;font-size:12px;color:var(--ink);
+background:var(--accent-bg);border:1px solid var(--accent-line);white-space:nowrap}
+.rn-dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--accent);
+animation:rn-pulse 1.4s ease-in-out infinite}
+@keyframes rn-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.7)}}
+@media (prefers-reduced-motion:reduce){.rn-dot{animation:none}}
+.rn-job{font-weight:750;color:var(--accent-ink)}
+.rn-time{font-variant-numeric:tabular-nums;font-weight:650;color:var(--ink)}
+.rn-doing{min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--soft)}
+.rn-n{flex:none;font-size:11px;color:var(--mut);padding-left:8px;border-left:1px solid var(--accent-line)}
 .refresh-note.bad{color:#f6b0ac}
 /* Buttons that only mean something on one view stay on that view. The work
    view is refreshed, not prepped: the words belong to the other tab. */
@@ -976,6 +988,42 @@ font-variant-numeric:tabular-nums;align-self:center}
 .br-l.do .br-k{color:#f7a7a0}
 .br-l.do .br-w{font-weight:550}
 .br-l.watch{border-left-color:rgba(255,255,255,.18)}
+/* Something that needs him inside the hour and is not yet an item. Rare, and
+   the one line above the room. */
+.br-l.alert{border-left-color:#ff6b5e;background:rgba(255,107,94,.16)}
+.br-l.alert .br-k{color:#ffaaa2}
+.br-l.alert .br-w{font-weight:650;color:#fff}
+/* An onsite's running order, under the room line. */
+.br-plan{flex-basis:100%;list-style:none;margin:4px 0 0 103px;padding:0;display:flex;
+flex-wrap:wrap;gap:3px 16px;font-size:12.5px;color:#9fb1cd}
+.br-plan li{display:flex;gap:6px}
+.br-plan b{font-variant-numeric:tabular-nums;color:#cfdcf2}
+.br-plan li.mine{color:#fff;font-weight:600}
+/* The rest of the TG news, one click down. The brief says the newest; these
+   are the others still moving around his tickets. */
+.br-l.more{padding:4px 18px 6px 47px}
+.br-more{flex:1;min-width:0}
+.br-more>summary{cursor:pointer;list-style:none;display:flex;gap:8px;
+align-items:center;font-size:12.5px;color:#9fb1cd}
+.br-more>summary::-webkit-details-marker{display:none}
+.br-more>summary::before{display:none}
+.br-more>summary:hover{color:#fff}
+.br-more>summary .fold-hint{border-color:rgba(255,255,255,.18);color:#b9c8e2;
+background:rgba(255,255,255,.07)}
+.br-more ul{list-style:none;margin:8px 0 2px;padding:0;
+border-top:1px solid rgba(255,255,255,.10)}
+.br-more li{padding:9px 0;border-bottom:1px solid rgba(255,255,255,.08);
+font-size:13.5px;line-height:1.5;color:#eef2f9}
+.br-more li:last-child{border-bottom:0}
+.br-more li b{font-weight:650}
+.br-why{display:block;color:#c6d3ea;font-size:12.5px;margin-top:2px}
+.br-on{font-size:11px;font-weight:650;color:#93a5c3;margin-right:4px}
+.br-rest{margin:3px 0}
+.br-rest>summary{cursor:pointer;font-size:11px;font-weight:700;text-transform:uppercase;
+letter-spacing:.06em;color:#93a5c3}
+.br-rest>summary:hover{color:#fff}
+.br-rest[open]{font-size:12.5px;color:#c6d3ea}
+@media (max-width:640px){.br-plan{margin-left:0}.br-l.more{padding-left:18px}}
 /* The numbers a line is about, so "start on 45" is one click from 45. */
 .br-jobs{display:inline-flex;gap:4px;margin-left:7px;vertical-align:1px}
 .br-job{font:800 10.5px/18px inherit;min-width:20px;text-align:center;
@@ -1011,70 +1059,6 @@ letter-spacing:.09em;color:var(--red);margin-right:9px;vertical-align:1px}
 .nk-alert.plain{background:var(--accent-bg);border-color:var(--accent-line)}
 .nk-alert.plain b{color:var(--accent)}
 .nk-in{padding:15px 18px 17px}
-.nk-next{display:flex;gap:9px;align-items:center;flex-wrap:wrap;padding:11px 13px;
-border:1px solid var(--accent-line);background:var(--accent-bg);border-radius:10px;
-margin-bottom:10px}
-.nk-next.off{border-color:var(--amber-line);background:var(--amber-bg)}
-.nk-next.later{border-color:var(--line);background:var(--hair)}
-.nk-tag{font:750 10px/1 inherit;text-transform:uppercase;letter-spacing:.09em;
-color:var(--accent-ink)}
-.nk-next.off .nk-tag{color:var(--amber)}
-.nk-next.later .nk-tag{color:var(--soft)}
-.nk-next.later strong{font-size:14px}
-.nk-next strong{font-size:15px;letter-spacing:-.01em}
-.nk-when{font-size:13px;font-weight:650;color:var(--mut)}
-.nk-where{font-size:12.5px;color:var(--soft)}
-.nk-focus{flex-basis:100%;font-size:13.5px;color:var(--mut);margin:0}
-/* The shape of a day that is not the usual half hour. An onsite has a time he
-   has to be somewhere and a time the real discussion starts, and neither is
-   the time in the calendar invite. */
-.nk-plan{flex-basis:100%;list-style:none;margin:7px 0 0;padding:8px 0 0;
-border-top:1px solid var(--accent-line);display:flex;flex-wrap:wrap;
-gap:3px 16px;font-size:12.5px;color:var(--soft)}
-.nk-plan li{display:flex;gap:6px}
-.nk-plan b{font-variant-numeric:tabular-nums;font-weight:700;color:var(--mut)}
-.nk-plan li.mine{color:var(--ink);font-weight:600}
-.nk-plan li.mine b{color:var(--accent)}
-.nk-news h3{margin:14px 0 8px;font-size:12px;font-weight:750;display:flex;
-gap:9px;align-items:center}
-.nk-news h3:before{content:"";width:3px;height:13px;border-radius:2px;
-background:var(--accent-line)}
-.nk-news h3 .q{font-weight:500;font-size:11.5px;color:var(--soft)}
-.nk-news ul{list-style:none;margin:0;padding:0;border:1px solid var(--line);
-border-radius:10px;overflow:hidden}
-.nk-news li{padding:10px 13px;border-bottom:1px solid var(--hair);display:flex;
-gap:11px;align-items:baseline;flex-wrap:wrap;background:var(--card)}
-.nk-news li:last-child{border-bottom:0}
-.n-what{flex:1;min-width:250px;font-size:13.5px}
-.n-what b{font-weight:650}
-.n-why{display:block;font-size:12.5px;color:var(--mut);margin-top:2px}
-.n-more{margin-top:4px}
-.n-more>summary{display:inline-flex;gap:7px;align-items:center;cursor:pointer;
-font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
-color:var(--soft)}
-.n-more>summary:hover{color:var(--accent)}
-.n-rest{display:block;margin-top:4px;font-size:12.5px;line-height:1.55;
-color:var(--mut)}
-.n-when{flex:none;font-size:11px;color:var(--soft);font-weight:650}
-
-/* The section header for the cards, with where each ticket stands on it. */
-.tickets-bar{margin:26px 0 12px;padding:13px 17px;background:var(--card);
-border:1px solid var(--line);border-radius:13px;box-shadow:var(--shadow);
-scroll-margin-top:96px}
-.tb-head{display:flex;gap:10px;align-items:baseline}
-.tb-head h2{margin:0;font-size:14px;font-weight:750;letter-spacing:-.01em}
-.tb-n{font-size:12px;color:var(--soft);margin-left:auto}
-.tb-chips{display:flex;gap:7px;flex-wrap:wrap;margin-top:11px}
-.tb-chip{display:flex;gap:7px;align-items:center;text-decoration:none;
-font-size:12.5px;font-weight:650;color:var(--ink);border:1px solid var(--line);
-background:var(--card);border-radius:8px;padding:5px 10px}
-.tb-chip:hover{border-color:var(--accent-line);background:var(--accent-bg)}
-.tb-chip .dot{width:8px;height:8px;border-radius:50%;background:var(--line);
-flex:none}
-.tb-chip.mine .dot{background:var(--red)}
-.tb-chip.theirs .dot{background:#8fbcf7}
-.tb-chip.clear .dot{background:var(--green)}
-.tb-chip .s{font-weight:500;font-size:11.5px;color:var(--soft)}
 
 /* Tickets that need nothing, and tickets that are over. */
 .tk-fold{background:var(--card);border:1px solid var(--line);border-radius:13px;
@@ -1091,36 +1075,33 @@ padding:0 7px}
 border-top:4px solid var(--line);border-radius:12px}
 .tk-fold .tk:last-child{margin-bottom:0}
 
-/* The circle. Todoist's one good idea, taken whole: the thing you press to be
-   done with a job is the first thing on its row, and its ring says how much it
-   matters before you read a word. p1 is his and due today, p2 his this week,
-   p3 with someone else, p4 held or queued. The ring fills on hover so pressing
-   it is never a surprise, and a closed job keeps a filled circle. */
-:root{--p1:#d1453b;--p2:#eb8909;--p3:#246fe0;--p4:#9aa3b2}
-.ck{--c:var(--p4);flex:none;width:19px;height:19px;padding:0;margin:0;
-border-radius:50%;border:2px solid var(--c);
-background:color-mix(in srgb,var(--c) 9%,transparent);cursor:pointer;
-display:grid;place-items:center;
-transition:background-color var(--t-fast) var(--ease),transform var(--t-fast) var(--ease)}
-.ck.p1{--c:var(--p1);border-width:2.4px}
-.ck.p2{--c:var(--p2)}
-.ck.p3{--c:var(--p3)}
-.ck.p4{--c:var(--p4)}
-.ck svg{width:12px;height:12px;fill:none;stroke:var(--c);stroke-width:2.2;
-stroke-linecap:round;stroke-linejoin:round;opacity:0;
-transition:opacity var(--t-fast) var(--ease)}
-.ck:hover svg,.ck:focus-visible svg{opacity:1}
-.ck:hover{background:color-mix(in srgb,var(--c) 18%,transparent)}
-.ck:active{transform:scale(.88)}
-.ck:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.ck.done,.ck.on{--c:var(--green);background:var(--c);border-color:var(--c)}
-.ck.done svg,.ck.on svg{opacity:1;stroke:#fff}
-.ck.done:hover{background:var(--card)}
-.ck.done:hover svg{stroke:var(--c)}
-.ck[aria-busy="true"]{cursor:progress}
-@keyframes ck-pop{0%{transform:scale(1)}40%{transform:scale(1.28)}100%{transform:scale(1)}}
-.ck.on{animation:ck-pop .32s var(--ease)}
-.act-head .ck{margin-right:-2px}
+/* The status, Jira's lozenge: where the job stands, and the thing you press to
+   move it. A checkbox can only say done, and half of these jobs end in "sent,
+   now waiting on somebody", so the control is the status itself and it opens
+   the moves open from there. Same colours as everywhere: red his, amber held,
+   blue with someone else, green closed. The caret only shows it is a control. */
+.stat{--sf:var(--mut);--sb:var(--hair);--sl:var(--line);
+flex:none;display:inline-flex;align-items:center;gap:4px;max-width:100%;min-width:0;
+font:inherit;font-size:11px;font-weight:700;letter-spacing:.01em;line-height:1.35;
+padding:2px 6px 2px 8px;border-radius:6px;border:1px solid var(--sl);
+color:var(--sf);background:var(--sb);cursor:pointer;white-space:nowrap;
+transition:background-color var(--t-fast) var(--ease),border-color var(--t-fast) var(--ease)}
+.stat.red{--sf:var(--red);--sb:var(--red-bg);--sl:var(--red-line)}
+.stat.amber{--sf:var(--amber);--sb:var(--amber-bg);--sl:var(--amber-line)}
+.stat.blue{--sf:var(--blue);--sb:var(--blue-bg);--sl:var(--blue-line)}
+.stat.green{--sf:var(--green);--sb:var(--green-bg);--sl:var(--green-line)}
+.stat-t{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.stat svg{flex:none;width:10px;height:10px;fill:none;stroke:currentColor;stroke-width:1.6;
+stroke-linecap:round;stroke-linejoin:round;opacity:.55;
+transition:opacity var(--t-fast) var(--ease),transform var(--t-fast) var(--ease)}
+.stat:hover{border-color:var(--sf)}
+.stat:hover svg,.stat:focus-visible svg{opacity:1}
+.stat[aria-expanded="true"]{border-color:var(--sf);box-shadow:0 0 0 2px var(--sl)}
+.stat[aria-expanded="true"] svg{transform:rotate(180deg);opacity:1}
+.stat:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.stat[aria-busy="true"]{cursor:progress;opacity:.7}
+@keyframes stat-pop{0%{transform:scale(1)}40%{transform:scale(1.08)}100%{transform:scale(1)}}
+.stat.on{animation:stat-pop .28s var(--ease)}
 
 /* A row going away: the strike draws across, then the row folds up. */
 .tr.going .tr-title,.act.going .act-title{text-decoration:line-through;
@@ -1138,7 +1119,7 @@ border-bottom:1px solid var(--line);list-style:none;background:transparent}
 .tr-sec+.tr-empty{padding:9px 18px 11px 48px;font-size:12.5px;color:var(--soft);
 list-style:none;border-bottom:1px solid var(--hair)}
 
-/* How much of today is done. Fills green as the circles do. */
+/* How much of today is done. Fills green as jobs close. */
 .track-day{display:flex;gap:10px;align-items:center;padding:8px 18px 10px;
 border-bottom:1px solid var(--line);font-size:12px;color:var(--soft);
 font-variant-numeric:tabular-nums}
@@ -1151,20 +1132,24 @@ transition:width .5s var(--ease)}
 .tr.kfocus,.act.kfocus{box-shadow:inset 0 0 0 2px var(--accent-line);
 background:var(--accent-bg)}
 
-/* What the circle asks when a job is not simply done: a draft that was sent
-   wants a name to wait on, so it is a menu rather than a guess. */
-.ck-menu{position:absolute;z-index:60;min-width:230px;background:var(--card);
-border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(15,25,45,.18);
-padding:5px;font-size:13px}
-.ck-menu button{display:block;width:100%;text-align:left;border:0;background:none;
-padding:8px 10px;border-radius:7px;cursor:pointer;color:var(--ink);font:inherit}
-.ck-menu button:hover,.ck-menu button:focus-visible{background:var(--hair);outline:none}
-.ck-menu button small{display:block;color:var(--soft);font-size:11.5px;margin-top:1px}
-.ck-menu .who{display:flex;gap:6px;padding:4px 6px 6px}
-.ck-menu .who input{flex:1;min-width:0;font:inherit;padding:6px 8px;
+/* The moves open from where a job stands, under its status. */
+.stat-menu{position:absolute;z-index:60;width:260px;max-width:calc(100vw - 24px);
+background:var(--card);border:1px solid var(--line);border-radius:10px;
+box-shadow:0 10px 30px rgba(15,25,45,.18);padding:5px;font-size:13px;
+animation:fold-in var(--t-fast) var(--ease) both}
+.stat-menu .stat-h{padding:7px 10px 4px;font-size:11px;font-weight:700;color:var(--soft);
+letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stat-menu .stat-h:not(:first-child){border-top:1px solid var(--hair);margin-top:4px;padding-top:9px}
+.stat-menu button{display:block;width:100%;text-align:left;border:0;background:none;
+padding:7px 10px;border-radius:7px;cursor:pointer;color:var(--ink);font:inherit}
+.stat-menu button:hover,.stat-menu button:focus-visible{background:var(--hair);outline:none}
+.stat-menu button small{display:block;color:var(--soft);font-size:11.5px;margin-top:1px}
+.stat-menu .who{display:flex;gap:6px;padding:4px 6px 6px}
+.stat-menu .who input{flex:1;min-width:0;font:inherit;padding:6px 8px;
 border:1px solid var(--line);border-radius:7px;background:var(--card);color:var(--ink)}
-.ck-menu .who button{width:auto;background:var(--accent);color:#fff;padding:6px 10px}
-.ck-menu .who button:hover{background:var(--accent-ink)}
+.stat-menu .who input:focus{outline:2px solid var(--accent-line);border-color:var(--accent)}
+.stat-menu .who button{width:auto;background:var(--accent);color:#fff;padding:6px 10px}
+.stat-menu .who button:hover,.stat-menu .who button:focus-visible{background:var(--accent-ink)}
 
 /* The undo, bottom left, the way every list app that respects you does it. */
 .toast{position:fixed;left:22px;bottom:22px;z-index:70;display:flex;gap:14px;
@@ -1185,4 +1170,71 @@ font-variant-numeric:tabular-nums;font-size:11.5px}
 
 @media (hover:none){.track-head .track-key{display:none}}
 @media (max-width:820px){.tr-sec i{display:none}.toast{left:12px;right:12px;bottom:12px}}
-@media (prefers-reduced-motion:reduce){.ck.on{animation:none}.tr.going{transition:none}}
+@media (prefers-reduced-motion:reduce){.stat.on,.stat-menu{animation:none}.tr.going{transition:none}}
+
+/* A milestone: an epic roll-up above the week. Plum, so it never reads as a ticket. */
+.milestones{display:grid;gap:12px;margin:0 0 16px}
+.ms{background:var(--card);border:1px solid var(--plum-line);border-left:4px solid var(--plum);
+border-radius:13px;padding:0 18px 14px;box-shadow:var(--shadow)}
+.ms-head{list-style:none;display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px;
+padding:14px 0 12px;cursor:pointer}
+.ms[open]>.ms-head{border-bottom:1px dashed var(--line);margin-bottom:4px}
+.ms-head::-webkit-details-marker{display:none}
+.ms-kind{font:750 10.5px/1 inherit;letter-spacing:.08em;text-transform:uppercase;
+color:var(--plum-ink);background:var(--plum-bg);border:1px solid var(--plum-line);
+border-radius:5px;padding:4px 7px}
+.ms-name{font-size:17px;font-weight:750;color:var(--ink)}
+.ms-ja{margin-left:8px;font-size:13px;font-weight:600;color:var(--mut)}
+.ms-pill{font:700 11.5px/1 inherit;border-radius:99px;padding:4px 9px;border:1px solid}
+.ms-pill.green{color:var(--green);background:var(--green-bg);border-color:var(--green-line)}
+.ms-pill.amber{color:var(--amber-ink);background:var(--amber-bg);border-color:var(--amber-line)}
+.ms-pill.red{color:var(--red);background:var(--red-bg);border-color:var(--red-line)}
+.ms-due{margin-left:auto;font-size:12.5px;color:var(--soft)}
+.ms-due b{color:var(--ink)}
+.ms-tn{color:var(--mut)}
+.ms-bar{flex:1 0 100%;height:6px;border-radius:99px;background:var(--hair);overflow:hidden}
+.ms-bar>span{display:block;height:100%;background:var(--plum);border-radius:99px;
+transition:width var(--t-slow,.4s) var(--ease,ease)}
+.ms-sum{flex:1 0 100%;margin:0;font-size:12.5px;color:var(--soft)}
+.ms-sum b{color:var(--ink)}
+.ms-notes{margin:8px 0 0;font-size:13.5px;color:var(--ink)}
+.ms-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:18px;margin-top:12px}
+@media (max-width:820px){.ms-grid{grid-template-columns:1fr}}
+.ms h4{margin:0 0 8px;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)}
+.ms-phases{list-style:none;margin:0;padding:0;position:relative}
+.ms-phases::before{content:"";position:absolute;left:10px;top:8px;bottom:8px;width:2px;background:var(--line)}
+.ms-ph{position:relative;display:flex;gap:10px;padding:0 0 10px}
+.ms-dot{flex:none;z-index:1;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;
+font:700 11px/1 inherit;background:var(--card);border:2px solid var(--line);color:var(--mut)}
+.ms-ph.done .ms-dot{background:var(--plum);border-color:var(--plum);color:#fff}
+.ms-ph.now .ms-dot{border-color:var(--plum);color:var(--plum-ink);box-shadow:0 0 0 4px var(--plum-bg)}
+.ms-ph.blocked .ms-dot{border-color:var(--red);color:var(--red)}
+.ms-body{display:grid;gap:2px;min-width:0}
+.ms-what{font-size:13.5px;font-weight:650;color:var(--ink)}
+.ms-ph.done .ms-what{color:var(--soft);font-weight:550}
+.ms-meta{display:flex;flex-wrap:wrap;gap:4px 8px;font-size:11.5px;color:var(--mut)}
+.ms-st{font-weight:700}
+.ms-ph.now .ms-st{color:var(--plum-ink)}
+.ms-ph.blocked .ms-st{color:var(--red)}
+.ms-note{font-size:12.5px;color:var(--soft)}
+.ms-num{font:700 11px/1 inherit;color:var(--accent-ink);background:var(--accent-bg);
+border:1px solid var(--accent-line);border-radius:5px;padding:2px 5px}
+.ms-tks,.ms-jobs{list-style:none;margin:0 0 12px;padding:0;display:grid;gap:1px;
+background:var(--line);border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.ms-tk,.ms-job{display:flex;align-items:baseline;gap:8px;padding:7px 10px;background:var(--card);font-size:13px}
+.ms-tk-ref{font-weight:700;color:var(--accent-ink);white-space:nowrap}
+.ms-tk.follow .ms-tk-ref{color:var(--soft)}
+.ms-tk-t{flex:1;min-width:0;color:var(--ink)}
+.ms-job a{flex:1;min-width:0;color:var(--ink);text-decoration:none}
+.ms-job a:hover{color:var(--accent)}
+.ms-job.done a,.ms-job.sent a,.ms-job.dropped a{color:var(--mut);text-decoration:line-through}
+.ms-tk-st{font-size:11px;color:var(--mut);white-space:nowrap}
+.ms-tk-who{font-size:11px;font-weight:650;color:var(--mut);white-space:nowrap}
+.ms-tk.mine .ms-tk-who{color:var(--plum-ink)}
+.ms-links{display:flex;gap:6px}
+.ms-spks{display:grid;gap:8px;margin:0 0 14px}
+.ms-spk{padding:10px 14px;border:1px solid var(--plum-line);border-left:4px solid var(--plum);
+border-radius:10px;background:var(--card);font-size:13.5px}
+.ms-spk .ms-due{margin-left:6px}
+.ms-now{margin-left:6px;font-size:12.5px;color:var(--plum-ink)}
+.ms-say{margin:6px 0 0;font-size:15px}

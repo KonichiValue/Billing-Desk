@@ -116,15 +116,10 @@ what came out of it.
 
     [{"date", "title", "url", "found", "gist"}]
 
-`news` is drawn inside Need to know at the top of the work view, along with the
-next session and `alert`. One block, because they are one question asked once a
-morning, and it folds.
-
-The first line of that block is not stored anywhere. It is counted from the
-items every time the page is drawn: how many are his, which one to start on, how
-long they add up to, and whether the next room is close enough to matter. It
-used to be a sentence an agent wrote, and a sentence written yesterday about a
-conversation reads as a riddle this morning.
+`news` is drawn in the brief at the top of the work view: the newest row as the
+Big news line, the rest folded under it. The next session and `alert` are lines
+of the same brief, so the morning is one block rather than a brief and a second
+fold repeating it.
 
 `alert` is the exception, and it is empty almost every day: something that needs
 him inside the hour and is not an item, because there is nothing to do until
@@ -371,6 +366,29 @@ item may never vanish from a ticket that is still on the board. Close it as
 `dropped` instead, because the number is how he refers to it.
 
     "earlier": [{"at": "ISO", "text": "a finding or 'Heading: body'"}]
+
+`milestones` is work Rei leads that is bigger than one ticket: an Asana
+milestone, a Jira epic, a row on the Notion TG page with his name as Lead. It
+is assigned to him there, which is what earns it a place, and it holds no work
+of its own. The work is the tickets and items it points at, so the epic and its
+children can never disagree about what is open.
+
+    [{"id": "elec-price-update",            a slug, so apply.py can address it
+      "name": "Elec Price Update", "name_ja": "電気料金改定",
+      "target": "2026-11-30",              ISO, the date it has to be done by
+      "target_note": "desired due date",
+      "status": "on-track|at-risk|off-track|done",
+      "outcome", "lead", "support", "notes", "source_url", "asana_url",
+      "phases": [{"what", "when", "state": "done|now|next|blocked",
+                  "who", "note", "items": [52]}],
+      "tickets": [{"ref", "title", "asana_url", "assignee", "state"}],
+      "items": [52, 54]}]
+
+`phases` is the path to done, in order, the way `closes_when` is for a ticket.
+`tickets` lists every ticket under it, his or not: a `ref` that is on the board
+links to that card, anything else is a child he follows and does not own, and
+it stays a row here rather than becoming a card. `items` are item numbers on
+any ticket that move the milestone; the page counts them for its progress bar.
 """
 
 from __future__ import annotations
@@ -502,7 +520,7 @@ def save(board: dict, path: Path | None = None) -> None:
 # so two writers on two different jobs never touch each other at all.
 
 _MISSING = object()
-KEYED = {"tickets", "items"}            # lists of records with an "id"
+KEYED = {"tickets", "items", "milestones"}  # lists of records with an "id"
 LOGS = {"events", "history", "earlier"}  # append-mostly: keep both sides' additions
 
 
@@ -682,6 +700,9 @@ URGENCIES = frozenset({"today", "this-week", "monitor"})
 # A chase date, and nothing else. A sentence in this field is a job with no day.
 ISO_DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
 
+MILESTONE_STATUS = ("on-track", "at-risk", "off-track", "done")
+PHASE_STATES = ("done", "now", "next", "blocked")
+
 
 def check(board: dict) -> list[str]:
     """Everything wrong with the shape of this board, in the words of a fix.
@@ -811,6 +832,40 @@ def check(board: dict) -> list[str]:
                     f"out when there is nothing to say."
                 )
 
+    milestones = board.get("milestones")
+    if milestones is not None and not isinstance(milestones, list):
+        bad.append("milestones should be a list, or left out")
+        milestones = []
+    seen: set[str] = set()
+    for n, ms in enumerate(milestones or [], 1):
+        if not isinstance(ms, dict) or not ms.get("id") or not ms.get("name"):
+            bad.append(f"milestones[{n}] needs an id and a name")
+            continue
+        where = f"milestone {ms['id']}"
+        if ms["id"] in seen:
+            bad.append(f"{where}: id used twice")
+        seen.add(ms["id"])
+        if ms.get("target") and not ISO_DAY.fullmatch(str(ms["target"])):
+            bad.append(f"{where}: target {ms['target']!r} is not YYYY-MM-DD; "
+                       "put any wording in target_note")
+        if ms.get("status") not in (None, *MILESTONE_STATUS):
+            bad.append(f"{where}: status {ms['status']!r}, one of {', '.join(MILESTONE_STATUS)}")
+        for field in ("phases", "tickets", "items"):
+            if ms.get(field) is not None and not isinstance(ms[field], list):
+                bad.append(f"{where}: {field} should be a list")
+        for p, phase in enumerate(ms.get("phases") or [], 1):
+            if not isinstance(phase, dict) or not phase.get("what"):
+                bad.append(f"{where}: phases[{p}] needs a 'what'")
+            elif phase.get("state", "next") not in PHASE_STATES:
+                bad.append(f"{where}: phases[{p}] state {phase['state']!r}, "
+                           f"one of {', '.join(PHASE_STATES)}")
+        for p, row in enumerate(ms.get("tickets") or [], 1):
+            if not isinstance(row, dict) or not (row.get("ref") or row.get("title")):
+                bad.append(f"{where}: tickets[{p}] needs a ref or a title")
+        for ident in ms.get("items") or []:
+            if str(ident) not in ids:
+                bad.append(f"{where}: item {ident} is not on the board")
+
     highest = max((int(n) for n in ids if n.isdigit()), default=0)
     if board.get("next_id", 0) <= highest:
         bad.append(
@@ -841,7 +896,11 @@ def set_state(item: dict, state: str, note: str = "", who: str = "") -> None:
     item["state_at"] = stamp
     item["state_note"] = note
     if who:
-        item.setdefault("waits_on", {})["who"] = who
+        # A job that was never with anyone may hold `"waits_on": null`, and
+        # setdefault hands that None back rather than a dict to write into.
+        if not isinstance(item.get("waits_on"), dict):
+            item["waits_on"] = {}
+        item["waits_on"]["who"] = who
         item["waits_on"].setdefault("since", stamp)
     if state in CLOSED_STATES:
         item["closed_at"] = now()

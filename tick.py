@@ -135,7 +135,7 @@ def main() -> int:
             item["sent_by_you"] = True
             B.set_state(item, "waiting", args.note, who=args.waiting)
             if args.chase:
-                item.setdefault("waits_on", {})["chase_on"] = args.chase
+                item["waits_on"]["chase_on"] = args.chase
         elif args.dropped:
             B.set_state(item, "dropped", args.note)
         elif args.sent:
@@ -143,7 +143,10 @@ def main() -> int:
         elif args.chase:
             # --chase on its own: set the chase date on an item already waiting,
             # without moving its state or resetting how long it has been there.
-            item.setdefault("waits_on", {})["chase_on"] = args.chase
+            # `waits_on` may be null on a job that was never with anyone.
+            if not isinstance(item.get("waits_on"), dict):
+                item["waits_on"] = {}
+            item["waits_on"]["chase_on"] = args.chase
         else:
             B.set_state(item, "done", args.note)
 
@@ -152,7 +155,17 @@ def main() -> int:
     keep.keep("tick")
     B.save(data)
     rebuild()
-    show(data)
+    # A person at a terminal wants the whole list back. An agent or the page
+    # wants to know the move landed, and the whole list is 24KB it then re-reads
+    # on every later turn of its run, so it gets the moved items only.
+    if sys.stdout.isatty():
+        show(data)
+    else:
+        for ident in args.ids:
+            ticket, item = B.by_id(data, ident)
+            st = item_state(item)
+            who = f" on {st['who']}" if st.get("who") else ""
+            print(f"{ident}. {st['state']}{who}  {ticket.get('ref', '')}: {item.get('title', '')}")
     return 0
 
 

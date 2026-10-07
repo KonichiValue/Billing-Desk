@@ -92,12 +92,25 @@ def help_dialog() -> str:
     <p>Same thing from a terminal: <code>tg ask 8 "..."</code>, and the answer
     lands on the same card.</p>
 
-    <h3>Finishing something</h3>
-    <p>In a terminal, never on the page. The page only shows the board; a tick on
-    it would be a lie.</p>
+    <h3>Moving a job</h3>
+    <p>Press its status, the coloured label on the right of every job. It lists
+    the moves open from where the job stands, and each one is the same as
+    <code>./tick.py</code> in a terminal, with an Undo for six seconds.</p>
+    <ul class="say-list">
+      <li><span class="said">With you</span><span class="does">Sent and waiting
+      on who, done, handed to someone else, dropped. A job with a draft asks
+      who you sent it to first.</span></li>
+      <li><span class="said">Waiting on Kevin</span><span class="does">They
+      replied, done, now with someone else, dropped.</span></li>
+      <li><span class="said">Not yet</span><span class="does">Start it now, or
+      close it.</span></li>
+      <li><span class="said">Done</span><span class="does">Open it again.</span></li>
+    </ul>
+    <p><b>Sending a message is not finishing.</b> That is why it is a status
+    and not a checkbox: if a reply is coming, the job goes to the person, not
+    to done.</p>
+    <p>The same from a terminal:</p>
     <ul class="say-list">{said}</ul>
-    <p><b>Sending a message is not finishing.</b> If a reply is coming, use
-    <code>-w</code> and the name.</p>
 
     <h3>The numbers</h3>
     <p>A job keeps its number until it closes, which is why &ldquo;do 3&rdquo;
@@ -138,16 +151,9 @@ def help_dialog() -> str:
     anything, <kbd>s</kbd> Japanese only, <kbd>,</kbd> settings,
     <kbd>?</kbd> this.</p>
     <p>On the To do list: <kbd>j</kbd> <kbd>k</kbd> move down and up,
-    <kbd>x</kbd> completes the job you are on, <kbd>enter</kbd> opens its card,
-    <kbd>u</kbd> undoes the last one.</p>
-
-    <h3>The circle</h3>
-    <p>Every job starts with one. Press it and the job is done, the same as
-    <code>./tick.py</code> in a terminal, with an Undo for six seconds. A job
-    with a draft asks whether you sent it and who you are waiting on, because
-    sending is not finishing. A finished job's circle reopens it. The ring
-    says who holds it: red is yours today, orange yours this week, blue with
-    someone else, grey held or queued.</p>
+    <kbd>x</kbd> opens the status of the job you are on, <kbd>&uarr;</kbd>
+    <kbd>&darr;</kbd> walk its moves, <kbd>enter</kbd> opens its card,
+    <kbd>u</kbd> undoes the last move.</p>
   </div>
 </dialog>"""
 

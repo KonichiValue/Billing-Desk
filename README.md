@@ -189,11 +189,13 @@ waiting row says who has it and since when, and the minutes count only what is
 still yours. Every row also says *when*: Do now, Held to Wednesday, Chase today,
 or "No chase date" when nothing has been set and the thing could sit for ever.
 
-The pages are read-only about status, deliberately. A page opened from disk
-cannot write to disk, so a checkbox on it could only ever remember a tick inside
-one browser, and a control that looks authoritative while the chat and the state
-file know nothing about it is worse than no control. Close things by saying so in
-chat, or with `tick.py`.
+Every job's status is a button. Press it and it lists the moves open from where
+the job stands: sent and waiting on who, done, dropped, they replied, open it
+again. Each one runs `tick.py`, the same as the terminal, so the move is in the
+item's history, and an Undo stays on screen for six seconds. It is a status
+rather than a checkbox because sending is not finishing. A page opened from disk
+has no server behind it and cannot move anything; close things there with
+`tick.py`, or by saying so in chat.
 
 ## Asking about one job, and changing it
 

@@ -466,6 +466,8 @@ border-radius:10px;padding:12px 15px;margin-top:15px}
 .warn ul{margin:6px 0 0;padding-left:18px;font-size:14px;color:var(--amber-ink)}
 .empty{color:var(--soft);font-style:italic;margin:0;font-size:14.5px}
 .gaps{padding:16px 20px;margin-top:22px}
+.gaps>summary{cursor:pointer;font-size:11.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--soft);font-weight:650;display:flex;gap:8px;align-items:center}
+.gaps>summary .q{text-transform:none;letter-spacing:0;font-weight:500}
 .gaps h2{font-size:11.5px;text-transform:uppercase;letter-spacing:.09em;
 color:var(--soft);margin:0;display:inline-block;font-weight:700}
 .gaps ul{margin:8px 0 0;padding-left:18px}
@@ -623,14 +625,14 @@ border-radius:8px;margin:13px 0 0;color:var(--ink)}
 .views button{padding:0 9px;flex:none}
 /* Flex children default to their content width, which is what pushes a phone
    into sideways scrolling. Nothing on this page needs to be wider than it. */
-.tr-title,.act-title,.n-what,.thr-body,.nk-sum,.q-en,.mv-what,.terms dd,
+.tr-title,.act-title,.thr-body,.nk-sum,.q-en,.mv-what,.terms dd,
 .howto>span,.act-head,.tk-meta,.st-run a{min-width:0}
 .terms dt{width:auto}
 .term{flex-direction:column;gap:4px}
 .tk,.st-tk{padding-left:14px;padding-right:14px}
 .tk-head{margin:0 -14px;padding-left:14px;padding-right:14px}
-.tr,.news li,.nk-news li{flex-wrap:wrap}
-.tr-title,.n-what{flex-basis:100%;order:-1}
+.tr,.news li{flex-wrap:wrap}
+.tr-title{flex-basis:100%;order:-1}
 .tr-min,.act-min{display:none}
 .thr-where{min-width:0;flex-basis:100%}
 .cons-row{flex-wrap:wrap}

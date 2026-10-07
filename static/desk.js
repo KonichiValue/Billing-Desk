@@ -12,6 +12,26 @@
     note.className = "refresh-note" + (tone ? " " + tone : "");
   }
 
+  // A run in progress, as a chip rather than a sentence: which button, how
+  // long, what it is doing now and how many steps it has taken. The step is
+  // the server's plain phrase for the last tool call, never the model's
+  // narration, so it reads "Reading the Slack thread" rather than half of
+  // "Now let me check whether the".
+  function progress(s) {
+    var secs = s.seconds || 0;
+    var clock = Math.floor(secs / 60) + ":" + ("0" + (secs % 60)).slice(-2);
+    var title = { refresh: "Refresh", prep: "Prep" }[s.job] || "Working";
+    var doing = s.last || s.message || "Starting";
+    note.className = "refresh-note run";
+    note.title = s.message || "";
+    note.innerHTML =
+      '<span class="rn-dot" aria-hidden="true"></span>' +
+      '<b class="rn-job">' + esc(title) + "</b>" +
+      '<span class="rn-time">' + clock + "</span>" +
+      '<span class="rn-doing">' + esc(doing.slice(0, 70)) + "</span>" +
+      (s.steps ? '<span class="rn-n">' + s.steps + " step" + (s.steps > 1 ? "s" : "") + "</span>" : "");
+  }
+
   function ready() {
     runners.forEach(function (b) {
       b.disabled = false;
@@ -180,15 +200,7 @@
         // A sweep reads every ticket and every thread behind it, so minutes are
         // normal. Saying how long it has been and what it last said is the
         // difference between a slow job and a job that looks stuck.
-        var note = s.message + "\u2026";
-        if (s.seconds) {
-          var m = s.seconds >= 60
-            ? Math.floor(s.seconds / 60) + "m " + (s.seconds % 60) + "s"
-            : s.seconds + "s";
-          note = s.message + " \u00b7 " + m;
-          if (s.last) note += " \u00b7 " + s.last.slice(0, 90);
-        }
-        say(note);
+        progress(s);
         later(2000);
         return;
       }
@@ -681,31 +693,50 @@
   });
 
 
-  // The circle on every job. Pressing it is him saying the job moved, on the
-  // job he means, so it runs ./tick.py like the terminal does and the move is in
-  // the item's history. A job with a draft or a reply expected is not simply
-  // done: sending is not finishing, so the circle asks which it was. Everything
-  // else completes on the press, and Undo puts back exactly what was there.
+  // The status on every job, Jira's lozenge. Pressing it is him saying the job
+  // moved, on the job he means, so it runs ./tick.py like the terminal does and
+  // the move is in the item's history. It always opens the moves open from where
+  // the job stands, because a job here has more than two states and sending is
+  // not finishing. Undo puts back exactly what was there.
   var menu = null, toastEl = null, toastTimer = null, last = null;
   function ticking() { return !!(menu || toastEl); }
+
+  // What the lozenge says the moment a move is pressed, before the board answers.
+  var AFTER = {
+    done: ["Done", "green"], sent: ["Sent", "green"], dropped: ["Dropped", "grey"],
+    mine: ["With you", "red"], waiting: ["Waiting", "blue"]
+  };
+  var TONE = ["red", "amber", "blue", "green", "grey"];
 
   function jobEls(n) {
     return [].slice.call(document.querySelectorAll('[data-job="' + n + '"]'));
   }
-  function mark(n, going) {
+  function stats(n) {
+    return [].slice.call(document.querySelectorAll('.stat[data-tick="' + n + '"]'));
+  }
+  // `look` is what the lozenge should say now, or null to put back what the
+  // page was drawn with. Only a job that closed is struck through and folded
+  // off the list; one handed to somebody is still open, just not his.
+  function mark(n, closing, look) {
     jobEls(n).forEach(function (el) {
-      el.classList.toggle("going", going);
-      // A row on the list folds away once the strike has drawn, the way a
-      // finished task leaves Todoist. The card below keeps it, struck through.
-      if (!going) el.classList.remove("gone");
+      el.classList.toggle("going", closing);
+      if (!closing) el.classList.remove("gone");
       else if (el.classList.contains("tr")) {
         setTimeout(function () { if (el.classList.contains("going")) el.classList.add("gone"); }, 700);
       }
     });
-    [].forEach.call(document.querySelectorAll('.ck[data-tick="' + n + '"]'), function (c) {
-      c.classList.toggle("on", going);
-      c.setAttribute("aria-busy", going ? "true" : "false");
+    stats(n).forEach(function (c) {
+      var t = c.querySelector(".stat-t");
+      if (!c.dataset.was) c.dataset.was = t.textContent + "|" + (TONE.filter(function (k) { return c.classList.contains(k); })[0] || "grey");
+      var was = c.dataset.was.split("|");
+      var now = look || was;
+      t.textContent = now[0];
+      TONE.forEach(function (k) { c.classList.toggle(k, k === now[1]); });
+      c.classList.toggle("on", !!look);
     });
+  }
+  function busy(n, on) {
+    stats(n).forEach(function (c) { c.setAttribute("aria-busy", on ? "true" : "false"); });
   }
 
   function closeToast() {
@@ -759,37 +790,47 @@
     if (!last) return;
     var was = last;
     last = null;
-    mark(was.n, !was.going);
+    mark(was.n, false, null);
+    busy(was.n, true);
     toast("Putting " + was.n + " back…");
     tick(was.n, "undo", "", was.before).then(function () {
-      mark(was.n, false);
+      busy(was.n, false);
       toast(was.n + " is back where it was");
     }).catch(function (err) {
-      mark(was.n, was.going);
+      busy(was.n, false);
+      mark(was.n, was.closing, was.look);
       toast("Could not undo " + was.n + ": " + err.message, null, true);
     });
   }
 
   function move(n, verb, who) {
     closeMenu();
-    var going = verb !== "mine";
-    mark(n, going);
+    var closing = verb === "done" || verb === "sent" || verb === "dropped";
+    var look = verb === "waiting" ? ["Waiting on " + who, "blue"] : AFTER[verb];
+    mark(n, closing, look);
+    busy(n, true);
     tick(n, verb, who).then(function (j) {
-      last = { n: n, before: j.before, going: going };
+      busy(n, false);
+      last = { n: n, before: j.before, closing: closing, look: look };
       toast(j.said || n + " moved", undoLast);
     }).catch(function (err) {
-      mark(n, false);
+      busy(n, false);
+      mark(n, false, null);
       toast("Could not move " + n + ": " + err.message, null, true);
     });
   }
 
   function closeMenu() {
-    if (menu) menu.remove();
+    if (!menu) return;
+    var from = menu._from;
+    menu.remove();
     menu = null;
+    if (from) from.setAttribute("aria-expanded", "false");
   }
   function option(label, small, fn) {
     var b = document.createElement("button");
     b.type = "button";
+    b.setAttribute("role", "menuitem");
     b.textContent = label;
     if (small) {
       var s = document.createElement("small");
@@ -799,68 +840,115 @@
     b.addEventListener("click", function (e) { e.stopPropagation(); fn(); });
     return b;
   }
+  // A name to hand the job to. Sent and waiting on somebody is the move a
+  // draft usually ends in, so on a job with one it comes first.
+  function whoRow(n, placeholder, button, value) {
+    var row = document.createElement("form");
+    row.className = "who";
+    var input = document.createElement("input");
+    input.value = value || "";
+    input.placeholder = placeholder;
+    input.setAttribute("aria-label", placeholder);
+    var go = document.createElement("button");
+    go.type = "submit";
+    go.textContent = button;
+    row.appendChild(input);
+    row.appendChild(go);
+    row.addEventListener("submit", function (e) {
+      e.preventDefault();
+      if (input.value.trim()) move(n, "waiting", input.value.trim());
+      else input.focus();
+    });
+    return row;
+  }
+  function heading(text) {
+    var h = document.createElement("div");
+    h.className = "stat-h";
+    h.textContent = text;
+    return h;
+  }
   function openMenu(c) {
     closeMenu();
+    if (c.getAttribute("aria-busy") === "true") return;
     var n = c.dataset.tick, st = c.dataset.state, who = c.dataset.who || "";
+    var draft = c.hasAttribute("data-draft");
     menu = document.createElement("div");
-    menu.className = "ck-menu";
+    menu.className = "stat-menu";
     menu.setAttribute("role", "menu");
-    if (c.hasAttribute("data-draft") && st !== "waiting") {
-      var row = document.createElement("form");
-      row.className = "who";
-      var input = document.createElement("input");
-      input.value = who;
-      input.placeholder = "Sent, waiting on who?";
-      input.setAttribute("aria-label", "Sent, waiting on who");
-      var go = document.createElement("button");
-      go.type = "submit";
-      go.textContent = "Sent";
-      row.appendChild(input);
-      row.appendChild(go);
-      row.addEventListener("submit", function (e) {
-        e.preventDefault();
-        if (input.value.trim()) move(n, "waiting", input.value.trim());
-        else input.focus();
-      });
-      menu.appendChild(row);
-    }
-    if (st === "waiting") {
+    menu._from = c;
+    c.setAttribute("aria-expanded", "true");
+    var title = c.dataset.title || "";
+    menu.appendChild(heading(n + (title ? "  " + title : "")));
+    if (st === "done" || st === "sent" || st === "dropped") {
+      menu.appendChild(option("Open it again", "back with you", function () { move(n, "mine"); }));
+    } else if (st === "waiting") {
       menu.appendChild(option("They replied", "it is yours again", function () { move(n, "mine"); }));
+      menu.appendChild(option("Done", "nothing more comes back", function () { move(n, "done"); }));
+      menu.appendChild(heading("Handed on"));
+      menu.appendChild(whoRow(n, "Now with who?", "Move", ""));
+      menu.appendChild(option("Dropped", "no longer needed", function () { move(n, "dropped"); }));
+    } else {
+      if (draft) {
+        menu.appendChild(heading("Sent it?"));
+        menu.appendChild(whoRow(n, "Waiting on who?", "Sent", who));
+      }
+      if (st === "hold") {
+        menu.appendChild(option("Start it now", "the hold is over, it is yours", function () { move(n, "mine"); }));
+      }
+      menu.appendChild(option("Done", "nothing comes back", function () { move(n, "done"); }));
+      if (!draft) {
+        var hand = option("With someone else", "a reply or their part is owed", function () {
+          var row = whoRow(n, "Waiting on who?", "Move", who);
+          hand.replaceWith(row);
+          row.querySelector("input").focus();
+        });
+        menu.appendChild(hand);
+      }
+      menu.appendChild(option("Dropped", "no longer needed", function () { move(n, "dropped"); }));
     }
-    menu.appendChild(option("Done", "nothing comes back", function () { move(n, "done"); }));
-    menu.appendChild(option("Dropped", "no longer needed", function () { move(n, "dropped"); }));
     document.body.appendChild(menu);
     var r = c.getBoundingClientRect();
-    var left = Math.min(r.left + window.scrollX, window.scrollX + document.documentElement.clientWidth - menu.offsetWidth - 12);
+    var left = Math.min(r.right + window.scrollX - menu.offsetWidth, window.scrollX + document.documentElement.clientWidth - menu.offsetWidth - 12);
     menu.style.left = Math.max(8, left) + "px";
-    menu.style.top = (r.bottom + window.scrollY + 6) + "px";
-    var first = menu.querySelector("input,button");
+    var below = r.bottom + 6 + menu.offsetHeight < window.innerHeight;
+    menu.style.top = (below ? r.bottom + window.scrollY + 6 : r.top + window.scrollY - menu.offsetHeight - 6) + "px";
+    var first = menu.querySelector("input,[role=menuitem]");
     if (first) first.focus();
   }
 
-  function press(c) {
-    if (c.getAttribute("aria-busy") === "true") return;
-    var n = c.dataset.tick, st = c.dataset.state;
-    if (st === "done" || st === "sent" || st === "dropped") return move(n, "mine");
-    if (c.hasAttribute("data-draft") || st === "waiting" || st === "hold") return openMenu(c);
-    move(n, "done");
-  }
+  // Up and down walk the menu, the way every menu does, and Escape leaves it
+  // from anywhere in it, the name box included.
+  document.addEventListener("keydown", function (e) {
+    if (menu && e.key === "Escape") {
+      var from = menu._from;
+      closeMenu();
+      if (from) from.focus();
+      e.preventDefault();
+      return;
+    }
+    if (!menu || (e.key !== "ArrowDown" && e.key !== "ArrowUp")) return;
+    var all = [].slice.call(menu.querySelectorAll("input,[role=menuitem]"));
+    var i = all.indexOf(document.activeElement);
+    var next = all[(i + (e.key === "ArrowDown" ? 1 : all.length - 1)) % all.length];
+    if (next) { next.focus(); e.preventDefault(); }
+  });
 
   // Capture, so the press never reaches the summary it sits in and opens the
   // card instead.
   document.addEventListener("click", function (e) {
-    var c = e.target.closest && e.target.closest(".ck");
+    var c = e.target.closest && e.target.closest(".stat");
     if (!c) {
-      if (menu && !(e.target.closest && e.target.closest(".ck-menu"))) closeMenu();
+      if (menu && !(e.target.closest && e.target.closest(".stat-menu"))) closeMenu();
       return;
     }
     e.preventDefault();
     e.stopPropagation();
-    press(c);
+    if (menu && menu._from === c) closeMenu();
+    else openMenu(c);
   }, true);
 
-  // j and k walk the list, x completes, Enter opens, u undoes. The list is the
-  // To do list on the desk; a row that is folded away is not in the walk.
+  // j and k walk the list, x opens its status, Enter opens the card, u undoes.
+  // The list is the To do list on the desk; a row folded away is not in the walk.
   var focusAt = -1;
   function walk() {
     var list = document.querySelector("#todo .track-list");
@@ -881,7 +969,6 @@
     var tag = (e.target.tagName || "").toLowerCase();
     if (tag === "input" || tag === "textarea" || e.target.isContentEditable) return;
     if (document.querySelector("dialog[open]")) return;
-    if (e.key === "Escape" && menu) { closeMenu(); return; }
     if (document.body.dataset.view === "standup") return;
     var rows = walk();
     var cur = document.querySelector("#todo .kfocus");
@@ -889,8 +976,8 @@
     if (e.key === "j") { focusRow(rows, at + 1); e.preventDefault(); }
     else if (e.key === "k") { focusRow(rows, at < 0 ? 0 : at - 1); e.preventDefault(); }
     else if ((e.key === "x" || e.key === "e") && cur) {
-      var c = cur.querySelector(".ck");
-      if (c) { press(c); e.preventDefault(); }
+      var c = cur.querySelector(".stat");
+      if (c) { openMenu(c); e.preventDefault(); }
     } else if ((e.key === "Enter" || e.key === "o") && cur) {
       var a = cur.querySelector("a.tr-title,a[href]");
       if (a) { a.click(); e.preventDefault(); }

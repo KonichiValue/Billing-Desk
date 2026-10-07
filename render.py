@@ -884,45 +884,37 @@ def section(
     return f'<section class="sub {role}">{head}{body}</section>'
 
 
-def priority(item: dict, st: dict, due_kind: str = "") -> str:
-    """Todoist's four colours, read off what the board already says.
+def status_button(item: dict, st: dict, label: str = "", tone: str = "") -> str:
+    """Where a job stands, as the thing you press to move it. Jira's lozenge.
 
-    p1 red is his and due today, or somebody else's with a chase that is due;
-    p2 orange is his this week; p3 blue is with somebody else; p4 grey is held
-    or only being watched. The colour is on the ring of the checkbox, so the
-    list reads by priority before a single word of it is read.
-    """
-    if st["closed"]:
-        return "done"
-    if st["state"] == "todo":
-        return {"today": "p1", "this-week": "p2"}.get(urgency_of(item), "p4")
-    if st["state"] == "waiting":
-        return "p1" if due_kind == "now" else "p3"
-    return "p4"
+    A job here has more than two states, and sending is not finishing, so a
+    checkbox that can only say done was the wrong shape: it closed jobs that
+    were owed a reply. This is the status itself, and pressing it lists the moves
+    open from where the job stands, each one a ./tick.py.
 
-
-def check_box(item: dict, st: dict, due_kind: str = "", queued: bool = False) -> str:
-    """The round checkbox in front of a job: press it and the job moves.
-
-    It carries what the page needs to decide whether one press is enough. A job
-    with a draft still to send, or one sitting with somebody, asks what happened
-    rather than closing, because "sent" usually means waiting on a reply and a
-    tick that closes it would hide the reply he is owed.
+    `label` and `tone` override what the job's state says, for a job queued
+    behind another, which is "With you" on the board and not startable.
     """
     n = esc(item.get("id", ""))
-    prio = "p4" if queued and not st["closed"] else priority(item, st, due_kind)
     draft = item.get("draft") or {}
     unsent = bool(draft) and not draft.get("sent") and not draft.get("posted")
-    who = (item.get("waits_on") or {}).get("who", "")
-    label = (f"Open job {n} again" if st["closed"] else f"Complete job {n}")
-    who_attr = f' data-who="{esc(who)}"' if who else ""
+    waits = item.get("waits_on") or {}
+    tone = tone if tone in TONES else st["tone"]
+    attrs = "".join(
+        f' data-{k}="{esc(v)}"'
+        for k, v in (("who", waits.get("who", "")), ("chase", waits.get("chase_on", "")))
+        if v
+    )
+    text = label or st["label"]
     return (
-        f'<button type="button" class="ck {prio}" data-tick="{n}" '
-        f'data-state="{esc(st["state"])}"{" data-draft" if unsent else ""}'
-        f'{who_attr} '
-        f'data-title="{esc(item.get("title", ""))}" aria-label="{label}" '
-        f'title="{label} (x)"><svg viewBox="0 0 16 16" aria-hidden="true">'
-        f'<path d="M4 8.4l2.6 2.6L12 5.6"/></svg></button>'
+        f'<button type="button" class="stat {esc(tone)}" data-tick="{n}" '
+        f'data-state="{esc(st["state"])}"{" data-draft" if unsent else ""}{attrs} '
+        f'data-title="{esc(item.get("title", ""))}" aria-haspopup="menu" '
+        f'aria-label="Job {n}: {esc(text)}. Change status" '
+        f'title="{esc(text)}. Press to change it (x)">'
+        f'<span class="stat-t">{esc(text)}</span>'
+        f'<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2.5 4l2.5 2.5L7.5 4"/></svg>'
+        f"</button>"
     )
 
 
@@ -1287,7 +1279,13 @@ def qa_thread(asks: list[dict]) -> str:
             foot=not mine,
         )
 
-    live = [bubble(a, i == len(roots) - 1) for i, a in enumerate(roots)]
+    # The newest stands open only on the day it was asked. A week-old answer
+    # held open was the tallest thing on the card, 2,000px on 7 Oct.
+    today = date.today().isoformat()
+    live = [
+        bubble(a, i == len(roots) - 1 and str(a.get("asked_at", ""))[:10] == today)
+        for i, a in enumerate(roots)
+    ]
     if len(live) > 3:
         older, recent = live[:-2], live[-2:]
         n = len(older)

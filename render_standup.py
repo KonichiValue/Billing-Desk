@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
+import render_milestone
 from render import (
     asset,
     ASKED,
@@ -710,6 +711,7 @@ def render(board: dict, desk_ids: dict[str, str], built: str, stale: bool) -> st
         }
         return f"""
   {render_huddle(board)}
+  {render_milestone.speaking(board)}
   {render_xws(board, empty_ids)}
   {banner}
   <div class="st-empty">
@@ -754,6 +756,7 @@ def render(board: dict, desk_ids: dict[str, str], built: str, stale: bool) -> st
   {prep_jump(tickets, ids, bool(also), bool(xws), bool(huddle))}
   {stale_note}
   {huddle}
+  {render_milestone.speaking(board)}
   {xws}
   <details class="nk" id="prep-need" data-remember="prep-need" open>
     <summary>
