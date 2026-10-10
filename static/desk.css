@@ -184,7 +184,7 @@ width:44px;text-align:right}
 .tr.shut{opacity:.62}
 
 /* The button that fetches the earlier days, and what it says if it cannot. */
-.ev-more{font:650 12px/1 inherit;cursor:pointer;color:var(--accent);
+.ev-more{font:650 12px/1 var(--font);cursor:pointer;color:var(--accent);
 background:var(--card);border:1px dashed var(--accent-line);border-radius:8px;
 padding:8px 12px;margin:0 0 10px;width:100%;
 transition:background-color var(--t-fast) var(--ease),
@@ -361,6 +361,66 @@ white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 background:var(--red-bg)}
 .wd-job.late .wd-n{background:var(--red)}
 .wd-job.late .wd-who{color:var(--red);font-weight:750}
+/* Meetings off the calendar. A room he speaks in stays the solid accent block;
+   every other meeting about this work is a quiet line under it, with Join while
+   it can be joined and Notes once Meet has attached them. Meetings that are not
+   about this work, or fall outside the working day, fold away under a count. */
+.wd-room{flex-wrap:nowrap}
+.wd-room-w{overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
+.wd-room.skipped{background:var(--hair);color:var(--soft);text-decoration:line-through}
+.wd-room .wm-go{flex:none;display:flex;gap:3px}
+.wd-room .wm-join,.wd-room .wm-notes{color:#fff;border-color:rgba(255,255,255,.55);
+background:rgba(255,255,255,.14)}
+.wd-meets{display:flex;flex-direction:column;gap:2px}
+.wm{display:flex;gap:5px;align-items:center;font-size:10.5px;line-height:1.35;
+padding:2px 4px 2px 6px;border-radius:5px;border-left:2px solid var(--line);
+background:var(--hair)}
+.wm.work{border-left-color:var(--accent-line)}
+.wm.tg{border-left-color:var(--accent)}
+.wm.tent .wm-w{font-style:italic}
+.wm.past{opacity:.66}
+.wm-t{flex:none;font-weight:750;color:var(--soft);font-variant-numeric:tabular-nums}
+.wm-w{flex:1;min-width:0;color:var(--ink);text-decoration:none;font-weight:600;
+white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wm-w:hover{text-decoration:underline}
+.wm-go{flex:none;display:flex;gap:3px}
+.wm-join,.wm-notes{font-size:9.5px;font-weight:750;text-decoration:none;
+border-radius:4px;padding:0 5px;line-height:15px;border:1px solid var(--accent-line);
+color:var(--accent-ink);background:var(--card)}
+.wm-notes{color:var(--soft);border-color:var(--line)}
+.wm-join:hover,.wm-notes:hover{border-color:var(--accent);color:var(--accent)}
+/* Now, and in the next ten minutes: the one meeting that matters this second. */
+.wm.soon,.wm.now{background:var(--accent-bg);box-shadow:inset 0 0 0 1px var(--accent-line)}
+.wm.now .wm-t,.wm.soon .wm-t{color:var(--accent)}
+.wm.now .wm-join,.wm.soon .wm-join,.wd-room.now .wm-join,.wd-room.soon .wm-join{
+background:var(--accent);border-color:var(--accent);color:#fff}
+.wd-room.now .wm-join,.wd-room.soon .wm-join{background:#fff;color:var(--accent)}
+.wm-more{font-size:10px}
+.wm-more>summary{cursor:pointer;color:var(--soft);font-weight:650;padding:1px 4px;
+list-style:none}
+.wm-more>summary::-webkit-details-marker{display:none}
+.wm-more>summary::before{content:"+ "}
+.wm-more[open]>summary::before{content:"\2212 "}
+.wm-more[open]{display:flex;flex-direction:column;gap:2px}
+.wm.side .wm-w{font-weight:500;color:var(--mut)}
+/* The calendar's own controls, at the end of the week's header. */
+.week-cal,.week-fold{font:inherit;font-size:11px;font-weight:700;border-radius:20px;
+padding:2px 9px;border:1px solid var(--line);background:var(--card);color:var(--soft);
+cursor:pointer}
+.week-cal:hover{border-color:var(--accent-line);color:var(--accent-ink)}
+.week-cal[aria-busy=true]{opacity:.6;cursor:progress}
+.week-fold{color:var(--accent-ink);background:var(--accent-bg);border-color:var(--accent-line)}
+.week-fold:hover{border-color:var(--accent)}
+.week-off{font-size:11px;color:var(--soft)}
+.week-h .week-cal{margin-left:auto}
+.week-ahead~.week-cal,.week-late~.week-cal{margin-left:0}
+/* The meeting that is on now, or about to be, in the header bar. */
+.meet-now{font-size:12px;font-weight:750;text-decoration:none;color:#fff;
+background:var(--accent);border-radius:8px;padding:5px 10px;white-space:nowrap;
+max-width:260px;overflow:hidden;text-overflow:ellipsis}
+.meet-now:hover{filter:brightness(1.08)}
+.meet-now.later{background:var(--card);color:var(--accent-ink);
+border:1px solid var(--accent-line)}
 .wd-rest{font-size:10.5px;font-weight:650;color:var(--soft);padding:2px 3px}
 .wd-none{color:#c3cad6;font-size:15px;margin-top:auto;text-align:center}
 @media (max-width:900px){
@@ -546,7 +606,7 @@ padding:6px 0 6px 16px;position:relative;border-top:1px solid var(--hair)}
 border-radius:50%;background:var(--green)}
 .pw-one summary{display:flex;gap:8px;align-items:baseline}
 .pw-one summary>span:not(.fold-hint):not(.pw-when){flex:1;min-width:0}
-.pw-one summary .fold-hint{flex:none;font-size:9.5px}
+.pw-one summary .fold-hint{flex:none;font-size:11px}
 .pw-one summary:hover{color:var(--green)}
 .pw-one details>p{margin:5px 0 2px;font-size:13px;color:var(--mut);line-height:1.5}
 .pw-when{flex:none;font-size:10.5px;font-weight:700;color:var(--soft);
@@ -719,7 +779,7 @@ letter-spacing:.07em;color:var(--plum-ink,#5b21b6)}
 white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .qa>details[open]>summary .qa-q{white-space:normal}
 .qa-when{flex:none;font-size:11px;font-weight:600;color:var(--soft)}
-.qa>details>summary .fold-hint{flex:none;font-size:9.5px}
+.qa>details>summary .fold-hint{flex:none;font-size:11px}
 /* His side of an exchange that has no answer yet, or never will: the question
    in full, because there is nothing under it to read instead. */
 .qa-me{display:flex;gap:9px;align-items:baseline;padding:9px 34px 9px 12px}
@@ -799,7 +859,7 @@ font-weight:650;color:var(--green);background:var(--green-bg);border:1px solid v
 /* Forget this one. Top right of its own bubble, quiet until the bubble is
    hovered, because it throws something away. */
 .qa-del{position:absolute;top:6px;right:7px;width:21px;height:21px;padding:0;
-font:600 15px/1 inherit;cursor:pointer;color:var(--soft);background:transparent;
+font:600 15px/1 var(--font);cursor:pointer;color:var(--soft);background:transparent;
 border:1px solid transparent;border-radius:6px;opacity:.3}
 .qa:hover .qa-del,.qa-del:focus{opacity:1}
 .qa-del:hover{color:var(--red);border-color:var(--red-line);background:var(--card)}
@@ -866,7 +926,7 @@ border-radius:10px;padding:12px 15px;margin-bottom:10px}
 
 /* Header actions. The one that matters in this view is the bright one. */
 .refresh{border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);
-color:#dce6f5;font:650 12px/1 inherit;padding:0 12px;border-radius:7px;
+color:#dce6f5;font:650 12px/1 var(--font);padding:0 12px;border-radius:7px;
 cursor:pointer}
 .refresh:hover{background:rgba(255,255,255,.16);color:#fff}
 body[data-view="desk"] #refresh,body[data-view="standup"] #prep{
@@ -915,7 +975,7 @@ align-items:center;flex-wrap:wrap;padding:12px 18px 14px}
 .nk>summary::-webkit-details-marker{display:none}
 .nk>summary::before{display:none}
 .nk[open]>summary{border-bottom:1px solid var(--line);background:var(--hair)}
-.nk-k{flex:none;font:750 9.5px/1 inherit;text-transform:uppercase;
+.nk-k{flex:none;font:750 9.5px/1 var(--font);text-transform:uppercase;
 letter-spacing:.09em;color:var(--accent);background:var(--accent-bg);
 border:1px solid var(--accent-line);padding:4px 7px;border-radius:5px}
 .nk.hot .nk-k{color:var(--red);background:var(--red-bg);border-color:var(--red-line)}
@@ -968,9 +1028,9 @@ border-color:rgba(255,255,255,.18);color:#b9c8e2;background:rgba(255,255,255,.07
 border-left:3px solid transparent}
 .br-n{flex:none;width:18px;height:18px;border-radius:50%;
 background:rgba(255,255,255,.13);color:#dbe5f5;display:grid;place-items:center;
-font:800 10px/1 inherit;align-self:center;font-variant-numeric:tabular-nums}
+font:800 10px/1 var(--font);align-self:center;font-variant-numeric:tabular-nums}
 /* What sort of line it is, said the way he would say it. */
-.br-k{flex:none;min-width:74px;font:750 9.5px/1.3 inherit;text-transform:uppercase;
+.br-k{flex:none;min-width:74px;font:750 9.5px/1.3 var(--font);text-transform:uppercase;
 letter-spacing:.06em;color:#9fb1cd;align-self:center}
 .br-w{flex:1;min-width:0;font-size:14px;line-height:1.5;color:#eef2f9}
 .br-at{flex:none;font-size:11.5px;font-weight:750;color:#f2cd9a;
@@ -1026,14 +1086,14 @@ letter-spacing:.06em;color:#93a5c3}
 @media (max-width:640px){.br-plan{margin-left:0}.br-l.more{padding-left:18px}}
 /* The numbers a line is about, so "start on 45" is one click from 45. */
 .br-jobs{display:inline-flex;gap:4px;margin-left:7px;vertical-align:1px}
-.br-job{font:800 10.5px/18px inherit;min-width:20px;text-align:center;
+.br-job{font:800 10.5px/18px var(--font);min-width:20px;text-align:center;
 padding:0 5px;border-radius:5px;text-decoration:none;color:#0e1118;
 background:#cfdcf2;font-variant-numeric:tabular-nums;
 transition:background-color var(--t-off) var(--ease-in),
 transform var(--t-off) var(--ease-in)}
 .br-job:hover{background:#fff;transform:translateY(-1px);
 transition-duration:var(--t-on)}
-.br-ref{display:inline-block;margin-left:7px;font:700 10.5px/18px inherit;
+.br-ref{display:inline-block;margin-left:7px;font:700 10.5px/18px var(--font);
 padding:0 7px;border-radius:5px;text-decoration:none;color:#cfe0fb;
 background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.14);
 vertical-align:1px;transition:background-color var(--t-off) var(--ease-in)}
@@ -1144,12 +1204,55 @@ letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 padding:7px 10px;border-radius:7px;cursor:pointer;color:var(--ink);font:inherit}
 .stat-menu button:hover,.stat-menu button:focus-visible{background:var(--hair);outline:none}
 .stat-menu button small{display:block;color:var(--soft);font-size:11.5px;margin-top:1px}
-.stat-menu .who{display:flex;gap:6px;padding:4px 6px 6px}
-.stat-menu .who input{flex:1;min-width:0;font:inherit;padding:6px 8px;
-border:1px solid var(--line);border-radius:7px;background:var(--card);color:var(--ink)}
-.stat-menu .who input:focus{outline:2px solid var(--accent-line);border-color:var(--accent)}
-.stat-menu .who button{width:auto;background:var(--accent);color:#fff;padding:6px 10px}
-.stat-menu .who button:hover,.stat-menu .who button:focus-visible{background:var(--accent-ink)}
+
+/* Picking who has it, the way Jira's assignee field does it: chips for who is
+   chosen, a search over everyone the board knows, the people on this ticket
+   first, and a typed name as the last resort rather than the only way. */
+.stat-menu{width:300px}
+.who-pick{padding:2px 4px 4px}
+.wp-field{display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:4px 5px;
+border:1px solid var(--line);border-radius:8px;background:var(--card);cursor:text}
+.wp-field:focus-within{outline:2px solid var(--accent-line);border-color:var(--accent)}
+.wp-field input{flex:1;min-width:90px;border:0;outline:0;background:none;color:var(--ink);
+font:inherit;padding:3px 2px}
+.wp-chip{display:inline-flex;align-items:center;gap:4px;padding:1px 2px 1px 1px;
+border-radius:999px;background:var(--hair);font-size:12px;font-weight:650;color:var(--ink)}
+.stat-menu .wp-chip button{width:auto;display:inline-grid;place-items:center;width:16px;height:16px;
+padding:0;border-radius:50%;font-size:12px;line-height:1;color:var(--soft)}
+.stat-menu .wp-chip button:hover{background:var(--line);color:var(--ink)}
+.wp-list{max-height:236px;overflow-y:auto;margin-top:4px;overscroll-behavior:contain}
+.wp-h{padding:7px 6px 3px;font-size:10.5px;font-weight:750;color:var(--soft);
+text-transform:uppercase;letter-spacing:.06em}
+.wp-row{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:7px;cursor:pointer}
+.wp-row:hover,.wp-row.on{background:var(--accent-bg)}
+.wp-row.picked{opacity:.55}
+.wp-t{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.25}
+.wp-t b{font-weight:600;font-size:13px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wp-t small{font-size:11px;color:var(--soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stat-menu .wp-add{width:22px;height:22px;flex:none;display:grid;place-items:center;padding:0;
+border-radius:50%;color:var(--soft);font-size:15px;line-height:1;opacity:0}
+.wp-row:hover .wp-add,.wp-row.on .wp-add{opacity:1}
+.stat-menu .wp-add:hover{background:var(--card);color:var(--accent-ink)}
+.wp-foot{display:flex;align-items:center;gap:8px;margin-top:5px}
+.wp-hint{flex:1;min-width:0;font-size:11px;color:var(--soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stat-menu .wp-go{width:auto;max-width:60%;background:var(--accent);color:#fff;padding:6px 11px;
+font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stat-menu .wp-go:hover,.stat-menu .wp-go:focus-visible{background:var(--accent-ink)}
+.stat-menu .wp-go:disabled{background:var(--line);color:var(--soft);cursor:default}
+
+/* A person as a circle with their initials, coloured by who they are so the
+   same person is the same colour everywhere. A team is a rounded square. */
+.av{flex:none;display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;
+font-size:9px;font-weight:750;letter-spacing:.02em;color:#fff;
+background:hsl(var(--h,220) 52% 46%);box-shadow:0 0 0 1.5px var(--card)}
+.av.team{border-radius:6px;background:hsl(var(--h,220) 22% 50%)}
+.av.more{background:var(--soft);font-size:8.5px}
+.wp-row .av,.wp-chip .av{width:22px;height:22px;font-size:9.5px}
+.wp-chip .av{width:18px;height:18px;font-size:8.5px}
+.avs{display:inline-flex;flex:none;margin-right:1px}
+.avs .av{width:17px;height:17px;font-size:8px}
+.avs .av+.av{margin-left:-5px}
+.stat .avs{margin-left:-3px}
 
 /* The undo, bottom left, the way every list app that respects you does it. */
 .toast{position:fixed;left:22px;bottom:22px;z-index:70;display:flex;gap:14px;
@@ -1176,16 +1279,21 @@ font-variant-numeric:tabular-nums;font-size:11.5px}
 .milestones{display:grid;gap:12px;margin:0 0 16px}
 .ms{background:var(--card);border:1px solid var(--plum-line);border-left:4px solid var(--plum);
 border-radius:13px;padding:0 18px 14px;box-shadow:var(--shadow)}
-.ms-head{list-style:none;display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px;
+.ms-head{list-style:none;display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;
 padding:14px 0 12px;cursor:pointer}
 .ms[open]>.ms-head{border-bottom:1px dashed var(--line);margin-bottom:4px}
 .ms-head::-webkit-details-marker{display:none}
-.ms-kind{font:750 10.5px/1 inherit;letter-spacing:.08em;text-transform:uppercase;
-color:var(--plum-ink);background:var(--plum-bg);border:1px solid var(--plum-line);
-border-radius:5px;padding:4px 7px}
+/* The kind tag is a chip, not a stamp: sentence case with a dot in the
+   milestone's colour, so it labels the card without shouting over the name. */
+.ms-kind{display:inline-flex;align-items:center;gap:6px;align-self:center;
+font:650 12px/1 var(--font);color:var(--plum-ink);background:var(--plum-bg);
+border:1px solid var(--plum-line);border-radius:999px;padding:5px 10px 5px 8px}
+.ms-kind:before{content:"";width:7px;height:7px;border-radius:50%;background:var(--plum)}
 .ms-name{font-size:17px;font-weight:750;color:var(--ink)}
 .ms-ja{margin-left:8px;font-size:13px;font-weight:600;color:var(--mut)}
-.ms-pill{font:700 11.5px/1 inherit;border-radius:99px;padding:4px 9px;border:1px solid}
+.ms-pill{display:inline-flex;align-items:center;gap:6px;font:650 12px/1 var(--font);
+border-radius:999px;padding:5px 10px 5px 8px;border:1px solid}
+.ms-pill:before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
 .ms-pill.green{color:var(--green);background:var(--green-bg);border-color:var(--green-line)}
 .ms-pill.amber{color:var(--amber-ink);background:var(--amber-bg);border-color:var(--amber-line)}
 .ms-pill.red{color:var(--red);background:var(--red-bg);border-color:var(--red-line)}
@@ -1202,12 +1310,18 @@ transition:width var(--t-slow,.4s) var(--ease,ease)}
 @media (max-width:820px){.ms-grid{grid-template-columns:1fr}}
 .ms h4{margin:0 0 8px;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)}
 .ms-phases{list-style:none;margin:0;padding:0;position:relative}
-.ms-phases::before{content:"";position:absolute;left:10px;top:8px;bottom:8px;width:2px;background:var(--line)}
-.ms-ph{position:relative;display:flex;gap:10px;padding:0 0 10px}
-.ms-dot{flex:none;z-index:1;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;
-font:700 11px/1 inherit;background:var(--card);border:2px solid var(--line);color:var(--mut)}
+/* The rail runs through the centre of every dot: left is half the dot's width
+   less half the rail's, so they stay joined whatever the dot size. */
+.ms-phases::before{content:"";position:absolute;left:12px;top:12px;bottom:18px;width:2px;
+border-radius:2px;background:var(--line)}
+.ms-ph{position:relative;display:flex;align-items:flex-start;gap:12px;padding:0 0 12px}
+.ms-dot{flex:none;z-index:1;width:26px;height:26px;box-sizing:border-box;border-radius:50%;
+display:inline-flex;align-items:center;justify-content:center;
+font:700 12px/1 var(--font);font-variant-numeric:tabular-nums;
+background:var(--card);border:2px solid var(--line);color:var(--mut)}
+.ms-body{padding-top:3px}
 .ms-ph.done .ms-dot{background:var(--plum);border-color:var(--plum);color:#fff}
-.ms-ph.now .ms-dot{border-color:var(--plum);color:var(--plum-ink);box-shadow:0 0 0 4px var(--plum-bg)}
+.ms-ph.now .ms-dot{border-color:var(--plum);color:var(--plum-ink);background:var(--plum-bg);box-shadow:0 0 0 4px var(--plum-bg)}
 .ms-ph.blocked .ms-dot{border-color:var(--red);color:var(--red)}
 .ms-body{display:grid;gap:2px;min-width:0}
 .ms-what{font-size:13.5px;font-weight:650;color:var(--ink)}
@@ -1217,11 +1331,13 @@ font:700 11px/1 inherit;background:var(--card);border:2px solid var(--line);colo
 .ms-ph.now .ms-st{color:var(--plum-ink)}
 .ms-ph.blocked .ms-st{color:var(--red)}
 .ms-note{font-size:12.5px;color:var(--soft)}
-.ms-num{font:700 11px/1 inherit;color:var(--accent-ink);background:var(--accent-bg);
-border:1px solid var(--accent-line);border-radius:5px;padding:2px 5px}
+.ms-num{display:inline-flex;align-items:center;justify-content:center;min-width:24px;
+box-sizing:border-box;font:700 11.5px/1 var(--font);font-variant-numeric:tabular-nums;
+color:var(--accent-ink);background:var(--accent-bg);border:1px solid var(--accent-line);
+border-radius:999px;padding:3px 7px}
 .ms-tks,.ms-jobs{list-style:none;margin:0 0 12px;padding:0;display:grid;gap:1px;
 background:var(--line);border:1px solid var(--line);border-radius:9px;overflow:hidden}
-.ms-tk,.ms-job{display:flex;align-items:baseline;gap:8px;padding:7px 10px;background:var(--card);font-size:13px}
+.ms-tk,.ms-job{display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--card);font-size:13px}
 .ms-tk-ref{font-weight:700;color:var(--accent-ink);white-space:nowrap}
 .ms-tk.follow .ms-tk-ref{color:var(--soft)}
 .ms-tk-t{flex:1;min-width:0;color:var(--ink)}
@@ -1238,3 +1354,156 @@ border-radius:10px;background:var(--card);font-size:13.5px}
 .ms-spk .ms-due{margin-left:6px}
 .ms-now{margin-left:6px;font-size:12.5px;color:var(--plum-ink)}
 .ms-say{margin:6px 0 0;font-size:15px}
+
+/* Which model wrote an answer, and how long it took. Under the answer, small,
+   because it is what he checks when an answer is thin rather than what he
+   reads first. */
+.qa-by{display:flex;gap:5px;align-items:center;margin:9px 13px 0;font-size:11px;
+font-weight:650;color:var(--soft);font-variant-numeric:tabular-nums}
+.qa-by .spark{width:10px;height:10px;fill:var(--plum);opacity:.6}
+.qa-model{font-size:11px;font-weight:650;color:var(--plum-ink);padding:1px 7px;
+border-radius:999px;background:var(--card);border:1px solid var(--plum-line)}
+
+/* The model picker. A pill, like Claude Desktop's, with the native select
+   inside it so the keyboard and the OS menu come for free. */
+.ask-model{position:relative;display:inline-flex;align-items:center;gap:5px;
+height:24px;padding:0 6px 0 9px;border-radius:999px;border:1px solid var(--plum-line);
+background:var(--plum-bg);color:var(--plum-ink);cursor:pointer;
+transition:border-color var(--t-fast) var(--ease)}
+.ask-model:hover,.ask-model:focus-within{border-color:var(--plum)}
+.ask-model .spark{width:11px;height:11px;fill:currentColor;flex:none}
+.ask-model select{appearance:none;-webkit-appearance:none;border:0;background:transparent;
+font:650 11.5px/1 var(--font);color:inherit;padding:0 14px 0 0;cursor:pointer;outline:0;
+background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),
+linear-gradient(135deg,currentColor 50%,transparent 50%);
+background-position:calc(100% - 6px) 52%,calc(100% - 2px) 52%;
+background-size:4px 4px;background-repeat:no-repeat}
+.ask-go .ask-chat{font:inherit;cursor:pointer;padding:3px 9px;font-size:11.5px;
+border-radius:7px;border:1px solid transparent;background:transparent;color:var(--plum-ink);
+font-weight:650}
+.ask-go .ask-chat:hover{border-color:var(--plum-line);background:var(--card)}
+
+/* The header's way into the panel. */
+.toggle.chat-go{display:inline-flex;align-items:center;gap:5px;color:#e9ddff;
+border-color:rgba(177,145,245,.45);background:rgba(124,58,237,.22)}
+.toggle.chat-go .spark{width:12px;height:12px;fill:currentColor}
+.toggle.chat-go:hover{background:rgba(124,58,237,.38);color:#fff}
+body:has(#chat:not([hidden])) .toggle.chat-go{background:#7c3aed;color:#fff;border-color:#7c3aed}
+
+/* The side panel. A tile down the right of the window, the full height under
+   the header, the way Glean and Notion put a long conversation beside the page
+   rather than on it. The page narrows to make room on a wide screen and is
+   covered on a narrow one, so nothing he was reading moves under it. */
+.chat{position:fixed;z-index:40;top:var(--chat-top,46px);right:0;bottom:0;
+width:min(460px,100vw);display:flex;flex-direction:column;
+background:var(--page);border-left:1px solid var(--line);
+box-shadow:-18px 0 40px -24px rgba(15,23,42,.35);
+animation:chat-in var(--t-slow) var(--ease)}
+@keyframes chat-in{from{transform:translateX(24px);opacity:0}to{transform:none;opacity:1}}
+@media (min-width:1300px){
+  body:has(#chat:not([hidden])) .wrap{margin-right:480px;margin-left:max(20px,calc((100vw - 460px - 920px) / 2))}
+}
+.chat-head{flex:none;display:flex;align-items:center;gap:8px;padding:10px 12px 10px 16px;
+border-bottom:1px solid var(--line);background:var(--card)}
+.chat-t{display:inline-flex;align-items:center;gap:6px;font-weight:750;font-size:14px;
+color:var(--plum-ink)}
+.chat-t .spark{width:14px;height:14px;fill:var(--plum)}
+.chat-pick{flex:1;min-width:0}
+.chat-pick select{width:100%;font:600 12.5px/1.2 var(--font);color:var(--ink);
+padding:5px 8px;border-radius:8px;border:1px solid var(--line);background:var(--card);
+text-overflow:ellipsis}
+.chat-pick select:focus{outline:2px solid var(--plum-line);border-color:var(--plum)}
+.chat-new,.chat-x{flex:none;font:inherit;cursor:pointer;border-radius:8px;
+border:1px solid var(--line);background:var(--card);color:var(--mut);
+font-size:12px;font-weight:650;padding:5px 9px}
+.chat-new:hover{border-color:var(--plum);color:var(--plum-ink)}
+.chat-x{width:28px;padding:5px 0;font-size:16px;line-height:1}
+.chat-x:hover{border-color:var(--soft);color:var(--ink)}
+.chat-body.ask{flex:1;min-height:0;overflow-y:auto;margin:0;padding:14px 14px 4px;
+border-top:0;overscroll-behavior:contain}
+.chat-empty{margin:30px 10px;color:var(--soft);font-size:13px;line-height:1.55;text-align:center}
+.chat-box{flex:none;padding:10px 12px 12px;border-top:1px solid var(--line);
+background:var(--card)}
+.chat-box .ask-go{margin-top:6px}
+.chat-follow{font-size:11.5px;color:var(--soft);margin:0 2px 6px;white-space:nowrap;
+overflow:hidden;text-overflow:ellipsis}
+
+/* In the panel a conversation reads like a chat: his words a bubble on the
+   right, the answer full width beneath it, and nothing folded. */
+.chat .qa-list{margin:0}
+.chat .qa{border:0;background:transparent;margin:0 0 16px}
+.chat .qa>.qa-me{justify-content:flex-end;flex-wrap:wrap;padding:0 0 0 48px;gap:4px 8px}
+.chat .qa>.qa-me .qa-k{display:none}
+.chat .qa>.qa-me .qa-q{flex:0 1 auto;order:2;padding:8px 12px;border-radius:14px 14px 4px 14px;
+background:var(--plum);color:#fff;font-weight:550;font-size:13.5px;line-height:1.5;
+white-space:pre-wrap}
+.chat .qa>.qa-me .qa-when{order:1;flex:1 1 100%;text-align:right;font-size:10.5px;padding-right:26px}
+/* Deleting one exchange sits on its time line, where it is found by looking
+   for it rather than by hovering over the answer and hoping. */
+.chat .qa.chat-qa .qa-del{top:-4px;right:0;opacity:.45}
+.chat .qa:hover .qa-del,.chat .qa .qa-del:focus{opacity:1}
+.chat-a{margin-top:8px;padding:12px 14px 12px;border:1px solid var(--plum-line);
+border-radius:4px 14px 14px 14px;background:var(--plum-bg)}
+.chat-a .qa-a{padding:0;color:var(--ink)}
+.chat-a .qa-by{margin:10px 0 0}
+.chat .qa.running,.chat .qa.failed,.chat .qa.cancelled{border:1px solid var(--plum-line);
+border-radius:12px;background:var(--plum-bg)}
+.chat .qa.running>.qa-me,.chat .qa.failed>.qa-me,.chat .qa.cancelled>.qa-me{padding:9px 34px 9px 12px}
+.chat .qa.running>.qa-me .qa-q,.chat .qa.failed>.qa-me .qa-q,.chat .qa.cancelled>.qa-me .qa-q{
+background:transparent;color:var(--ink);padding:0;border-radius:0}
+.chat .qa.failed{border-color:var(--amber-line);background:var(--amber-bg)}
+.chat .qa.running{border-color:transparent}
+.chat .qa-acts{margin:10px 0 0}
+@media (max-width:640px){.chat{width:100vw}}
+@media (prefers-reduced-motion:reduce){.chat{animation:none}}
+
+/* What the panel is about: the job's number, its ticket, its title and where it
+   stands, under the header and always in view, so an answer is never read
+   without knowing which job it was about. */
+.chat-about{flex:none;display:flex;align-items:center;gap:7px;padding:8px 14px;
+border-bottom:1px solid var(--line);background:var(--card);font-size:12px;min-width:0}
+.chat-num{flex:none;display:inline-grid;place-items:center;min-width:22px;height:22px;
+padding:0 6px;border-radius:999px;background:var(--ink);color:var(--card);
+font-weight:750;font-size:11.5px;font-variant-numeric:tabular-nums}
+.chat-tag{flex:none;padding:2px 7px;border-radius:6px;background:var(--hair);
+color:var(--mut);font-weight:650;font-size:11.5px;max-width:9em;overflow:hidden;
+text-overflow:ellipsis;white-space:nowrap}
+.chat-title{flex:1;min-width:0;font-weight:600;color:var(--ink);overflow:hidden;
+text-overflow:ellipsis;white-space:nowrap}
+.chat-state{flex:none;max-width:11em;padding:2px 8px;border-radius:999px;font-size:11px;
+font-weight:650;border:1px solid var(--line);color:var(--mut);background:var(--hair);
+overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-state.red{color:var(--red);background:var(--red-bg);border-color:var(--red-line)}
+.chat-state.amber{color:var(--amber);background:var(--amber-bg);border-color:var(--amber-line)}
+.chat-state.blue{color:var(--blue);background:var(--blue-bg);border-color:var(--blue-line)}
+.chat-state.green{color:var(--green);background:var(--green-bg);border-color:var(--green-line)}
+.chat-goto{flex:none;font-weight:650;font-size:11.5px;color:var(--plum-ink);text-decoration:none}
+.chat-goto:hover{text-decoration:underline}
+
+/* Clear, behind a ... so it is one press from the header and never pressed by
+   accident on the way to New topic. */
+.chat-clear{position:relative;flex:none}
+.chat-more{font:inherit;cursor:pointer;border-radius:8px;border:1px solid var(--line);
+background:var(--card);color:var(--mut);font-size:13px;font-weight:800;line-height:1;
+padding:6px 8px;letter-spacing:-1px}
+.chat-more:hover,.chat-more[aria-expanded="true"]{border-color:var(--soft);color:var(--ink)}
+.chat-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:5;min-width:210px;
+display:flex;flex-direction:column;padding:5px;border-radius:10px;background:var(--card);
+border:1px solid var(--line);box-shadow:0 12px 30px -10px rgba(15,23,42,.3)}
+.chat-menu[hidden]{display:none}
+.chat-menu button{font:inherit;font-size:12.5px;text-align:left;cursor:pointer;
+border:0;background:none;color:var(--ink);padding:7px 10px;border-radius:7px}
+.chat-menu button:hover,.chat-menu button:focus-visible{background:var(--hair);outline:none}
+.chat-menu button[data-chat-clear="all"]{color:var(--red)}
+
+/* The week's arrows, first in its header the way every calendar puts them, and
+   a way home whenever the strip is not showing this week. */
+.week-flip{display:inline-flex;align-items:center;gap:4px;align-self:center}
+.week-flip button{font:inherit;cursor:pointer;display:inline-grid;place-items:center;
+min-width:24px;height:24px;padding:0 6px;border-radius:999px;border:1px solid var(--line);
+background:var(--card);color:var(--mut);font-size:15px;font-weight:700;line-height:1}
+.week-flip button:hover,.week-flip button:focus-visible{border-color:var(--accent);color:var(--accent-ink);outline:none}
+.week-flip .week-now{font-size:11px;font-weight:700;padding:0 9px;color:var(--accent-ink);
+border-color:var(--accent-line);background:var(--accent-bg,var(--card))}
+.week.week-away .week-h h2{color:var(--accent-ink)}
+.week.week-loading .week-days{opacity:.5;transition:opacity var(--t-fast,.12s)}

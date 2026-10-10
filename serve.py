@@ -39,6 +39,7 @@ from urllib.parse import unquote
 
 import agent
 import board
+import calendar_sync
 import keep
 import render
 import render_desk
@@ -705,6 +706,46 @@ def run_check() -> None:
         )
 
 
+# The calendar read, for the week strip. Its own state for the same reason as
+# `health`: reading the calendar is not a sweep, and the Refresh button stays
+# live while it runs.
+cal: dict = {"state": "idle", "said": ""}
+cal_lock = threading.Lock()
+
+
+def read_calendar() -> None:
+    """One calendar read, its outcome kept where /api/status can report it."""
+    with cal_lock:
+        if cal["state"] == "running":
+            return
+        cal.update(state="running", said="Reading the calendar")
+    try:
+        got = calendar_sync.fetch()
+    except Exception as exc:  # noqa: BLE001  (a thread that raises says nothing)
+        got = {"error": str(exc)}
+    with cal_lock:
+        if got.get("error"):
+            cal.update(state="failed", said=str(got["error"])[:200])
+        else:
+            cal.update(state="done", said=f"{got['events']} meetings")
+
+
+def calendar_loop() -> None:
+    """Read the calendar when it is due: hourly, and just after a work meeting.
+
+    Never dies: a lapsed Google grant or a locked credential is one failed read,
+    reported on the page, and the next due read tries again.
+    """
+    time.sleep(20)
+    while True:
+        try:
+            if calendar_sync.due():
+                read_calendar()
+        except Exception:  # noqa: BLE001
+            pass
+        time.sleep(60)
+
+
 def connect_one(kind: agent.Kind, args: list[str], label: str, done) -> bool:
     """Run one auth command, show the link it prints, wait for it to land.
 
@@ -874,6 +915,11 @@ def ask_model() -> str:
     return agent.model_for("ask")
 
 
+# What the picker may send. Anything else is ignored rather than passed to the
+# CLI, so a stale page or a typed request can never name a model nobody chose.
+ASK_MODEL_IDS = {m for m, _, _ in agent.ASK_MODELS}
+
+
 def load_asks() -> list[dict]:
     """Every question asked from a card, and what came back.
 
@@ -921,6 +967,29 @@ def forget_ask(ident: str) -> int:
                 break
             doomed |= more
         left = [r for r in rows if r.get("id") not in doomed]
+        if len(left) == len(rows):
+            return 0
+        ASKS.parent.mkdir(exist_ok=True)
+        ASKS.write_text(
+            json.dumps({"asks": left}, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        return len(rows) - len(left)
+
+
+def clear_asks(ref: str = "") -> int:
+    """Throw away one conversation, or every one when `ref` is empty.
+
+    The panel's Clear. A question still queued or running stays, because its
+    answer is on its way back to that row and would only land as an orphan.
+    """
+    with asks_lock:
+        rows = load_asks()
+        left = [
+            r for r in rows
+            if (ref and r.get("ref") != ref)
+            or r.get("state") in ("queued", "running")
+        ]
         if len(left) == len(rows):
             return 0
         ASKS.parent.mkdir(exist_ok=True)
@@ -1178,6 +1247,13 @@ def chain_to(parent: str) -> list[dict]:
     return list(reversed(chain))
 
 
+# How much of a conversation travels with a follow-up. The side panel makes
+# twenty-exchange conversations normal, and every earlier answer whole on every
+# question is a long prompt for "and the second one?". The newest few are what
+# "that" can mean; the rest are named as being there.
+FOLLOW_KEEP = 6
+
+
 def followed(chain: list[dict]) -> list[str]:
     if not chain:
         return []
@@ -1186,6 +1262,10 @@ def followed(chain: list[dict]) -> list[str]:
         "He is following up on this, and the last exchange is the one he means.",
         "Oldest first:",
     ]
+    if len(chain) > FOLLOW_KEEP:
+        lines.append(f"  ({len(chain) - FOLLOW_KEEP} earlier exchanges in this "
+                     "conversation are left out; they are in state/asks.json.)")
+        chain = chain[-FOLLOW_KEEP:]
     for r in chain:
         lines += [f"  Q: {r.get('question', '')}", f"  A: {r.get('answer', '')}"]
     return lines
@@ -1353,7 +1433,8 @@ def ask_context(ref: str, question: str, parent: str = "") -> str:
     return "\n".join(lines)
 
 
-def run_ask(ask_id: str, ref: str, question: str, parent: str = "") -> None:
+def run_ask(ask_id: str, ref: str, question: str, parent: str = "",
+            chosen: str = "") -> None:
     """One question, answered against the board and pinned back onto the card."""
     global asks_running
     # The row already exists: the request handler wrote it as `queued` so the card
@@ -1394,7 +1475,10 @@ def run_ask(ask_id: str, ref: str, question: str, parent: str = "") -> None:
 
     which = ref.replace("item:", "job ").replace("ticket:", "")
     ask_job("running", f"Thinking about {which}")
-    model = ask_model()
+    # The model he picked in the composer, when it is one this desk offers.
+    model = chosen if chosen in ASK_MODEL_IDS else ask_model()
+    row["model"] = model
+    save_ask(row)
     kind = agent.pick()
     if kind is None:
         row.update(state="failed", answer="No agent is installed to answer with.")
@@ -1516,6 +1600,12 @@ def run_agent(kind: str) -> None:
         return
 
     left, message = blockers()
+    if left and set(left) <= set(agent.NEEDED_MCPS) | {"tools"}:
+        # A lapsed grant is the one blocker this can walk him through, so it
+        # does, rather than stopping on a message telling him to press Log in.
+        # start_login shows each browser link on the page and waits for it.
+        start_login()
+        left, message = blockers()
     if left:
         set_job("needs_login", f"{message} Press Log in and approve each one.")
         return
@@ -1572,6 +1662,16 @@ def run_agent(kind: str) -> None:
             # drops can still exit nought having read nothing, and reporting that
             # as "Refreshed" is the worst of the outcomes: he walks into the room
             # on a board that nobody swept.
+            # The run found a connection dead mid-sweep and stopped, as
+            # prompt-refresh.md tells it to. Its grants were fine at preflight,
+            # so this is a lapse since: start the reconnect rather than calling
+            # a one-line stop "Refreshed".
+            if ran.code == 0 and AUTH_STOP.search(ran.text) and len(ran.text) < 400:
+                start_login()
+                if not blockers()[0]:
+                    set_job("failed", f"{ran.text.strip()} Reconnected: press "
+                                      f"{'Refresh' if kind == 'refresh' else 'Write prep'} again.")
+                return
             if ran.code == 0 and ran.text:
                 # The run writes the board and nothing else; desk.md, which a
                 # chat reads, is redrawn here so a run never spends a turn on it.
@@ -1602,6 +1702,14 @@ def run_agent(kind: str) -> None:
     finally:
         clear_live("sweep")
         LOCK.unlink(missing_ok=True)
+
+
+# How a run says it stopped on a dead connection, per "Stop rather than improvise".
+AUTH_STOP = re.compile(
+    r"\b(asana|slack)\b.{0,80}\b(missing|disconnected|not connected|authenticat|authori[sz]|"
+    r"unavailable|no tools?)",
+    re.I | re.S,
+)
 
 
 def failure_note(kind: str, ran: Ran, log_name: str) -> str:
@@ -1722,6 +1830,26 @@ class Handler(BaseHTTPRequestHandler):
                 "text/html; charset=utf-8",
             )
             return
+        if path == "/api/week":
+            # Another week on the strip, for the arrows. Unkeyed like
+            # /api/thread: it writes nothing and shows what the page shows.
+            query = self.path.split("?", 1)[1] if "?" in self.path else ""
+            try:
+                offset = int(next(
+                    (b[7:] for b in query.split("&") if b.startswith("offset=")), "0"
+                ))
+                data = board.load()
+            except ValueError:
+                self.json_out(400, {"error": "which week?"})
+                return
+            except OSError as exc:
+                self.json_out(500, {"error": str(exc)})
+                return
+            self.send(
+                200, render_desk.week_html(data, offset).encode("utf-8"),
+                "text/html; charset=utf-8",
+            )
+            return
         if path == "/api/thread":
             # One card's conversation, redrawn. When an answer lands the page
             # swaps this in where the old one was, rather than reloading and
@@ -1731,9 +1859,12 @@ class Handler(BaseHTTPRequestHandler):
             want = next(
                 (unquote(b[4:]) for b in query.split("&") if b.startswith("ref=")), ""
             )
+            # The side panel draws the same record as a chat, with nothing folded.
+            chat = "chat=1" in query.split("&")
             render.load_asks(ASKS)
             self.send(
-                200, render.thread_html(want).encode("utf-8"), "text/html; charset=utf-8"
+                200, render.thread_html(want, chat).encode("utf-8"),
+                "text/html; charset=utf-8",
             )
             return
         if path == "/api/status":
@@ -1750,6 +1881,8 @@ class Handler(BaseHTTPRequestHandler):
             with health_lock:
                 if health["state"] != "cold":
                     state["health"] = dict(health, rows=list(health["rows"]))
+            with cal_lock:
+                state["calendar"] = dict(cal)
             # What the board looks like now. The page holds the one it was drawn
             # from, so a `./tick.py 26` in a terminal reloads the browser rather
             # than sitting there being quietly wrong.
@@ -1843,6 +1976,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.json_out(404, {"error": f"nothing on the board matches {ref}"})
                 return
             parent = str(body.get("parent", "")).strip()
+            chosen = str(body.get("model", "")).strip()
+            chosen = chosen if chosen in ASK_MODEL_IDS else ""
             ask_id = f"{int(time.time())}-{secrets.token_hex(3)}"
             # Written before the reply goes back, so the card can find itself on
             # the very next poll rather than racing the worker for it.
@@ -1853,11 +1988,12 @@ class Handler(BaseHTTPRequestHandler):
                     "question": question,
                     "asked_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
                     "state": "queued",
+                    "model": chosen or ask_model(),
                 }
                 | ({"parent": parent} if parent else {})
             )
             ahead = ask_queue.qsize()
-            ask_queue.put((ask_id, ref, question, parent))
+            ask_queue.put((ask_id, ref, question, parent, chosen))
             if not ahead:
                 ask_job("running", "Starting")
             self.json_out(202, {"state": "queued", "id": ask_id, "ahead": ahead})
@@ -1910,9 +2046,14 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/forget":
             try:
                 length = int(self.headers.get("Content-Length") or 0)
-                ident = str(json.loads(self.rfile.read(length) or b"{}").get("id", ""))
-            except (ValueError, OSError):
+                body = json.loads(self.rfile.read(length) or b"{}")
+                ident = str(body.get("id", ""))
+            except (ValueError, OSError, AttributeError):
                 self.json_out(400, {"error": "unreadable"})
+                return
+            # Clear: one conversation by its ref, or all of them.
+            if body.get("ref") or body.get("all") is True:
+                self.json_out(200, {"forgot": clear_asks(str(body.get("ref") or ""))})
                 return
             if not ident:
                 self.json_out(400, {"error": "nothing named"})
@@ -1937,6 +2078,17 @@ class Handler(BaseHTTPRequestHandler):
             # looking hung.
             threading.Thread(target=guarded(run_check, "check"), daemon=True).start()
             self.json_out(202, {"state": "checking"})
+            return
+        if path == "/api/calendar":
+            # Read the calendar now. Collected from /api/status like the check,
+            # since a read is a headless run of about forty seconds. A read that
+            # finds something new rewrites state/calendar.json and the page
+            # reloads on its own.
+            with cal_lock:
+                busy = cal["state"] == "running"
+            if not busy:
+                threading.Thread(target=read_calendar, daemon=True).start()
+            self.json_out(202, {"state": "running"})
             return
         self.json_out(404, {"error": "not here"})
 
@@ -1980,6 +2132,10 @@ def main() -> int:
     (ROOT / "state").mkdir(exist_ok=True)
     for _ in range(ASK_WORKERS):
         threading.Thread(target=ask_worker, daemon=True).start()
+    # Only the real desk reads the calendar on a timer. A preview on another
+    # port would spend a run an hour for a page nobody is looking at.
+    if args.port == DESK_PORT or os.environ.get("TG_CALENDAR_LOOP"):
+        threading.Thread(target=calendar_loop, daemon=True).start()
 
     # Claim the port before announcing the key. `serve.json` is how `tg` and the
     # browser find this server, so a second copy started by hand while launchd

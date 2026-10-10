@@ -23,6 +23,9 @@ from pathlib import Path
 
 import render_standup
 import render_brief
+import calendar_sync
+import render_chat
+import people
 import render_milestone
 import render_dialogs
 import render_path
@@ -53,6 +56,7 @@ from render import (
     load_asks,
     next_live,
     opening,
+    people_json,
     pill,
     plain,
     script_meta,
@@ -348,6 +352,18 @@ def day_folds(days: dict[str, list[dict]], keys: list[str]) -> str:
         </details>"""
         )
     return "".join(out)
+
+
+def week_html(data: dict, offset: int) -> str:
+    """The week strip for another week, for the page to swap in when he flips.
+
+    The card anchors are worked out the way `render()` works them, so a job on
+    a flipped-to week still links to its card.
+    """
+    people.load(data)
+    tickets = data.get("tickets", [])
+    refs = {t.get("ref", ""): anchor(t.get("ref", "")) for t in tickets}
+    return render_week.render(data, tickets, refs, offset)
 
 
 def earlier_events(rows: list[dict]) -> str:
@@ -802,8 +818,25 @@ def controls(prep_label: str) -> str:
   <button id="login" class="refresh" hidden>Log in</button>
   <a id="login-link" class="refresh" hidden target="_blank" rel="noopener">Open sign-in page</a>
   <span id="refresh-note" class="refresh-note"></span>
+  <a id="meet-now" class="meet-now" hidden target="_blank" rel="noopener"></a>
+<script type="application/json" id="meets">{meets_today()}</script>
 <script>
 {asset("desk.js")}</script>"""
+
+
+def meets_today() -> str:
+    """Today's meetings that can be joined, for the header's Join chip.
+
+    Every meeting with a Meet link, not only the work ones: the chip is how he
+    gets into the next room on time, and the room that is not about Tokyo Gas
+    still starts at its hour.
+    """
+    rows = [
+        {"t": e["title"], "s": e["start"], "e": e["end"], "j": e["join"], "w": bool(e.get("work"))}
+        for e in calendar_sync.events_on(date.today().isoformat())
+        if e.get("join")
+    ]
+    return json.dumps(rows, ensure_ascii=False).replace("</", "<\\/")
 
 def checked_line(stamp: str) -> str:
     """How long ago the board was last brought up to date, in plain words.
@@ -988,6 +1021,8 @@ def ticket_group(t: dict) -> str:
 
 def render(data: dict) -> str:
     pretty = date.today().strftime("%a %-d %b")
+    # Who the board's names are, first, so every holder below is said one way.
+    people.load(data)
     item_index = index_items(data.get("tickets", []))
 
     # Tickets you owe something on come first. Everything open stays on the page.
@@ -1094,6 +1129,8 @@ def render(data: dict) -> str:
     {link_btn((data.get("meeting_note") or {}).get("url", ""), "Meeting note")}
     <button class="toggle" id="scriptonly">Japanese only</button>
     {controls(prep_label)}
+    <button class="toggle chat-go" data-chat-toggle type="button" aria-controls="chat" hidden
+            title="Ask in the side panel (a)">{SPARK}Ask</button>
     <button class="toggle" data-settings type="button" aria-label="Settings"
             title="Settings">&#9881;</button>
     <button class="toggle" data-help type="button" aria-label="How to use this"
@@ -1118,6 +1155,8 @@ def render(data: dict) -> str:
     {render_standup.render(data, refs, built, stale)}
   </div>
 </div>
+{render_chat.render(data, refs)}
+{people_json(data)}
 {finder([t for t in tickets if ticket_group(t) != "closed"], refs)}
 {render_dialogs.help_dialog()}
 {render_dialogs.settings_dialog()}"""

@@ -19,8 +19,9 @@ is wider than the rest, because today is the column he reads.
 from __future__ import annotations
 
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
+import calendar_sync
 from render import (
     day_words,
     esc,
@@ -60,6 +61,64 @@ WEEK_DAYS = 5
 # chases count against the limit.
 ROWS_PER_DAY = 4
 
+# A meeting outside these hours is somebody else's working day: the US/EU
+# all-hands at 23:00, a dinner. Kept, but folded with the meetings that are not
+# about this work, so the column reads as the day he is actually at the desk.
+DESK_HOURS = ("08:00", "20:00")
+
+
+def meetings(days: list[date]) -> dict[str, list[dict]]:
+    """The calendar, by day, for the columns being drawn."""
+    shown = {d.isoformat() for d in days}
+    out: dict[str, list[dict]] = {}
+    for e in calendar_sync.load_raw().get("events") or []:
+        if e.get("date") in shown:
+            out.setdefault(e["date"], []).append(e)
+    return out
+
+
+def same_room(s: dict, events: list[dict]) -> dict | None:
+    """The calendar event that is this board session, by its day and time."""
+    at = s.get("at") or ""
+    return next((e for e in events if at and e.get("at") == at and e.get("work")), None)
+
+
+def meet_links(e: dict, past: bool) -> str:
+    """Join while it can still be joined, Notes once there are some."""
+    out = ""
+    if e.get("join") and not past:
+        out += (f'<a class="wm-join" href="{esc(e["join"])}" target="_blank" rel="noopener"'
+                f' title="Join in Google Meet">Join</a>')
+    for n in (e.get("notes") or [])[:1]:
+        out += (f'<a class="wm-notes" href="{esc(n["url"])}" target="_blank" rel="noopener"'
+                f' title="{esc(n["title"])}">Notes</a>')
+    return out
+
+
+def over(e: dict) -> bool:
+    """The meeting has ended, so there is nothing left to join."""
+    try:
+        return datetime.fromisoformat(e["end"]) <= datetime.now(calendar_sync.JST)
+    except (KeyError, ValueError):
+        return False
+
+
+def meet_row(e: dict, today: date) -> str:
+    past = over(e)
+    answer = e.get("answer", "")
+    klass = " ".join(filter(None, [
+        "wm", "work" if e.get("work") else "side", "tg" if e.get("tg") else "",
+        "tent" if answer in {"tentative", "needsAction"} else "",
+        "past" if past else "",
+    ]))
+    span = e["at"] + (f'&ndash;{esc(e["until"])}' if e.get("until") else "")
+    said = {"tentative": " · maybe", "needsAction": " · not answered"}.get(answer, "")
+    return f"""<div class="{klass}" data-start="{esc(e.get("start", ""))}" data-end="{esc(e.get("end", ""))}">
+              <span class="wm-t">{esc(e["at"])}</span>
+              <a class="wm-w" href="{esc(e.get("link", ""))}" target="_blank" rel="noopener"
+                 title="{esc(e["title"])} {span}{esc(said)}">{esc(e["title"])}</a>
+              <span class="wm-go">{meet_links(e, past)}</span></div>"""
+
 
 def whose(item: dict, st: dict) -> tuple[str, str]:
     """Who is holding this, and which of the page's four colours that is.
@@ -72,7 +131,7 @@ def whose(item: dict, st: dict) -> tuple[str, str]:
         return "With you", "mine"
     if st["state"] == "hold":
         return st.get("who") or "Held", "held"
-    who = (item.get("waits_on") or {}).get("who") or st.get("who") or ""
+    who = st.get("who") or ""
     return f"With {who}" if who else "With them", "theirs"
 
 
@@ -131,7 +190,7 @@ def dated(item: dict, st: dict, today: date) -> str:
 
 
 def due_rows(
-    tickets: list[dict], days: list[date], today: date
+    tickets: list[dict], days: list[date], today: date, home: bool = True
 ) -> tuple[dict[str, list[dict]], int, int]:
     """Everything with a day, filed by the column it falls in.
 
@@ -141,6 +200,11 @@ def due_rows(
     act on, because a chase that slipped is more urgent than one that has not
     come up, not less, and a calendar that hides it is lying by omission. After
     the last column it is counted and named in the header rather than drawn.
+
+    That catching is for the week he opens on (`home`). Flipped to another week,
+    a date lands on its own day or not at all: the pile of overdue work belongs
+    to now, and stacking it onto a Monday three weeks out, or one gone by, would
+    put it on a day it has nothing to do with.
     """
     shown = {d.isoformat() for d in days}
     first, last = days[0].isoformat(), days[-1].isoformat()
@@ -160,9 +224,11 @@ def due_rows(
             if when > last:
                 ahead += 1
                 continue
+            if not home and when < first:
+                continue
             who, tone = whose(i, st)
             overdue = when < first or when < today.isoformat()
-            if overdue:
+            if overdue and (home or when not in shown):
                 late += 1
                 lands = catch
             elif when in shown:
@@ -197,16 +263,27 @@ def due_rows(
     return by_day, late, ahead
 
 
-def render(board: dict, tickets: list[dict], refs: dict[str, str]) -> str:
-    """One week, Monday to Friday, with every room and every job due in it."""
+def render(
+    board: dict, tickets: list[dict], refs: dict[str, str], offset: int = 0
+) -> str:
+    """One week, Monday to Friday, with every room and every job due in it.
+
+    `offset` is how many weeks from this one, for the arrows in the header. The
+    page always opens on this week; another week is fetched when he flips to
+    it and swapped in, so a reload brings him back to now. Looking back, the
+    overdue pile is not restacked onto that week: overdue is about today, and a
+    week behind him shows only what was dated inside it.
+    """
     today = date.today()
-    days = columns(monday_of(today))
-    by_day, late, ahead = due_rows(tickets, days, today)
+    offset = max(-52, min(52, offset))
+    days = columns(monday_of(today) + timedelta(weeks=offset))
+    by_day, late, ahead = due_rows(tickets, days, today, home=offset == 0)
 
     rooms: dict[str, list[dict]] = {}
     for s in board.get("sessions") or []:
         if s.get("date"):
             rooms.setdefault(s["date"], []).append(s)
+    cal = meetings(days)
 
     cells = []
     for n, d in enumerate(days):
@@ -217,12 +294,33 @@ def render(board: dict, tickets: list[dict], refs: dict[str, str]) -> str:
             by_day.get(iso, []),
             key=lambda r: (not r["late"], r["tone"] != "mine", int(r["id"] or 0)),
         )
-        marks = "".join(
-            f"""<span class="wd-room" title="{esc(s.get("label") or "")}">
+        events = sorted(cal.get(iso, []), key=lambda e: e.get("start", ""))
+        # A room he speaks in is drawn as a room, with the calendar's Join and
+        # Notes on it, and not a second time in the list of meetings under it.
+        used: set[str] = set()
+        marks = ""
+        for s in sess:
+            e = same_room(s, events)
+            if e:
+                used.add(e["id"])
+            links = meet_links(e, over(e)) if e else ""
+            marks += f"""<span class="wd-room{" skipped" if s.get("skipped") else ""}"
+              title="{esc(s.get("label") or s.get("reason") or "")}"
+              {f'data-start="{esc(e["start"])}" data-end="{esc(e["end"])}"' if e else ""}>
               <b>{esc(s.get("at", ""))}</b>
-              {esc((s.get("tab") or s.get("name") or s.get("kind") or "Session"))}</span>"""
-            for s in sess
-        )
+              <span class="wd-room-w">{esc((s.get("tab") or s.get("name") or s.get("kind") or "Session"))}</span>
+              {f'<span class="wm-go">{links}</span>' if links else ""}</span>"""
+        rest_meets = [e for e in events if e["id"] not in used]
+        lo, hi = DESK_HOURS
+        front = [e for e in rest_meets if e.get("work") and lo <= e["at"] < hi]
+        folded = [e for e in rest_meets if e not in front]
+        meet_html = "".join(meet_row(e, today) for e in front)
+        if folded:
+            meet_html += (
+                f'<details class="wm-more"{" open" if d == today and len(folded) <= 2 else ""}>'
+                f'<summary>{len(folded)} other meeting{"s" if len(folded) != 1 else ""}</summary>'
+                + "".join(meet_row(e, today) for e in folded) + "</details>"
+            )
         # His own work is never folded away, however long the day is. Only the
         # rest competes for the remaining rows.
         his = [r for r in jobs if r["tone"] in {"mine", "late"}]
@@ -248,7 +346,7 @@ def render(board: dict, tickets: list[dict], refs: dict[str, str]) -> str:
             rows += (
                 f'<span class="wd-rest">and {len(rest)} more</span>'
             )
-        quiet = not sess and not jobs
+        quiet = not sess and not jobs and not events
         # A day this week that is already behind him reads back rather than
         # empty, so Monday on a Wednesday does not look like nothing is due.
         klass = " ".join(
@@ -276,6 +374,7 @@ def render(board: dict, tickets: list[dict], refs: dict[str, str]) -> str:
           {f'<span class="wd-c">{len(jobs)}</span>' if jobs else ""}
         </div>
         {f'<div class="wd-rooms">{marks}</div>' if marks else ""}
+        {f'<div class="wd-meets">{meet_html}</div>' if meet_html else ""}
         {f'<div class="wd-jobs">{rows}</div>' if rows else ""}
         {'<span class="wd-none">&ndash;</span>' if quiet else ""}
       </li>""")
@@ -304,15 +403,60 @@ def render(board: dict, tickets: list[dict], refs: dict[str, str]) -> str:
         if first.month == last.month
         else f'{first.strftime("%-d %b")} &ndash; {last.strftime("%-d %b")}'
     )
-    title = ("This week" if this_week else "Next week") + f" &middot; {span}"
+    home = monday_of(today)
+    gap = (first - home).days // 7
+    name = (
+        ("This week" if this_week else "Next week") if gap == 0
+        else "Next week" if gap == 1
+        else "Last week" if gap == -1
+        else f"In {gap} weeks" if gap > 0
+        else f"{-gap} weeks ago"
+    )
+    title = f"{name} &middot; {span}"
+    flip = f"""
+        <span class="week-flip" role="group" aria-label="Which week">
+          <button type="button" data-week="{offset - 1}" aria-label="The week before"
+                  title="The week before ([)">&lsaquo;</button>
+          {f'<button type="button" class="week-now" data-week="0" title="Back to this week">This week</button>' if offset else ""}
+          <button type="button" data-week="{offset + 1}" aria-label="The week after"
+                  title="The week after (])">&rsaquo;</button>
+        </span>"""
     return f"""
-    <section class="week" id="week" aria-label="The week">
+    <section class="week{' week-away' if offset else ''}" id="week" aria-label="The week" data-offset="{offset}">
       <header class="week-h">
+        {flip}
         <h2>{title}</h2>
         {f'<span class="week-next">{esc(lead)}</span>' if lead else ""}
         {f'<span class="week-busy">{esc(warn)}</span>' if warn else ""}
         {f'<span class="week-ahead">{ahead} after Friday</span>' if ahead else ""}
         {f'<span class="week-late">{late} overdue</span>' if late else ""}
+        {calendar_bit(board, days)}
       </header>
       <ol class="week-days">{"".join(cells)}</ol>
     </section>"""
+
+
+def calendar_bit(board: dict, days: list[date]) -> str:
+    """Where the calendar stands: how fresh it is, and notes nobody has read.
+
+    The button reads the calendar again there and then. The notes line is the
+    other half of a meeting: Meet attaches Gemini's notes when it ends, and
+    until a sweep has read them the board does not know what was said.
+    """
+    seen = calendar_sync.seen_at()
+    data = calendar_sync.load_raw()
+    if not seen:
+        label, tip = "Connect calendar", "Read your Google Calendar into the week"
+    else:
+        label, tip = f"Calendar {calendar_sync.ago(seen)}", "Read the calendar again"
+    first, last = days[0].isoformat(), days[-1].isoformat()
+    off = bool(data.get("from")) and (last < data["from"] or first > data.get("to", ""))
+    unread = calendar_sync.unread_notes(board) if days[0] <= date.today() <= days[-1] else []
+    fold = ""
+    if unread:
+        names = ", ".join(f'{e["title"].strip()} ({day_words(e["date"])})' for e in unread[:4])
+        fold = (f'<button type="button" class="week-fold" data-cal-fold title="{esc(names)}">'
+                f'{len(unread)} meeting note{"s" if len(unread) != 1 else ""} to fold in</button>')
+    return f"""{fold}
+        {'<span class="week-off">Calendar not read this far</span>' if off else ""}
+        <button type="button" class="week-cal" data-cal-sync title="{esc(tip)}">{esc(label)}</button>"""

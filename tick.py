@@ -8,7 +8,7 @@ back to you on the same number when they reply.
     ./tick.py                            where everything is
     ./tick.py --rebuild                  redraw both pages, change nothing
     ./tick.py 4                          finished, nothing comes back
-    ./tick.py 2 -w "Kevin"               sent, ball is with Kevin
+    ./tick.py 2 -w "Kevin"               sent, ball is with Kevin, chase in 2 working days
     ./tick.py 2 -w "Kevin" -n "asked about the account-level hold"
     ./tick.py 2 --mine                   they replied, it is yours again
     ./tick.py 5 --dropped -n "TG answered it themselves"
@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
+from datetime import date, timedelta
 from pathlib import Path
 
 import board as B
@@ -74,6 +75,14 @@ def rebuild() -> None:
             cwd=ROOT,
             stdout=subprocess.DEVNULL,
         )
+
+
+def working_days_on(n: int) -> str:
+    day = date.today()
+    while n:
+        day += timedelta(days=1)
+        n -= day.weekday() < 5
+    return day.isoformat()
 
 
 def main() -> int:
@@ -134,8 +143,10 @@ def main() -> int:
         if args.waiting:
             item["sent_by_you"] = True
             B.set_state(item, "waiting", args.note, who=args.waiting)
-            if args.chase:
-                item["waits_on"]["chase_on"] = args.chase
+            # Every wait gets a day, or it drops off the week strip and nobody
+            # chases it. Two working days is the follow-up nudge most tools
+            # default to; --chase overrides it.
+            item["waits_on"]["chase_on"] = args.chase or working_days_on(2)
         elif args.dropped:
             B.set_state(item, "dropped", args.note)
         elif args.sent:

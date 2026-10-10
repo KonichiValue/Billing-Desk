@@ -244,7 +244,7 @@
   function grow(t){
     // A line that grows with what he writes, up to a point, the way every chat
     // composer does. A fixed four-row box is either too big or too small.
-    if(!t||t.tagName!=='TEXTAREA'||!t.closest('.ask'))return;
+    if(!t||t.tagName!=='TEXTAREA'||!t.closest('.ask,.chat-box'))return;
     t.style.height='auto';
     t.style.height=Math.min(t.scrollHeight+2,260)+'px';
   }
@@ -295,6 +295,9 @@
     // the reply line inside whichever answer he is pulling on. Every button
     // works on the one it is inside.
     var here=e.target.closest('.fu')||box.querySelector('.ask-box');
+    // The side panel's conversation is an .ask with no box of its own: its
+    // composer sits under it, and desk.js runs that one.
+    if(!here)return;
     var field=here.querySelector('textarea');
     if(e.target.closest('.ask-open')){
       openAsk(box,'');

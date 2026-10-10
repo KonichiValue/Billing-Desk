@@ -26,13 +26,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import audit
 import board as B
+import calendar_sync
 
 WRAP = 160
 ROOT = Path(__file__).resolve().parent
@@ -42,13 +44,16 @@ _scale = 1.0
 _lines: list[str] = []
 
 
+def _config() -> dict:
+    try:
+        return json.loads((ROOT / "config.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
 def _project_gids() -> list[str]:
     """The two TG project gids the gate query runs against, from config.json."""
-    try:
-        conf = json.loads((ROOT / "config.json").read_text(encoding="utf-8"))
-        return [p["gid"] for p in conf.get("asana", {}).get("projects", []) if p.get("gid")]
-    except (OSError, ValueError, KeyError):
-        return []
+    return [p["gid"] for p in _config().get("asana", {}).get("projects", []) if p.get("gid")]
 
 
 def _age(stamp: str) -> str:
@@ -202,6 +207,89 @@ def _item_line(i: dict, full: bool) -> None:
         _out(f"            state_note: {_clip(i.get('state_note'), 120 if full else 70, full)}")
 
 
+SLACK_LIVE_DAYS = 30
+JST = timezone(timedelta(hours=9))
+
+
+def _slack_ts(url: str) -> tuple[str, str] | None:
+    """(channel, parent ts) from a Slack link, the two things read_thread takes.
+
+    A reply's link carries the parent in `thread_ts`; a parent's link carries it
+    in the `p` segment, with the decimal point taken out.
+    """
+    m = re.search(r"slack\.com/archives/([A-Z0-9]+)/p(\d{10})(\d{6})", url or "")
+    if not m:
+        return None
+    parent = re.search(r"thread_ts=(\d{10}\.\d{6})", url)
+    return m.group(1), parent.group(1) if parent else f"{m.group(2)}.{m.group(3)}"
+
+
+def _slack_oldest(last_at: str) -> str:
+    """A thread's recorded `last_at` (JST wall time) as a Slack ts, a minute early."""
+    try:
+        when = datetime.fromisoformat(str(last_at).strip().replace(" ", "T"))
+    except ValueError:
+        return ""
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=JST)
+    return f"{when.timestamp() - 60:.6f}"
+
+
+def _slack_plan(b: dict, checked: str) -> None:
+    """Every live Slack thread, read every sweep, from the last sweep on.
+
+    Asana has a gate: a comment moves `modified_at`, so the census and the gate
+    find it. Slack has none. A reply in a thread moves nothing on the board, so a
+    rule that skipped threads "looked at since the ticket last moved" skipped
+    them for good: the ticket only moves when a sweep sees the reply. That is how
+    Rei's and Kevin's 7 Oct replies on item 50 were missed. So a Slack thread on a
+    ticket with open work is read whenever it has spoken in the last month, with
+    `oldest` set to the last sweep so a quiet one costs a few lines.
+    """
+    me = (_config().get("owner") or {}).get("slack_user_id", "")
+    try:
+        day = datetime.fromisoformat(checked).date()
+    except ValueError:
+        day = None
+    _out("  S. Slack, in the same message as 0, 1 and M. No thread here is skippable: Slack has")
+    _out("     no gate, so a reply moves nothing until a sweep reads it.")
+    if me:
+        after = (day - timedelta(days=1)).isoformat() if day else "?"
+        _out(f"     search from:<@{me}> after:{after}  = everything he sent, so his own sends land too.")
+        _out(f"     search keywords=[\"<@{me}>\"] after:{after}  = everything that mentions him.")
+    cut = (day or datetime.now().date()) - timedelta(days=SLACK_LIVE_DAYS)
+    seen: set = set()
+    old: set[str] = set()
+    for t in b.get("tickets", []):
+        if not any(B.is_open(i) for i in t.get("items") or []):
+            continue
+        links = [th.get("url", "") for th in t.get("threads") or []]
+        links += [(i.get("draft") or {}).get("link", "") for i in t.get("items") or [] if B.is_open(i)]
+        lasts = {th.get("url", ""): th.get("last_at", "") for th in t.get("threads") or []}
+        for url in links:
+            key = _slack_ts(url)
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            last = audit.as_date(lasts.get(url)) or datetime.fromtimestamp(float(key[1])).date()
+            if last < cut:
+                old.add(key[0])
+                continue
+            # From the newest message the board has recorded, not from the last
+            # sweep: a sweep that missed a reply must not move the window past it.
+            oldest = _slack_oldest(lasts.get(url, ""))
+            _out(f"     read_thread channel_id={key[0]} message_ts={key[1]}"
+                 + (f" oldest={oldest}" if oldest else "")
+                 + f"  ({t.get('ref')}, last {lasts.get(url) or '?'})")
+    # A thread quiet for a month is not read whole, but its channel is searched,
+    # so a reply that wakes it is still found.
+    after = (day - timedelta(days=1)).isoformat() if day else "?"
+    for channel in sorted(old):
+        _out(f"     search in:<#{channel}> after:{after}  = wakes any thread here quiet over {SLACK_LIVE_DAYS} days")
+    _out("     A reply in any of these is an event; his own message is an event \"You\" (section 5).")
+    _out("     Put each read thread's newest message in the patch's \"threads\" (last_at, last_from).")
+
+
 def _sweep_plan(b: dict) -> None:
     """The worklist for a sweep, made from the watermarks rather than reasoned out.
 
@@ -216,7 +304,7 @@ def _sweep_plan(b: dict) -> None:
     gids = _project_gids()
     _out("SWEEP PLAN  (built from the watermarks; read this, not the raw board)")
     proj = f" projects={','.join(gids)}" if gids else ""
-    _out("  Make calls 0, 1 and M together, in ONE message: they do not depend on each other.")
+    _out("  Make calls 0, 1, M and every S together, in ONE message: they do not depend on each other.")
     _out(f"  0. Census, NO date filter: search_tasks assignee=me completed=false{proj}")
     _out("     = what BELONGS on the board. An assigned incomplete gid not below is MISSING: add it, deep-read it.")
     _out(f"  1. Gate: search_tasks modified_at.after={since or '?'}{proj} opt_fields=name,modified_at,assignee.name,completed")
@@ -228,10 +316,11 @@ def _sweep_plan(b: dict) -> None:
                  f" completed=false{proj} opt_fields=name,assignee.name,modified_at,completed")
             _out("     = its child tickets. Update the milestone's tickets/phases rows; a child assigned to")
             _out("     Rei becomes a ticket card too (new_tickets), anything else stays a row on the milestone.")
-    _out("  2. Threads to read (not looked at since the ticket last moved); mark them in the patch's \"checked\".")
+    _slack_plan(b, checked)
+    _out("  2. Other threads to read (not looked at since the ticket last moved); mark them in the patch's \"checked\".")
     quiet_refs: list[str] = []
     for t in b.get("tickets", []):
-        threads = t.get("threads") or []
+        threads = [th for th in t.get("threads") or [] if not _slack_ts(th.get("url", ""))]
         if not threads:
             continue
         events = t.get("events") or []
@@ -272,6 +361,36 @@ def _sweep_plan(b: dict) -> None:
             )
     if not any_build:
         _out("       - none on the board")
+    # Sent, marked by his own press since the last sweep. The mark stands; the
+    # sweep only confirms it against the thread, the way a read receipt would.
+    marked = []
+    for t in b.get("tickets", []):
+        for i in t.get("items") or []:
+            last = (i.get("history") or [{}])[-1]
+            if (i.get("state") == "waiting" and i.get("sent_by_you")
+                    and last.get("state") == "waiting" and str(last.get("at", "")) > checked):
+                marked.append((t, i, last))
+    if marked:
+        _out("  4. Marked sent since the last sweep: find his message in the thread (it is in")
+        _out("     2's reads, or the draft link). Answered: item back to todo, per section 6.")
+        _out("     Not found: say so in the item's state \"note\", never move it back yourself.")
+        for t, i, last in marked:
+            link = (i.get("draft") or {}).get("link", "")
+            _out(f"       - {i.get('id')} ({t.get('ref')}) -> {(i.get('waits_on') or {}).get('who', '?')}"
+                 f" at {str(last.get('at', ''))[:16]}  {link}")
+    # Meetings that ended with Gemini notes attached and no note record on the
+    # board yet, read from the calendar the desk keeps. This is how a room he
+    # sat in reaches the board without him pasting anything.
+    unread = calendar_sync.unread_notes(b)
+    if unread:
+        _out("  N. Meeting notes nobody has read: drive_read_file each doc, in the same message as 0/1/S.")
+        _out("     Fold what was said into the tickets it touches (events, items), then add one")
+        _out("     other_notes row per meeting {date, title, url, found, gist} (board \"other_notes+\"), or set")
+        _out("     migration_note for a Migration daily / X-Workstream one. A meeting with nothing for")
+        _out("     his tickets still gets its row, gist \"nothing for Rei's tickets\", so it stops showing.")
+        for e in unread[:8]:
+            doc = next((n for n in e.get("notes") or [] if calendar_sync.GEMINI.search(n.get("title", ""))), {})
+            _out(f"       - {e['date']} {e['at']} {e['title'][:60]}  {doc.get('url', '')}")
     _out()
 
 

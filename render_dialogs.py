@@ -89,6 +89,18 @@ def help_dialog() -> str:
     forgets one for good.</p>
     <p>The box above the tickets is for the day rather than one job: what to
     start on, whether tomorrow is covered. It answers in job numbers.</p>
+    <p><b>For a long conversation</b>, press <b>Ask</b> in the header or
+    <kbd>a</kbd>. The side panel is the same record as the cards, drawn as a
+    chat: everything open, newest at the bottom, and each question follows on
+    from the last answer until you press <b>New topic</b>. Pick which job it is
+    about at the top; the strip under it names the job, its ticket and where it
+    stands, with a link to its card. <b>Open in side panel</b> on any card's box
+    carries what you typed over. <b>&middot;&middot;&middot;</b> clears this
+    conversation or every one, and <b>&times;</b> on a question forgets just
+    that one.</p>
+    <p>Every answer says which model wrote it and how long it took. Pick the
+    model next to the box: Opus 5.5 writes the best Japanese, Sonnet is a
+    third of the wait, Haiku is for a quick lookup. The choice sticks.</p>
     <p>Same thing from a terminal: <code>tg ask 8 "..."</code>, and the answer
     lands on the same card.</p>
 
@@ -97,9 +109,10 @@ def help_dialog() -> str:
     the moves open from where the job stands, and each one is the same as
     <code>./tick.py</code> in a terminal, with an Undo for six seconds.</p>
     <ul class="say-list">
-      <li><span class="said">With you</span><span class="does">Sent and waiting
-      on who, done, handed to someone else, dropped. A job with a draft asks
-      who you sent it to first.</span></li>
+      <li><span class="said">With you</span><span class="does">Sent, waiting
+      on who (filled from the draft, so <kbd>x</kbd> then Enter), done,
+      dropped. The wait gets a chase day two working days out, and the next
+      refresh looks for your message and their answer.</span></li>
       <li><span class="said">Waiting on Kevin</span><span class="does">They
       replied, done, now with someone else, dropped.</span></li>
       <li><span class="said">Not yet</span><span class="does">Start it now, or
@@ -109,8 +122,29 @@ def help_dialog() -> str:
     <p><b>Sending a message is not finishing.</b> That is why it is a status
     and not a checkbox: if a reply is coming, the job goes to the person, not
     to done.</p>
+    <p><b>Who it waits on is a person, not a sentence.</b> The picker starts
+    with whoever the draft is addressed to, then the people on that ticket, the
+    ones you wait on most, and the teams. Type to search by name, surname,
+    kanji or team. <kbd>Enter</kbd> picks, <b>+</b> or <kbd>Shift</kbd>+<kbd>Enter</kbd>
+    adds another, <kbd>Backspace</kbd> takes the last one off, and
+    <span class="said">Use &ldquo;&hellip;&rdquo;</span> takes someone the board has not
+    met yet. Their initials show on the job from then on.</p>
     <p>The same from a terminal:</p>
     <ul class="say-list">{said}</ul>
+
+    <h3>The week, and your meetings</h3>
+    <p>The strip draws every meeting on your Google Calendar beside your jobs.
+    Work meetings are drawn in full, Tokyo Gas rooms in red; the rest fold
+    under <b>N other meetings</b>. <b>Join</b> opens the Meet, <b>Notes</b> the
+    notes doc, the title the event itself. From ten minutes before a meeting
+    the header offers <b>Join &hellip; in 5m</b>.</p>
+    <p>The calendar is read hourly through the working day and again just
+    after a work meeting ends, which is when Meet attaches Gemini's notes.
+    <b>Calendar 12m ago</b> reads it now. When notes arrive that the board has
+    not read, <b>2 meeting notes to fold in</b> appears: it runs a refresh, which
+    reads them and puts what was said on the tickets it touches.</p>
+    <p>For that to happen on its own, turn on <b>Take notes with Gemini</b> in
+    the Meet. Nothing here ever writes to the calendar.</p>
 
     <h3>The numbers</h3>
     <p>A job keeps its number until it closes, which is why &ldquo;do 3&rdquo;
@@ -149,7 +183,8 @@ def help_dialog() -> str:
     <h3>Keys</h3>
     <p><kbd>1</kbd> your work, <kbd>2</kbd> what you say, <kbd>/</kbd> find
     anything, <kbd>s</kbd> Japanese only, <kbd>,</kbd> settings,
-    <kbd>?</kbd> this.</p>
+    <kbd>a</kbd> the Ask panel, <kbd>[</kbd> <kbd>]</kbd> the week before
+    and after, <kbd>?</kbd> this.</p>
     <p>On the To do list: <kbd>j</kbd> <kbd>k</kbd> move down and up,
     <kbd>x</kbd> opens the status of the job you are on, <kbd>&uarr;</kbd>
     <kbd>&darr;</kbd> walk its moves, <kbd>enter</kbd> opens its card,

@@ -139,6 +139,31 @@ def promises_are_caught() -> list[str]:
     return bad
 
 
+def font_shorthands_hold() -> list[str]:
+    """A `font:` shorthand the browser will throw away.
+
+    `font:700 11px/1 inherit` reads as if it keeps the family, but `inherit` is
+    not allowed inside the shorthand, so the whole declaration is dropped and the
+    label quietly renders as 15.5px body text. Twenty-six of them did, which is
+    why the milestone numbers sat off-centre. Use `var(--font)` for the family.
+    """
+    bad = []
+    for path in sorted((ROOT / "static").glob("*.css")):
+        # Comments are blanked rather than removed so line numbers still hold.
+        text = re.sub(
+            r"/\*.*?\*/",
+            lambda m: re.sub(r"[^\n]", " ", m.group(0)),
+            path.read_text(encoding="utf-8"),
+            flags=re.S,
+        )
+        for match in re.finditer(r"(?<![\w-])font:([^;}]*)", text):
+            value = match.group(1).strip()
+            if value != "inherit" and re.search(r"\b(inherit|initial|unset)\b", value):
+                line = text[: match.start()].count(chr(10)) + 1
+                bad.append(f"static/{path.name}:{line}: font:{value}")
+    return bad
+
+
 def reload_guard_holds() -> list[str]:
     """The page reloads itself when the board moves, and never over his typing.
 
@@ -372,6 +397,7 @@ CHECKS = (
     ("Python parses", python_parses),
     ("JavaScript parses", javascript_parses),
     ("Every fetch handles a failure", promises_are_caught),
+    ("Every font shorthand is one the browser keeps", font_shorthands_hold),
     ("The page reloads itself, but never over his typing", reload_guard_holds),
     ("The board is the shape the renderers expect", board_shape),
     ("Spoken lines carry furigana", furigana_present),

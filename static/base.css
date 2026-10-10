@@ -11,6 +11,12 @@
    are built. Every one is still checked for contrast on white: the meaning
    comes first and the pigment is only which red it is. */
 :root{
+/* One family for every shorthand. `font:700 11px/1 inherit` is not valid CSS
+   (inherit cannot stand in for the family inside the shorthand), so the browser
+   drops the whole declaration and the label falls back to body text. That is
+   what pushed the milestone numbers off-centre. Write `var(--font)` instead. */
+--font:-apple-system,BlinkMacSystemFont,"Inter var","Inter","Segoe UI",
+"Hiragino Sans","Noto Sans JP",sans-serif;
 /* 墨 sumi, ink. Warmed a few degrees off blue-black, which is what stops the
    page reading as cold grey. */
 --ink:#171b26;--mut:#4d5666;--soft:#767f90;--line:#e3e7ef;--hair:#f0f3f8;
@@ -86,8 +92,7 @@ body[data-view="standup"]{--accent:#9c1b85;--accent-bg:#fdf1fa;--accent-line:#f1
    account ids. Both are ignored by a font that does not carry them, so there is
    nothing to guard. */
 body{margin:0;background:var(--page);color:var(--ink);
-font:15.5px/1.55 -apple-system,BlinkMacSystemFont,"Inter var","Inter","Segoe UI",
-"Hiragino Sans","Noto Sans JP",sans-serif;-webkit-font-smoothing:antialiased;
+font:15.5px/1.55 var(--font);-webkit-font-smoothing:antialiased;
 -moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;
 font-variation-settings:"opsz" auto;font-feature-settings:"cv01","ss03"}
 /* Tracking tightens as type grows and *opens* at the smallest size, which is
@@ -250,7 +255,7 @@ padding:0 10px;border-radius:7px;color:#dae4f5;background:rgba(255,255,255,.09);
 border:1px solid rgba(255,255,255,.14)}
 #countdown:empty{display:none}
 #countdown.soon{background:#fee4e2;border-color:#fda29b;color:#912018}
-.toggle{font:600 12px/1 inherit;padding:0 10px;border-radius:7px;
+.toggle{font:600 12px/1 var(--font);padding:0 10px;border-radius:7px;
 border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.07);
 cursor:pointer;color:#c9d6ea}
 .toggle:hover{background:rgba(255,255,255,.14);color:#fff}
@@ -278,11 +283,11 @@ box-shadow:0 1px 3px rgba(9,14,26,.4)}
    whole bar stays one line tall. No rule between the two: it read as a border on
    the tab rather than a divider between two words. */
 .views .sub{font-size:11.5px;font-weight:550;opacity:.62;padding-left:8px}
-.views .k{flex:none;font:700 10px/14px inherit;min-width:14px;text-align:center;
+.views .k{flex:none;font:700 10px/14px var(--font);min-width:14px;text-align:center;
 border-radius:4px;background:rgba(255,255,255,.13);color:#c2cee3}
 .views button[aria-selected="true"] .k{background:var(--hair);color:var(--soft)}
 .views .badge{flex:none;min-width:17px;padding:0 5px;border-radius:9px;
-background:#e0483b;color:#fff;font:700 10.5px/17px inherit;text-align:center}
+background:#e0483b;color:#fff;font:700 10.5px/17px var(--font);text-align:center}
 .views button[aria-selected="true"] .badge{background:var(--red);color:#fff}
 .views .badge.quiet{background:rgba(255,255,255,.16);color:#dbe4f2}
 body[data-view="desk"] #view-standup,body[data-view="standup"] #view-desk{display:none}
@@ -410,12 +415,24 @@ details.sub[open]>summary{padding-bottom:8px}
 details.sub>summary>h3{margin:0;width:auto;flex:1}
 details.sub>summary:hover .fold-hint{color:var(--accent);border-color:var(--accent-line)}
 /* Say Show or Hide in words. A triangle alone does not tell you there is
-   anything behind it, which is how a folded section reads as an empty one. */
-.fold-hint{flex:none;margin-left:auto;font:650 9.5px/1 inherit;
-text-transform:uppercase;letter-spacing:.06em;color:var(--soft);
-border:1px solid var(--line);border-radius:4px;padding:3px 5px;background:var(--card)}
+   anything behind it, which is how a folded section reads as an empty one.
+   Set as a soft pill with a chevron that turns, the way Slack and Instagram
+   draw a secondary button: sentence case, no capitals shouting, and a hover
+   that fills rather than outlines. */
+.fold-hint{flex:none;margin-left:auto;display:inline-flex;align-items:center;gap:5px;
+font:600 11.5px/1 var(--font);letter-spacing:0;color:var(--mut);
+border:1px solid var(--line);border-radius:999px;padding:4px 10px 4px 8px;
+background:var(--hair);white-space:nowrap;
+transition:color var(--t-fast) var(--ease),background var(--t-fast) var(--ease),
+border-color var(--t-fast) var(--ease)}
+.fold-hint:before{content:"";width:5px;height:5px;margin-top:-3px;
+border:solid currentColor;border-width:0 1.6px 1.6px 0;transform:rotate(45deg);
+transition:transform var(--t-fast) var(--ease),margin var(--t-fast) var(--ease)}
+details[open]>summary .fold-hint:before{transform:rotate(-135deg);margin-top:3px}
 .fold-hint:after{content:"Show"}
 details[open]>summary .fold-hint:after{content:"Hide"}
+summary:hover .fold-hint{color:var(--accent-ink);background:var(--accent-bg);
+border-color:var(--accent-line)}
 .status,.st-stands{margin:0;font-size:15px;color:var(--ink)}
 .matters{margin:10px 0 0;padding:9px 13px;background:var(--accent-bg);
 border:1px solid var(--accent-line);border-radius:8px;font-size:14px;
@@ -437,7 +454,7 @@ padding-bottom:5px;border-bottom:1px solid var(--accent-line)}
 .jp-h-ja{font-size:15px;font-weight:700;color:var(--accent-ink)}
 .jp-h-en{font-size:11.5px;color:var(--soft);text-transform:uppercase;
 letter-spacing:.06em;font-weight:600}
-.copy{margin-left:auto;font:600 11px/1 inherit;color:var(--soft);background:var(--card);
+.copy{margin-left:auto;font:600 11px/1 var(--font);color:var(--soft);background:var(--card);
 border:1px solid var(--line);border-radius:6px;padding:4px 8px;cursor:pointer}
 .copy:hover{color:var(--accent);border-color:var(--accent-line)}
 .jp-line{margin-bottom:10px;padding-left:12px;border-left:3px solid var(--accent-line)}
@@ -493,7 +510,7 @@ padding:3px 9px;border-radius:7px;border:1px solid transparent;white-space:nowra
 border-color:var(--accent-line)}
 .jump a .c{font-size:10.5px;font-weight:700;color:var(--red);margin-left:5px}
 .jump a .ord{font-size:10.5px;font-weight:600;color:var(--soft);margin-left:6px}
-.jump .find{margin-left:auto;font:600 11.5px/1 inherit;color:var(--soft);
+.jump .find{margin-left:auto;font:600 11.5px/1 var(--font);color:var(--soft);
 background:var(--card);border:1px solid var(--line);border-radius:7px;padding:5px 9px;
 cursor:pointer;display:flex;gap:6px;align-items:center}
 .jump .find:hover{color:var(--accent);border-color:var(--accent-line)}
@@ -515,7 +532,7 @@ display:flex;align-items:flex-start;justify-content:center;padding:11vh 16px 16p
 box-shadow:0 24px 60px rgba(9,14,26,.35);overflow:hidden;display:flex;
 flex-direction:column;max-height:74vh}
 .pal input{border:0;border-bottom:1px solid var(--line);padding:16px 19px;
-font:16px/1.4 inherit;outline:0;color:var(--ink)}
+font:16px/1.4 var(--font);outline:0;color:var(--ink)}
 .pal ul{list-style:none;margin:0;padding:7px;overflow:auto}
 .pal li{padding:9px 11px;border-radius:9px;display:flex;gap:10px;
 align-items:center;cursor:pointer}
@@ -554,7 +571,7 @@ align-items:baseline;font-size:13.5px}
 .say-list .said{flex:none;min-width:186px;font-weight:650;color:var(--accent-ink);
 font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px}
 .say-list .does{flex:1;min-width:0;color:var(--mut)}
-.help-close{position:absolute;top:14px;right:16px;font:700 13px/1 inherit;
+.help-close{position:absolute;top:14px;right:16px;font:700 13px/1 var(--font);
 background:var(--card);border:1px solid var(--line);border-radius:7px;padding:6px 10px;
 cursor:pointer;color:var(--mut)}
 .help-close:hover{color:var(--ink);border-color:var(--soft)}
@@ -568,7 +585,7 @@ background:rgba(255,255,255,.6);font-size:13px;color:var(--mut)}
 .howto code{font:600 12px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
 background:var(--card);border:1px solid var(--line);border-radius:5px;padding:2px 6px;
 color:var(--accent-ink);white-space:nowrap}
-.howto .more{margin-left:auto;font:650 12px/1 inherit;background:var(--card);
+.howto .more{margin-left:auto;font:650 12px/1 var(--font);background:var(--card);
 border:1px solid var(--line);border-radius:7px;padding:6px 11px;cursor:pointer;
 color:var(--accent)}
 .howto .more:hover{border-color:var(--accent-line);background:var(--accent-bg)}
@@ -691,7 +708,7 @@ font:800 30px/1 "Hiragino Sans","Noto Sans JP",serif;
 box-shadow:0 4px 14px rgba(192,54,43,.45);
 animation:nami-seal .5s var(--spring) .82s both}
 .nami-said{position:absolute;bottom:-6px;white-space:nowrap;
-font:700 12.5px/1 inherit;color:var(--accent-ink);background:var(--card);
+font:700 12.5px/1 var(--font);color:var(--accent-ink);background:var(--card);
 border:1px solid var(--accent-line);border-radius:20px;padding:5px 13px;
 box-shadow:var(--shadow);animation:nami-said .4s var(--ease) 1s both}
 @keyframes nami-draw{from{stroke-dashoffset:620}to{stroke-dashoffset:0}}
@@ -753,7 +770,7 @@ margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* Its own row under the text rather than a third column competing for width,
    and hidden rather than absent when not selected so nothing shifts. */
 .thm-on{grid-column:2;justify-self:start;visibility:hidden;
-font:700 9.5px/1 inherit;text-transform:uppercase;
+font:700 9.5px/1 var(--font);text-transform:uppercase;
 letter-spacing:.06em;color:var(--accent);background:var(--accent-bg);
 border:1px solid var(--accent-line);border-radius:4px;padding:3px 6px}
 .thm[aria-pressed="true"] .thm-on{visibility:visible}
@@ -784,7 +801,7 @@ overflow:hidden}
 .chk{background:var(--card);display:flex;gap:10px;align-items:baseline;padding:9px 12px;
 animation:fold-in var(--t-mid) var(--ease) both}
 .chk-m{flex:none;width:17px;height:17px;border-radius:50%;display:grid;
-place-items:center;font:800 9.5px/1 inherit;color:#fff;align-self:center}
+place-items:center;font:800 9.5px/1 var(--font);color:#fff;align-self:center}
 .chk.ok .chk-m{background:var(--green)}
 .chk.bad .chk-m{background:var(--red)}
 .chk.unsure .chk-m{background:var(--amber)}

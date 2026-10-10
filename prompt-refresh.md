@@ -12,8 +12,8 @@ Slack and Notion.
 
 You need the Asana and Slack tools to do this at all. If they are missing, or
 they answer with an authentication error, **stop immediately**, change nothing,
-and reply with one line naming what is missing. Rei fixes it with the Log in
-button on the page.
+and reply with one line naming what is missing. The desk sees that line and
+walks the login itself, so say plainly which of Asana or Slack it was.
 
 Three things are never a workaround, however reasonable they look:
 
@@ -38,8 +38,8 @@ this shape, and a sweep that keeps it finishes in a few minutes:
 2. **Turn 2: every independent source call, in one message.** The census, the
    gate and the milestone search do not depend on each other, so they go out
    together as parallel tool calls in a single message. Then every
-   `get_task`/`get_task_stories` the gate earns, and every Slack thread the plan
-   names, together in the next message. One call per turn is the slow shape:
+   `get_task`/`get_task_stories` the gate earns, together in the next message.
+   The plan's Slack reads (step S) go out with the first message. One call per turn is the slow shape:
    each turn re-reads the whole context.
 3. **Then write once.** Put every finding of the sweep into one JSON patch with
    the Write tool at `tmp/patch.json`, and apply it with one `./apply.py
@@ -286,9 +286,26 @@ session usually reaches a ticket as evidence rather than as work: something
 answered there that his ticket has been guessing at. Put it in that item's
 `prepared` with the session as the source, not in a new item.
 
+**Rooms the calendar says happened.** The desk reads his Google Calendar, and
+when a work meeting ends Meet attaches Gemini's notes to the event. The digest's
+step N names every such meeting no note record covers yet, with its doc link.
+Read each one with `mcp__google__drive_read_file`, in the same message as the
+census and the Slack reads, and treat it exactly like a note he pointed you at:
+what was said goes onto the tickets it touches, and the meeting gets its
+`other_notes` row (or `migration_note` for a Migration daily or X-Workstream)
+even when nothing in it reached his work, gist "nothing for Rei's tickets", so
+it stops being offered. Gemini's notes are a machine summary: quote what it
+says somebody said, attribute it to the meeting and not to the person, and
+never let it be the only source for closing an item. A doc that will not open
+is a gap, not a guess.
+
 ## 4. Then the conversations
 
-- New replies in every thread listed under each ticket's `threads`.
+- Every Slack read the plan's step S names, all of them, every sweep. Slack has
+  no gate: a reply there moves nothing on the board until you read it, so a
+  thread is never skipped for looking quiet. His own messages in them are
+  events too ("You"), and so is anything the two searches turn up.
+- New replies in every other thread listed under each ticket's `threads`.
 - Slack messages that mention Rei and have no reply from him, in the channels
   those threads live in. If one belongs to a ticket on the board, attach it as a
   thread and give it an item. If it belongs to no ticket, still give it an item
@@ -314,6 +331,9 @@ changes what he does.
 - The thing an item was held for has happened: drop the `hold`, set `todo`.
 - He sent something and the board did not know: `state` becomes `waiting` with
   `waits_on` filled in, or `sent` when nothing comes back.
+- He marked it sent from the page (the digest's sweep plan, step 4): his press
+  stands. Find the message in the thread. An answer after it moves the item as
+  above; no message found is a `"note"` on the item saying so, and nothing else.
 - Genuinely new work goes in the patch's `new_items`; apply numbers it.
 - Nothing moved on an item: leave it exactly as it is.
 

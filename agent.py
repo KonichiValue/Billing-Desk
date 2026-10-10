@@ -36,6 +36,37 @@ ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 # for. `config.json` overrides per job, `TG_MODEL` for a single run.
 DEFAULT_MODEL = "claude-low-carbon-apac-opus-5-5"
 
+# The models a question may be asked on, in the order the picker lists them.
+# Only ones this gateway serves: on 9 Oct Haiku 5.5 and Fable 5.1 came back 403
+# ("user can only access kraken-default-models"), so they are not offered.
+ASK_MODELS = (
+    ("claude-low-carbon-apac-opus-5-5", "Opus 5.5", "best writing, the slowest"),
+    ("claude-low-carbon-apac-sonnet-5-5", "Sonnet 5.5", "faster, nearly as good"),
+    ("claude-low-carbon-apac-opus", "Opus 4.8", "the long-context one"),
+    ("claude-low-carbon-apac-sonnet", "Sonnet 4.6", "quick and steady"),
+    ("claude-low-carbon-apac-haiku", "Haiku 4.5", "quickest, for a lookup"),
+)
+
+# Names an older answer may carry, so every bubble can say who wrote it.
+MODEL_NAMES = {m: name for m, name, _ in ASK_MODELS} | {
+    "claude-opus-4-8": "Opus 4.8",
+    "auto": "Default model",
+}
+
+
+def model_label(model: str | None) -> str:
+    """A model id as a person would say it: "Opus 5.5", not the gateway's id."""
+    if not model:
+        return ""
+    if model in MODEL_NAMES:
+        return MODEL_NAMES[model]
+    m = re.search(r"(opus|sonnet|haiku|fable)[-_]?(\d)?[-_.]?(\d)?", model)
+    if not m:
+        return model
+    ver = ".".join(x for x in m.groups()[1:] if x)
+    return m.group(1).title() + (f" {ver}" if ver else "")
+
+
 # The MCP servers a sweep cannot do its job without. Asana is where the tickets
 # are and Slack is where the threads are; an agent missing either does not stop,
 # it improvises, which is the failure this list exists to prevent. ktdb is not

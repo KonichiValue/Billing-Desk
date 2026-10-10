@@ -130,6 +130,13 @@ sweep writes everything it found as one `tmp/patch.json` and applies it with
 `./apply.py`, which goes through `board.save()`; the runner rebuilds afterwards.
 `./tick.py --rebuild` redraws both pages without moving anything.
 
+**Slack has no gate.** Asana's `modified_at` tells a sweep which tickets moved;
+a Slack reply moves nothing on the board until a sweep reads it. So the digest's
+step S names every Slack thread on a ticket with open work that spoke in the last
+month, read from its recorded `last_at`, plus searches for his own messages,
+his mentions, and the channels of older threads. Never add a "quiet, skip" rule
+for Slack: one missed Rei's and Kevin's replies on item 50 on 7 Oct.
+
 **Learning something in a chat is not a reason to leave the board stale.**
 Whenever work in a chat turns up something that belongs on the page, a ticket
 that moved, a draft that is now wrong, work you did on his behalf, put it on the
@@ -261,12 +268,24 @@ Do not hand-edit files in `output/`. They are regenerated from the board on
 every page load.
 
 **The open page reloads itself when the board moves.** `render.stamp()` is the
-size and modification time of `state/board.json`, `state/asks.json` and
-everything in `static/`, the page carries the one it was drawn from in
+size and modification time of `state/board.json`, `state/asks.json`,
+`state/calendar.json` and everything in `static/`, the page carries the one it was drawn from in
 `data-stamp`, and `/api/status` reports the current one every couple of seconds.
 So `./tick.py 26` in a terminal, a sweep on a schedule and an ask answered in
 another tab all reach the page on their own. If you add another file the page is
 drawn from, add it to `SOURCES` or the page will not notice it changing.
+
+**His meetings come from `calendar_sync.py`, not the board.** It reads Google
+Calendar through a one-tool headless Haiku run and writes `state/calendar.json`:
+every meeting in the four weeks the strip flips through, with its Meet link and
+any notes docs attached. A meeting is a fact about his week, not a job, so it
+never goes on the board and a sweep never writes it. serve.py on 8787 reads it
+hourly in working hours and again just after a work meeting ends, and
+`POST /api/calendar` reads it now. Nothing ever writes to the calendar. When a
+work meeting ends with Gemini notes that no `meeting_note`, `migration_note` or
+`other_notes` row covers, `calendar_sync.unread_notes()` names it, the digest
+lists it as step N, and the next refresh reads the doc and records it. A chat
+asked about his day reads the Meetings section of `output/desk.md`.
 
 It holds the reload back for one thing only: something half-written in a
 composer, where taking the words away would be worse than the staleness. Then it
@@ -326,8 +345,10 @@ Models come from `config.json` per job, overridable with `TG_REFRESH_MODEL` and
 friends. Prompts go in on stdin, because `prompt-post.md` is 48KB and that is no
 business of the command line.
 
-A sweep is worth nothing without Asana and Slack, so `agent.blockers()` refuses
-one that cannot reach them and the page says which. `./setup-mcp.sh` adds the
+A sweep is worth nothing without Asana and Slack, so `agent.blockers()` checks
+them before a token is spent. A lapsed grant is not a refusal: the Refresh and
+Write prep buttons and `tg refresh` walk the login first and only then refuse,
+and a run that stops mid-way on a dead connection starts the login too. `./setup-mcp.sh` adds the
 servers and walks the logins, `./setup-mcp.sh --check` and `tg mcp` report where
 they stand. Only Rei can approve a grant in a browser, so a lapsed one goes in
 `gaps` rather than being worked around.

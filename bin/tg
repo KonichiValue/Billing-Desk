@@ -179,6 +179,19 @@ left, message = agent.blockers(agent.pick())
 if left:
     print(message)
 ')" || { print -u2 "could not check whether a run can work"; return 1 }
+  if [[ -n "$why" && -t 0 && "$why" == *(Asana|Slack)* ]]; then
+    # A lapsed grant is fixable from here: walk the logins, then ask again.
+    print -u2 "$why"
+    print -u2 "Reconnecting first."
+    ./setup-mcp.sh || return 1
+    why="$(python3 -c '
+import agent
+agent.forget_readiness()
+left, message = agent.blockers(agent.pick())
+if left:
+    print(message)
+')"
+  fi
   if [[ -n "$why" ]]; then
     print -u2 "$why"
     return 1

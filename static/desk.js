@@ -71,7 +71,14 @@
   // of the wait is the count and the dots, and the second line is there to say a
   // long wait is still a normal one.
   function thinking(id, s, queued) {
-    var li = bubbleFor(id);
+    var all = document.querySelectorAll ? document.querySelectorAll('.qa[data-qa="' + id + '"]') : [];
+    if (all.length > 1) {
+      [].forEach.call(all, function (one) { thinkingIn(one, s, queued, id); });
+      return;
+    }
+    thinkingIn(bubbleFor(id), s, queued, id);
+  }
+  function thinkingIn(li, s, queued, id) {
     if (!li) return;
     var t = li.querySelector(".ask-wait-t");
     var tail = li.querySelector(".ask-wait-tail");
@@ -125,6 +132,7 @@
     // for. Losing what he was typing to a helpful refresh would be worse than
     // the staleness it fixes.
     var half = [].slice.call(document.querySelectorAll(".ask textarea"))
+      .concat([].slice.call(document.querySelectorAll(".chat-box textarea")))
       .some(function (t) { return t.value.trim(); });
     // The reply line under an answer is always there, so only an open box at
     // the foot of a card counts as open: an empty reply line is not his.
@@ -364,7 +372,7 @@
   // not in the document yet: reaching for them here found nothing, which left
   // every card with the clipboard fallback and no way to actually send.
   function showSends() {
-    [].forEach.call(document.querySelectorAll("[data-ask-send]"), function (b) {
+    [].forEach.call(document.querySelectorAll("[data-ask-send],[data-chat-toggle],[data-chat-open]"), function (b) {
       b.hidden = false;
     });
     // A question still running when the page was drawn, from before a reload
@@ -451,14 +459,23 @@
 
   // One card's conversation, fetched and swapped in. What he has typed into a
   // reply line survives it, and the screen does not move.
+  // One conversation's markup, or null when the server would not draw it.
+  function thread(ref, chat) {
+    return fetch("/api/thread?ref=" + encodeURIComponent(ref) + (chat ? "&chat=1" : "")).then(function (r) {
+      return r.ok ? r.text() : null;
+    }).catch(function () { return null; });
+  }
   function redraw(ref, fresh) {
-    return fetch("/api/thread?ref=" + encodeURIComponent(ref)).then(function (r) {
-      if (!r.ok) throw new Error("no thread");
-      return r.text();
-    }).then(function (html) {
+    var panel = chatBody();
+    var both = [thread(ref, false)];
+    if (panel && panel.dataset.ask === ref) both.push(thread(ref, true));
+    return Promise.all(both).then(function (got) {
+      var html = got[0];
+      if (html === null) throw new Error("no thread");
       var place = window.deskPlace ? window.deskPlace.take() : null;
+      if (got.length > 1 && got[1] !== null) drawChat(got[1], fresh);
       [].forEach.call(document.querySelectorAll(".ask[data-ask]"), function (box) {
-        if (box.dataset.ask !== ref) return;
+        if (box.dataset.ask !== ref || box.dataset.chat) return;
         var thread = box.querySelector(".ask-thread");
         if (!thread) return;
         var kept = {};
@@ -493,7 +510,7 @@
   // card the instant he presses Enter rather than when the server gets round to
   // it. It is the same markup the server draws for a running question, so the
   // redraw that replaces it changes nothing he can see until the answer is in.
-  function runningBubble(question, id) {
+  function runningBubble(question, id, model) {
     var li = document.createElement("li");
     li.className = "qa running fresh";
     li.dataset.qa = id || "";
@@ -505,6 +522,7 @@
       '<div class="qa-wait">' +
       '<span class="ask-dots" aria-hidden="true"><i></i><i></i><i></i></span>' +
       '<span class="ask-wait-t">Sending</span>' +
+      (model ? '<span class="qa-model">' + esc(model) + "</span>" : "") +
       '<button type="button" class="qa-stop" data-stop="' + esc(id || "") + '">Stop</button>' +
       '<span class="ask-wait-tail" hidden></span></div>';
     return li;
@@ -515,6 +533,8 @@
   // to, and the reply line moves down with it, the way the server draws it.
   function placeBubble(box, panel, li) {
     var thread = box.querySelector(".ask-thread");
+    var empty = thread && thread.querySelector(".chat-empty");
+    if (empty) empty.remove();
     if (panel.classList.contains("fu")) {
       var of = panel.closest(".qa");
       var list = of && of.classList.contains("kid") ? of.parentNode : null;
@@ -553,11 +573,32 @@
   }
 
   // Send one question, from a fresh bubble or from Try again on an old one.
-  function ask(ref, question, parent, li) {
+  // The model he picked next to the box. Every picker on the page shows the
+  // same one, because it is one pref, so whichever is nearest will do.
+  function picker(scope) {
+    var sel = (scope && scope.querySelector && scope.querySelector(".ask-model select")) ||
+      (document.querySelector ? document.querySelector(".ask-model select") : null);
+    return sel || null;
+  }
+  function modelName(sel) {
+    if (!sel || !sel.options) return "";
+    var o = sel.options[sel.selectedIndex];
+    return o ? o.textContent.replace(/\s*\(default\)$/, "") : "";
+  }
+  document.addEventListener("change", function (e) {
+    var sel = e.target.closest && e.target.closest(".ask-model select");
+    if (!sel) return;
+    [].forEach.call(document.querySelectorAll(".ask-model select"), function (o) {
+      if (o !== sel) o.value = sel.value;
+    });
+    if (window.deskPref) window.deskPref.set("desk-ask-model", sel.value);
+  });
+
+  function ask(ref, question, parent, li, model) {
     return fetch("/api/ask?k=" + encodeURIComponent(key), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ref: ref, question: question, parent: parent || "" })
+      body: JSON.stringify({ ref: ref, question: question, parent: parent || "", model: model || "" })
     }).then(function (r) {
       if (!r.ok) {
         return r.json().catch(function () { return {}; }).then(function (j) {
@@ -580,28 +621,34 @@
   document.addEventListener("click", function (e) {
     var b = e.target.closest && e.target.closest(".ask-send");
     if (!b || b.hidden) return;
-    var box = b.closest(".ask");
+    // The panel's composer sits under its conversation rather than inside it,
+    // so it is the one send whose box is not its ancestor.
+    var inChat = b.closest(".chat-box");
+    var box = inChat ? chatBody() : b.closest(".ask");
+    if (!box) return;
     // The send inside an answer is a follow-up to that answer; the one at the
     // foot of the card is a new question about the job.
-    var panel = b.closest(".fu") || box.querySelector(".ask-box");
+    var panel = inChat || b.closest(".fu") || box.querySelector(".ask-box");
     var field = panel.querySelector("textarea");
     var hint = panel.querySelector(".ask-hint");
     var question = (field.value || "").trim();
     if (!question) { field.focus(); return; }
     if (hint) hint.textContent = "";
-    var li = runningBubble(question, "");
+    var sel = picker(panel);
+    var li = runningBubble(question, "", modelName(sel));
     li.dataset.parent = panel.dataset.parent || "";
     placeBubble(box, panel, li);
+    if (inChat) chatScroll(true);
     // The words are on the card now, in the bubble, so the composer lets go of
     // them: it shuts, and the next question starts on an empty line.
     field.value = "";
     field.style.height = "";
-    if (!panel.classList.contains("fu")) {
+    if (!panel.classList.contains("fu") && !inChat) {
       panel.hidden = true;
       var bar = box.querySelector(".ask-bar");
       if (bar) bar.hidden = false;
     }
-    ask(box.dataset.ask, question, li.dataset.parent, li).catch(function (err) {
+    ask(box.dataset.ask, question, li.dataset.parent, li, sel ? sel.value : "").catch(function (err) {
       failBubble(li, err.message);
     });
   });
@@ -618,10 +665,11 @@
     var old = b.dataset.retry;
     var question = q ? q.textContent.trim() : "";
     if (!box || !question) return;
-    var fresh = runningBubble(question, "");
+    var sel = picker(box);
+    var fresh = runningBubble(question, "", modelName(sel));
     fresh.dataset.parent = li.dataset.parent || "";
     li.parentNode.replaceChild(fresh, li);
-    ask(box.dataset.ask, question, fresh.dataset.parent, fresh).then(function () {
+    ask(box.dataset.ask, question, fresh.dataset.parent, fresh, sel ? sel.value : "").then(function () {
       if (!old) return;
       hush();
       return fetch("/api/forget?k=" + encodeURIComponent(key), {
@@ -692,6 +740,380 @@
     });
   });
 
+
+  // The side panel: one long conversation beside the page. Same record as the
+  // cards, drawn as a chat, so everything here is the card's machinery pointed
+  // at a box that does not fold. Each question follows on from the newest
+  // answer, which is what makes "why" and "shorter" whole questions, until he
+  // presses New topic.
+  function chatEl() { return document.getElementById("chat"); }
+  function chatBody() {
+    var c = chatEl();
+    return c && c.querySelector ? c.querySelector(".chat-body") : null;
+  }
+  function chatBox() {
+    var c = chatEl();
+    return c && c.querySelector ? c.querySelector(".chat-box") : null;
+  }
+  // The newest answer is what the next question follows on from.
+  function follow(fresh) {
+    var box = chatBox(), body = chatBody();
+    if (!box || !body) return;
+    var said = body.querySelectorAll(".qa.answered");
+    var lastOne = said.length ? said[said.length - 1] : null;
+    box.dataset.parent = lastOne && !box.dataset.fresh ? lastOne.dataset.qa : "";
+    var line = box.querySelector(".chat-follow");
+    if (line) {
+      var q = lastOne && lastOne.querySelector(".qa-q");
+      line.hidden = !box.dataset.parent;
+      line.textContent = box.dataset.parent && q
+        ? "Following on from “" + q.textContent.trim().slice(0, 60) + "”"
+        : "";
+    }
+  }
+  function chatScroll(force) {
+    var body = chatBody();
+    if (!body) return;
+    var near = body.scrollHeight - body.scrollTop - body.clientHeight < 160;
+    if (force || near) body.scrollTop = body.scrollHeight;
+  }
+  function drawChat(html, fresh) {
+    var body = chatBody();
+    if (!body) return;
+    var t = body.querySelector(".ask-thread");
+    if (!t) return;
+    var near = body.scrollHeight - body.scrollTop - body.clientHeight < 160;
+    t.innerHTML = html;
+    (fresh || []).forEach(function (id) {
+      var li = t.querySelector('.qa[data-qa="' + id + '"]');
+      if (li) li.classList.add("fresh");
+    });
+    var box = chatBox();
+    if (box) delete box.dataset.fresh;
+    follow();
+    if (near || (fresh && fresh.length)) body.scrollTop = body.scrollHeight;
+  }
+  // The strip under the header that says which job, which ticket and where it
+  // stands, redrawn from the picked option so it can never name the wrong one.
+  function aboutStrip(opt, ref) {
+    var c = chatEl();
+    var strip = c && c.querySelector(".chat-about");
+    if (!strip) return;
+    var d = (opt && opt.dataset) || {};
+    strip.dataset.about = ref;
+    strip.innerHTML = "";
+    function bit(cls, text, tag) {
+      var s = document.createElement(tag || "span");
+      s.className = cls;
+      s.textContent = text;
+      strip.appendChild(s);
+      return s;
+    }
+    if (d.num) bit("chat-num", d.num);
+    bit("chat-tag", d.tag || "");
+    bit("chat-title", d.title || (opt ? opt.textContent : ref)).title = d.title || "";
+    if (d.state) bit("chat-state " + (d.tone || "grey"), d.state);
+    if (d.href) {
+      var a = bit("chat-goto", "Card →", "a");
+      a.href = "#" + d.href;
+      a.title = "Go to its card";
+    }
+  }
+  function chatMenu(on) {
+    var c = chatEl();
+    var m = c && c.querySelector(".chat-menu");
+    if (m) m.hidden = !on;
+  }
+  // Clear: this conversation, or every one. One confirm, because it cannot be
+  // undone and the second item sits one row under the first.
+  function chatClear(which) {
+    chatMenu(false);
+    var body = chatBody();
+    if (!body) return;
+    var ref = body.dataset.ask;
+    var all = which === "all";
+    var n = body.querySelectorAll(".qa").length;
+    if (!all && !n) { say("nothing to clear here", "ok"); return; }
+    if (!window.confirm(all ? "Clear every conversation on the desk, on every card? This cannot be undone."
+                            : "Clear this conversation (" + n + " " + (n === 1 ? "question" : "questions") + ")?")) return;
+    hush();
+    fetch("/api/forget?k=" + encodeURIComponent(key), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(all ? { all: true } : { ref: ref })
+    }).then(function (r) {
+      if (!r.ok) throw new Error("the desk server kept them");
+      return r.json();
+    }).then(function (j) {
+      var keep = [].slice.call(body.querySelectorAll(".qa.running,.qa.queued"));
+      var t = body.querySelector(".ask-thread");
+      if (t) {
+        t.innerHTML = keep.length ? "" : '<p class="chat-empty">Cleared. Ask anything about this.</p>';
+        if (keep.length) {
+          var ul = document.createElement("ul");
+          ul.className = "qa-list";
+          keep.forEach(function (li) { ul.appendChild(li); });
+          t.appendChild(ul);
+        }
+      }
+      var box = chatBox();
+      if (box) delete box.dataset.fresh;
+      follow();
+      say("cleared " + (j.forgot || 0), "ok");
+      // Every card that held one of them is stale now, so redraw those in place.
+      var seen = {};
+      [].forEach.call(document.querySelectorAll(".ask[data-ask]"), function (b) {
+        var r = b.dataset.ask;
+        if (b.dataset.chat || seen[r] || (!all && r !== ref) || !b.querySelector(".qa")) return;
+        seen[r] = true;
+        redraw(r, []).catch(function () {});
+      });
+    }).catch(function (err) { say(err.message, "bad"); });
+  }
+  function chatTo(ref, label) {
+    var c = chatEl(), body = chatBody();
+    if (!c || !body || !ref) return Promise.resolve();
+    var pick = c.querySelector(".chat-pick select");
+    if (pick) {
+      var has = [].some.call(pick.options, function (o) { return o.value === ref; });
+      if (!has) {
+        var o = document.createElement("option");
+        o.value = ref;
+        o.textContent = label || ref;
+        pick.insertBefore(o, pick.firstChild ? pick.firstChild.nextSibling : null);
+      }
+      pick.value = ref;
+    }
+    if (window.deskPref) window.deskPref.set("desk-chat-ref", ref);
+    aboutStrip(pick && pick.selectedOptions ? pick.selectedOptions[0] : null, ref);
+    if (body.dataset.ask === ref) return Promise.resolve();
+    body.dataset.ask = ref;
+    var t = body.querySelector(".ask-thread");
+    if (t) t.innerHTML = '<p class="chat-empty">Loading…</p>';
+    return thread(ref, true).then(function (html) {
+      if (html === null) throw new Error("no thread");
+      if (body.dataset.ask === ref) drawChat(html, []);
+      chatScroll(true);
+      [].forEach.call(body.querySelectorAll(".qa[data-live]"), function (li) {
+        if (li.dataset.qa && !mine[li.dataset.qa]) mine[li.dataset.qa] = { ref: ref };
+      });
+      if (pending()) later(0);
+    }).catch(function () {
+      if (t) t.innerHTML = '<p class="chat-empty">Could not load that conversation.</p>';
+    });
+  }
+  function chatOpen(on, focus) {
+    var c = chatEl();
+    if (!c) return;
+    c.hidden = !on;
+    if (window.deskPref) window.deskPref.set("desk-chat", on ? "1" : "0");
+    if (!on) return;
+    follow();
+    chatScroll(true);
+    var f = c.querySelector(".chat-box textarea");
+    if (f && focus !== false) f.focus();
+  }
+  document.addEventListener("click", function (e) {
+    var t = e.target.closest && e.target.closest("[data-chat-toggle],[data-chat-close],[data-chat-open],.chat-new,[data-chat-more],[data-chat-clear]");
+    if (!t) {
+      if (!(e.target.closest && e.target.closest(".chat-menu"))) chatMenu(false);
+      return;
+    }
+    var c = chatEl();
+    if (!c) return;
+    if (t.hasAttribute("data-chat-more")) {
+      var m = c.querySelector(".chat-menu");
+      chatMenu(m && m.hidden);
+      return;
+    }
+    if (t.hasAttribute("data-chat-clear")) { chatClear(t.dataset.chatClear); return; }
+    if (t.hasAttribute("data-chat-close")) { chatOpen(false); return; }
+    if (t.hasAttribute("data-chat-toggle")) { chatOpen(c.hidden); return; }
+    if (t.classList.contains("chat-new")) {
+      var box = chatBox();
+      if (box) { box.dataset.fresh = "1"; follow(); }
+      var f = c.querySelector(".chat-box textarea");
+      if (f) f.focus();
+      return;
+    }
+    // From a card's composer: carry the words over, and the conversation with
+    // them, rather than making him say again which job he means.
+    var card = t.closest(".ask");
+    var typed = card && card.querySelector(".ask-box textarea");
+    var words = typed ? typed.value : "";
+    if (typed) typed.value = "";
+    var shut = card && card.querySelector(".ask-cancel");
+    if (shut) shut.click();
+    var label = card && card.querySelector(".ask-of");
+    chatTo(t.dataset.chatOpen, label ? label.textContent.trim() : "").then(function () {
+      var f = c.querySelector(".chat-box textarea");
+      if (f && words) f.value = words;
+    });
+    chatOpen(true);
+  });
+  document.addEventListener("change", function (e) {
+    var pick = e.target.closest && e.target.closest(".chat-pick select");
+    if (pick) chatTo(pick.value);
+  });
+  document.addEventListener("keydown", function (e) {
+    var inBox = e.target.closest && e.target.closest(".chat-box");
+    if (inBox && e.target.tagName === "TEXTAREA") {
+      if (e.key === "Escape") { e.target.blur(); chatOpen(false); return; }
+      if (e.key !== "Enter" || e.shiftKey || e.altKey || e.isComposing) return;
+      e.preventDefault();
+      var send = inBox.querySelector(".ask-send");
+      if (send) send.click();
+      return;
+    }
+    if (e.key !== "a" || e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
+    var tag = (e.target.tagName || "").toLowerCase();
+    if (tag === "input" || tag === "textarea" || tag === "select" || e.target.isContentEditable) return;
+    if (document.querySelector("dialog[open]")) return;
+    var c = chatEl();
+    if (!c) return;
+    e.preventDefault();
+    chatOpen(c.hidden);
+  });
+  // The week strip's arrows. The page always draws this week; another one is
+  // fetched and swapped in. Which week he flipped to survives the page reloading
+  // itself under him for ten minutes, so a sweep landing does not throw him back
+  // to now mid-look, and after that, or in a new tab, it is this week again.
+  function weekTo(offset, quiet) {
+    var w = document.getElementById("week");
+    if (!w || !w.classList) return;
+    offset = Math.max(-52, Math.min(52, offset | 0));
+    try {
+      if (offset) sessionStorage.setItem("desk-week", JSON.stringify({ o: offset, at: Date.now() }));
+      else sessionStorage.removeItem("desk-week");
+    } catch (err) { /* private mode: it just will not remember */ }
+    if (String(offset) === w.dataset.offset) return;
+    w.classList.add("week-loading");
+    fetch("/api/week?offset=" + offset).then(function (r) {
+      if (!r.ok) throw new Error("the desk server would not draw that week");
+      return r.text();
+    }).then(function (html) {
+      var cur = document.getElementById("week");
+      if (!cur) return;
+      var t = document.createElement("div");
+      t.innerHTML = html.trim();
+      if (t.firstChild) cur.replaceWith(t.firstChild);
+      meetMark();
+    }).catch(function (err) {
+      w.classList.remove("week-loading");
+      if (!quiet) say(err.message, "bad");
+    });
+  }
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("[data-week]");
+    if (!b) return;
+    e.preventDefault();
+    weekTo(parseInt(b.dataset.week, 10) || 0);
+  });
+  document.addEventListener("keydown", function (e) {
+    if ((e.key !== "[" && e.key !== "]") || e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
+    var tag = (e.target.tagName || "").toLowerCase();
+    if (tag === "input" || tag === "textarea" || tag === "select" || e.target.isContentEditable) return;
+    if (document.querySelector("dialog[open]")) return;
+    var w = document.getElementById("week");
+    if (!w || !w.dataset) return;
+    e.preventDefault();
+    weekTo((parseInt(w.dataset.offset, 10) || 0) + (e.key === "]" ? 1 : -1));
+  });
+  function weekBack() {
+    try {
+      var kept = JSON.parse(sessionStorage.getItem("desk-week") || "null");
+      if (kept && kept.o && Date.now() - kept.at < 600000) weekTo(kept.o, true);
+    } catch (err) { /* nothing kept */ }
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", weekBack);
+  else weekBack();
+
+  // The calendar. "Calendar 12m ago" reads it again now; the server does it in a
+  // thread and this follows /api/status until it settles. A read that found the
+  // meetings changed rewrites state/calendar.json, and the page reloads itself
+  // from that like any other source, so nothing here redraws the week.
+  var calWatch = null;
+  function calFollow(b) {
+    fetch("/api/status").then(function (r) { return r.json(); }).then(function (s) {
+      var c = s.calendar || {};
+      if (c.state === "running") return;
+      clearInterval(calWatch); calWatch = null;
+      if (b && b.removeAttribute) b.removeAttribute("aria-busy");
+      if (c.state === "failed") say("Calendar: " + (c.said || "could not read it"), "bad");
+      else if (b) b.textContent = "Calendar just now";
+    }).catch(function () {
+      clearInterval(calWatch); calWatch = null;
+      if (b && b.removeAttribute) b.removeAttribute("aria-busy");
+      say("lost the desk server", "bad");
+    });
+  }
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("[data-cal-sync]");
+    if (!b || b.getAttribute("aria-busy") === "true") return;
+    b.setAttribute("aria-busy", "true");
+    b.textContent = "Reading calendar";
+    fetch("/api/calendar?k=" + encodeURIComponent(key), { method: "POST" }).then(function (r) {
+      if (!r.ok) throw new Error("the desk server would not read the calendar");
+      if (!calWatch) calWatch = setInterval(function () { calFollow(b); }, 2000);
+    }).catch(function (err) {
+      b.removeAttribute("aria-busy");
+      b.textContent = "Calendar";
+      say(err.message, "bad");
+    });
+  });
+  // Notes to fold in is a refresh: the sweep reads the Gemini notes the digest
+  // names and puts what was said on the tickets. Same button, same run.
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("[data-cal-fold]");
+    if (!b) return;
+    var r = document.getElementById("refresh");
+    if (r && !r.disabled) r.click();
+    else say("A refresh is already running; it reads the notes too.");
+  });
+
+  // Which meeting is on now and which is next, marked on the strip and offered
+  // in the header as a Join chip from ten minutes before it starts. Re-marked
+  // every half minute, so the page left open all day still knows the hour.
+  var meets = [];
+  try {
+    var mj = document.getElementById("meets");
+    meets = JSON.parse((mj && mj.textContent) || "[]") || [];
+  } catch (err) { meets = []; }
+  function meetMark() {
+    if (!document.querySelectorAll) return;
+    var now = Date.now();
+    [].slice.call(document.querySelectorAll(".wm[data-start], .wd-room[data-start]")).forEach(function (el) {
+      var s = Date.parse(el.dataset.start), en = Date.parse(el.dataset.end);
+      if (isNaN(s)) return;
+      el.classList.toggle("now", s <= now && now < en);
+      el.classList.toggle("soon", s > now && s - now <= 15 * 60000);
+    });
+    var chip = document.getElementById("meet-now");
+    if (!chip) return;
+    var next = null;
+    meets.forEach(function (m) {
+      var s = Date.parse(m.s), en = Date.parse(m.e);
+      if (isNaN(s) || now >= en || s - now > 10 * 60000) return;
+      if (!next || (m.w && !next.w) || (m.w === next.w && s < Date.parse(next.s))) next = m;
+    });
+    if (!next) { chip.hidden = true; return; }
+    var mins = Math.round((Date.parse(next.s) - now) / 60000);
+    chip.href = next.j;
+    // The time first, so the stylesheet's ellipsis eats the title and not the minutes.
+    chip.textContent = (mins > 0 ? "Join in " + mins + "m: " : "Join now: ") + next.t;
+    chip.title = next.t;
+    chip.className = "meet-now" + (mins > 0 ? " later" : "");
+    chip.hidden = false;
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", meetMark);
+  else meetMark();
+  setInterval(meetMark, 30000);
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", function () { follow(); chatScroll(true); });
+  } else {
+    follow();
+  }
 
   // The status on every job, Jira's lozenge. Pressing it is him saying the job
   // moved, on the job he means, so it runs ./tick.py like the terminal does and
@@ -803,10 +1225,10 @@
     });
   }
 
-  function move(n, verb, who) {
+  function move(n, verb, who, shown) {
     closeMenu();
     var closing = verb === "done" || verb === "sent" || verb === "dropped";
-    var look = verb === "waiting" ? ["Waiting on " + who, "blue"] : AFTER[verb];
+    var look = verb === "waiting" ? ["Waiting on " + (shown || who), "blue"] : AFTER[verb];
     mark(n, closing, look);
     busy(n, true);
     tick(n, verb, who).then(function (j) {
@@ -840,26 +1262,220 @@
     b.addEventListener("click", function (e) { e.stopPropagation(); fn(); });
     return b;
   }
-  // A name to hand the job to. Sent and waiting on somebody is the move a
-  // draft usually ends in, so on a job with one it comes first.
-  function whoRow(n, placeholder, button, value) {
-    var row = document.createElement("form");
-    row.className = "who";
+  // Who the board knows, worked out by people.py from every name it holds and
+  // embedded in the page, so picking someone is picking a person rather than
+  // typing "Tanaka-san" and hoping the next sweep reads it the same way.
+  var PEOPLE = null;
+  function directory() {
+    if (PEOPLE) return PEOPLE;
+    PEOPLE = { people: [], near: {}, byId: {} };
+    var el = document.getElementById("desk-people");
+    try {
+      var j = el ? JSON.parse(el.textContent) : null;
+      if (j && j.people) { PEOPLE.people = j.people; PEOPLE.near = j.near || {}; }
+    } catch (err) { /* no directory: the picker still takes a typed name */ }
+    PEOPLE.people.forEach(function (p) { PEOPLE.byId[p.id] = p; });
+    return PEOPLE;
+  }
+  function avatarEl(p) {
+    var a = document.createElement("span");
+    a.className = "av" + (p.team ? " team" : "");
+    a.setAttribute("aria-hidden", "true");
+    a.textContent = p.ini || "?";
+    if (p.hue !== undefined) a.style.setProperty("--h", p.hue);
+    return a;
+  }
+  // The picker: chips for who it is with, a search box, and the people to
+  // pick from. The draft's addressee comes in already chosen, so x then Enter
+  // is still the whole of the common case. Enter or a click picks and moves the
+  // job; Shift+Enter or + adds a second person first. Anyone not on the board
+  // yet is one "Use" row away, and joins the directory once it is written.
+  function personPicker(n, button, preIds, preText) {
+    var dir = directory();
+    var chosen = [];
+    (preIds || []).forEach(function (id) { if (dir.byId[id]) chosen.push(dir.byId[id]); });
+    if (!chosen.length && preText) chosen.push({ id: "x-" + preText, name: preText, short: preText, value: preText, ini: preText.slice(0, 2).toUpperCase(), custom: true });
+    var wrap = document.createElement("div");
+    wrap.className = "who-pick";
+    var field = document.createElement("div");
+    field.className = "wp-field";
     var input = document.createElement("input");
-    input.value = value || "";
-    input.placeholder = placeholder;
-    input.setAttribute("aria-label", placeholder);
+    input.placeholder = "Search people or teams";
+    input.setAttribute("aria-label", "Who has it now?");
+    input.setAttribute("role", "combobox");
+    input.setAttribute("aria-expanded", "true");
+    input.setAttribute("autocomplete", "off");
+    var list = document.createElement("div");
+    list.className = "wp-list";
+    list.setAttribute("role", "listbox");
+    var foot = document.createElement("div");
+    foot.className = "wp-foot";
+    var hint = document.createElement("span");
+    hint.className = "wp-hint";
     var go = document.createElement("button");
-    go.type = "submit";
+    go.type = "button";
+    go.className = "wp-go";
     go.textContent = button;
-    row.appendChild(input);
-    row.appendChild(go);
-    row.addEventListener("submit", function (e) {
-      e.preventDefault();
-      if (input.value.trim()) move(n, "waiting", input.value.trim());
-      else input.focus();
+    foot.appendChild(hint);
+    foot.appendChild(go);
+    wrap.appendChild(field);
+    wrap.appendChild(list);
+    wrap.appendChild(foot);
+    var rows = [], at = -1;
+
+    function value() {
+      var full = chosen.map(function (p) { return p.value; }).join(" and ");
+      if (full.length <= 80) return full;
+      return chosen.map(function (p) { return p.name; }).join(" and ").slice(0, 80);
+    }
+    function said() {
+      var s = chosen.map(function (p) { return p.short || p.name; });
+      return s.length < 2 ? (s[0] || "") : s.slice(0, -1).join(", ") + " and " + s[s.length - 1];
+    }
+    function submit(extra) {
+      if (extra && !chosen.some(function (p) { return p.id === extra.id; })) chosen.push(extra);
+      if (!chosen.length) { input.focus(); return; }
+      move(n, "waiting", value(), said());
+    }
+    function add(p) {
+      if (!chosen.some(function (c) { return c.id === p.id; })) chosen.push(p);
+      input.value = "";
+      draw();
+      input.focus();
+    }
+    function chips() {
+      [].slice.call(field.querySelectorAll(".wp-chip")).forEach(function (c) { c.remove(); });
+      chosen.forEach(function (p, i) {
+        var c = document.createElement("span");
+        c.className = "wp-chip";
+        c.appendChild(avatarEl(p));
+        var t = document.createElement("span");
+        t.textContent = p.short || p.name;
+        c.appendChild(t);
+        var x = document.createElement("button");
+        x.type = "button";
+        x.textContent = "×";
+        x.setAttribute("aria-label", "Remove " + (p.short || p.name));
+        x.addEventListener("click", function (e) {
+          e.stopPropagation();
+          chosen.splice(i, 1);
+          draw();
+          input.focus();
+        });
+        c.appendChild(x);
+        field.insertBefore(c, input);
+      });
+      go.disabled = !chosen.length;
+      go.textContent = chosen.length ? button + " · " + said() : button;
+    }
+    function score(p, q) {
+      var hay = [p.name, p.short, p.ja, p.org].concat(p.also || []).join(" ").toLowerCase();
+      if (hay.indexOf(q) < 0) return -1;
+      var words = (p.name + " " + p.short).toLowerCase().split(/[\s,-]+/);
+      var start = words.some(function (w) { return w.indexOf(q) === 0; });
+      return (start ? 100 : 0) + Math.min(p.n || 0, 99);
+    }
+    function head(text) {
+      var h = document.createElement("div");
+      h.className = "wp-h";
+      h.textContent = text;
+      list.appendChild(h);
+    }
+    function row(p, label) {
+      var r = document.createElement("div");
+      r.className = "wp-row";
+      r.setAttribute("role", "option");
+      r.id = "wp-" + n + "-" + rows.length;
+      var picked = chosen.some(function (c) { return c.id === p.id; });
+      if (picked) r.classList.add("picked");
+      r.appendChild(avatarEl(p));
+      var t = document.createElement("span");
+      t.className = "wp-t";
+      var b = document.createElement("b");
+      b.textContent = label || p.name;
+      t.appendChild(b);
+      var sub = [p.team ? "Team" : p.org, p.ja].filter(Boolean).join(" · ");
+      if (sub) {
+        var s = document.createElement("small");
+        s.textContent = sub;
+        t.appendChild(s);
+      }
+      r.appendChild(t);
+      if (!p.custom || label) {
+        var plus = document.createElement("button");
+        plus.type = "button";
+        plus.className = "wp-add";
+        plus.textContent = picked ? "✓" : "+";
+        plus.title = picked ? "Already with them" : "Add, and pick another (Shift+Enter)";
+        plus.addEventListener("click", function (e) { e.stopPropagation(); if (!picked) add(p); });
+        r.appendChild(plus);
+      }
+      r.addEventListener("mousedown", function (e) { e.preventDefault(); });
+      r.addEventListener("click", function () { submit(p); });
+      r._p = p;
+      rows.push(r);
+      list.appendChild(r);
+    }
+    function draw() {
+      chips();
+      list.innerHTML = "";
+      rows = [];
+      var q = input.value.trim().toLowerCase();
+      var seen = {};
+      chosen.forEach(function (p) { seen[p.id] = true; });
+      if (q) {
+        var hits = dir.people.map(function (p) { return [score(p, q), p]; })
+          .filter(function (x) { return x[0] >= 0 && !seen[x[1].id]; })
+          .sort(function (a, b) { return b[0] - a[0]; }).slice(0, 7);
+        hits.forEach(function (x) { row(x[1]); });
+        var typed = input.value.trim().slice(0, 60);
+        row({ id: "x-" + typed, name: typed, short: typed, value: typed, ini: typed.slice(0, 2).toUpperCase(), custom: true },
+            "Use “" + typed + "”");
+        at = 0;
+      } else {
+        var sugg = (PEOPLE.near[n] || []).map(function (id) { return dir.byId[id]; })
+          .filter(function (p) { return p && !seen[p.id]; }).slice(0, 5);
+        if (sugg.length) { head("On this ticket"); sugg.forEach(function (p) { seen[p.id] = true; row(p); }); }
+        var often = dir.people.filter(function (p) { return !p.team && !seen[p.id]; }).slice(0, 5);
+        if (often.length) { head("Often"); often.forEach(function (p) { seen[p.id] = true; row(p); }); }
+        var teams = dir.people.filter(function (p) { return p.team && !seen[p.id]; });
+        if (teams.length) { head("Teams"); teams.forEach(function (p) { row(p); }); }
+        at = chosen.length ? -1 : 0;
+      }
+      hint.textContent = q ? "Enter picks · Shift+Enter adds another"
+        : chosen.length ? "Enter to move it" : "Type a name, or pick one";
+      mark();
+    }
+    function mark() {
+      rows.forEach(function (r, i) { r.classList.toggle("on", i === at); });
+      if (rows[at]) {
+        input.setAttribute("aria-activedescendant", rows[at].id);
+        rows[at].scrollIntoView({ block: "nearest" });
+      } else input.removeAttribute("aria-activedescendant");
+    }
+    input.addEventListener("input", draw);
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!rows.length) return;
+        at = e.key === "ArrowDown" ? Math.min(rows.length - 1, at + 1) : Math.max(-1, at - 1);
+        mark();
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        var p = rows[at] && rows[at]._p;
+        if (e.shiftKey || e.metaKey) { if (p) add(p); return; }
+        submit(p || null);
+      } else if (e.key === "Backspace" && !input.value && chosen.length) {
+        chosen.pop();
+        draw();
+      }
     });
-    return row;
+    go.addEventListener("click", function (e) { e.stopPropagation(); submit(null); });
+    field.appendChild(input);
+    field.addEventListener("click", function () { input.focus(); });
+    draw();
+    return wrap;
   }
   function heading(text) {
     var h = document.createElement("div");
@@ -871,7 +1487,6 @@
     closeMenu();
     if (c.getAttribute("aria-busy") === "true") return;
     var n = c.dataset.tick, st = c.dataset.state, who = c.dataset.who || "";
-    var draft = c.hasAttribute("data-draft");
     menu = document.createElement("div");
     menu.className = "stat-menu";
     menu.setAttribute("role", "menu");
@@ -884,34 +1499,32 @@
     } else if (st === "waiting") {
       menu.appendChild(option("They replied", "it is yours again", function () { move(n, "mine"); }));
       menu.appendChild(option("Done", "nothing more comes back", function () { move(n, "done"); }));
-      menu.appendChild(heading("Handed on"));
-      menu.appendChild(whoRow(n, "Now with who?", "Move", ""));
+      menu.appendChild(heading("Handed on to"));
+      menu.appendChild(personPicker(n, "Move", [], ""));
       menu.appendChild(option("Dropped", "no longer needed", function () { move(n, "dropped"); }));
     } else {
-      if (draft) {
-        menu.appendChild(heading("Sent it?"));
-        menu.appendChild(whoRow(n, "Waiting on who?", "Sent", who));
-      }
+      // First, because it is the move he makes most: sent it, a reply is owed.
+      // The name comes in filled from the draft, so x then Enter is the whole
+      // of it, and the next sweep looks for the message and for the answer.
+      menu.appendChild(heading("Sent, waiting on"));
+      var ids = (c.dataset.whoids || c.dataset.toids || "").split(",").filter(Boolean);
+      menu.appendChild(personPicker(n, "Sent", ids, ids.length ? "" : (who || c.dataset.to || "")));
       if (st === "hold") {
         menu.appendChild(option("Start it now", "the hold is over, it is yours", function () { move(n, "mine"); }));
       }
       menu.appendChild(option("Done", "nothing comes back", function () { move(n, "done"); }));
-      if (!draft) {
-        var hand = option("With someone else", "a reply or their part is owed", function () {
-          var row = whoRow(n, "Waiting on who?", "Move", who);
-          hand.replaceWith(row);
-          row.querySelector("input").focus();
-        });
-        menu.appendChild(hand);
-      }
       menu.appendChild(option("Dropped", "no longer needed", function () { move(n, "dropped"); }));
     }
     document.body.appendChild(menu);
     var r = c.getBoundingClientRect();
     var left = Math.min(r.right + window.scrollX - menu.offsetWidth, window.scrollX + document.documentElement.clientWidth - menu.offsetWidth - 12);
     menu.style.left = Math.max(8, left) + "px";
-    var below = r.bottom + 6 + menu.offsetHeight < window.innerHeight;
-    menu.style.top = (below ? r.bottom + window.scrollY + 6 : r.top + window.scrollY - menu.offsetHeight - 6) + "px";
+    // Below when it fits, else whichever side has more room, and never up under
+    // the sticky header where its first rows cannot be seen.
+    var bar = 58, room = window.innerHeight - r.bottom - 6, up = r.top - bar - 6;
+    var below = menu.offsetHeight <= room || room >= up;
+    menu.style.top = (below ? r.bottom + window.scrollY + 6
+      : Math.max(window.scrollY + bar, r.top + window.scrollY - menu.offsetHeight - 6)) + "px";
     var first = menu.querySelector("input,[role=menuitem]");
     if (first) first.focus();
   }

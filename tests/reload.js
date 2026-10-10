@@ -99,6 +99,10 @@ function makePage(options) {
     encodeURIComponent,
     setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
     clearTimeout: () => {},
+    // The meeting marks re-draw on an interval. Not the reload's business, so
+    // they never run here and never count as the page watching.
+    setInterval: () => 0,
+    clearInterval: () => {},
     // Whatever the test wants the server to be saying this poll.
     fetch: (url) => {
       sandbox.fetched.push(url);

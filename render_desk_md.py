@@ -15,9 +15,11 @@ from __future__ import annotations
 import json
 import os
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
+import calendar_sync
+import people
 import render_milestone
 
 from render import item_state as state_of
@@ -525,8 +527,48 @@ def render_huddle(data: dict) -> list[str]:
     return block(title, rows)
 
 
+def render_meetings(data: dict) -> list[str]:
+    """Today's and the next working day's meetings, from `state/calendar.json`.
+
+    So a chat asked "what's my afternoon" or "where's the CDL weekly link" can
+    answer from this file like the page does, and knows which notes are unread.
+    """
+    stored = calendar_sync.load_raw()
+    events = stored.get("events") or []
+    if not events:
+        return []
+    today = date.today()
+    ahead = today + timedelta(days=3 if today.weekday() == 4 else 1)
+    out = ["## Meetings", "",
+           f"From Google Calendar, read {calendar_sync.seen_at() or stored.get('fetched_at', '?')}.", ""]
+    for day in (today, ahead):
+        rows = [e for e in events if e.get("date") == day.isoformat()]
+        out.append(f"**{'Today' if day == today else day.strftime('%a %-d %b')}**"
+                   + ("" if rows else ": nothing"))
+        for e in rows:
+            span = e["at"] + (f"-{e['until']}" if e.get("until") else "")
+            tags = ", ".join(filter(None, [
+                "TG in the room" if e.get("tg") else "",
+                {"tentative": "maybe", "needsAction": "not answered"}.get(e.get("answer", ""), ""),
+            ]))
+            links = " ".join(
+                ([link("Join", e["join"])] if e.get("join") else [])
+                + [link("Notes", n["url"]) for n in (e.get("notes") or [])[:1] if n.get("url")]
+            )
+            out.append(f"- {span} {'**' + e['title'] + '**' if e.get('work') else e['title']}"
+                       + (f" ({tags})" if tags else "") + (f" {links}" if links else ""))
+        out.append("")
+    unread = calendar_sync.unread_notes(data)
+    if unread:
+        out += ["**Notes not folded in yet:** " + "; ".join(
+            f"{e['date']} {e['title'].strip()}" for e in unread[:6]) + ". The next refresh reads them.", ""]
+    return out
+
+
 def render(data: dict) -> str:
     pretty = date.today().strftime("%A %-d %B %Y")
+    # Holders said the way the page says them, so the two files agree.
+    people.load(data)
     tickets = data.get("tickets", [])
     _index = index_items(tickets)
     total = sum(
@@ -672,6 +714,8 @@ def render(data: dict) -> str:
     milestones = render_milestone.markdown(data)
     if milestones:
         out += milestones.splitlines() + [""]
+
+    out += render_meetings(data)
 
     asked = render_asks("board")
     if asked:

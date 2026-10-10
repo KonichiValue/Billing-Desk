@@ -17,6 +17,9 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+import agent
+import people
+
 RUBY = re.compile(r"\{([^|{}]+)\|([^|{}]+)\}")
 KANJI = re.compile(r"[\u4e00-\u9fff]")
 
@@ -456,6 +459,9 @@ def item_state(item: dict) -> dict:
     who = waits.get("who", "")
     at = item.get("state_at") or waits.get("since", "")
     label, tone, order = LIFECYCLE.get(state, LIFECYCLE["todo"])
+    # The way he says them, "Tanaka-san" rather than "Tomoya Tanaka, TG", once
+    # the render has worked out who the board's names are. As written otherwise.
+    who = people.said(who) if who else who
     if state == "waiting" and who:
         label = f"Waiting on {who}"
     return {
@@ -684,7 +690,9 @@ STATIC = ROOT / "static"
 
 # Everything the page is drawn from. Not the rendered files in `output/`, which
 # are written fresh on every load and would change the answer every time.
-SOURCES = ("state/board.json", "state/asks.json")
+# `calendar.json` only changes when a read found the meetings different, so an
+# hourly look that found nothing new leaves the page where it is.
+SOURCES = ("state/board.json", "state/asks.json", "state/calendar.json")
 
 
 def stamp(conversation: bool = True) -> str:
@@ -884,6 +892,20 @@ def section(
     return f'<section class="sub {role}">{head}{body}</section>'
 
 
+def draft_to(item: dict) -> str:
+    """Who an unsent draft is addressed to, so "Sent, waiting on" comes filled.
+
+    The draft's `target` is a sentence ("Slack reply to Chris Lerus in the Ask
+    IE thread"), so this takes the words after "to" and stops at the place. A
+    guess he can overwrite in the box, never written to the board.
+    """
+    draft = item.get("draft") or {}
+    if draft.get("sent") or draft.get("posted"):
+        return ""
+    m = re.search(r"\bto ([A-Z].+?)(?: in | on | \u2014 | \(|,|$)", str(draft.get("target", "")))
+    return m.group(1).strip()[:60] if m else ""
+
+
 def status_button(item: dict, st: dict, label: str = "", tone: str = "") -> str:
     """Where a job stands, as the thing you press to move it. Jira's lozenge.
 
@@ -896,26 +918,60 @@ def status_button(item: dict, st: dict, label: str = "", tone: str = "") -> str:
     behind another, which is "With you" on the board and not startable.
     """
     n = esc(item.get("id", ""))
-    draft = item.get("draft") or {}
-    unsent = bool(draft) and not draft.get("sent") and not draft.get("posted")
     waits = item.get("waits_on") or {}
     tone = tone if tone in TONES else st["tone"]
+    holders = people.find(waits.get("who", "")) if st["state"] == "waiting" else []
     attrs = "".join(
         f' data-{k}="{esc(v)}"'
-        for k, v in (("who", waits.get("who", "")), ("chase", waits.get("chase_on", "")))
+        for k, v in (
+            ("who", waits.get("who", "")),
+            ("whoids", ",".join(p["id"] for p in holders)),
+            ("chase", waits.get("chase_on", "")),
+            ("to", draft_to(item)),
+            ("toids", ",".join(p["id"] for p in people.find(draft_to(item)))),
+        )
         if v
     )
     text = label or st["label"]
     return (
         f'<button type="button" class="stat {esc(tone)}" data-tick="{n}" '
-        f'data-state="{esc(st["state"])}"{" data-draft" if unsent else ""}{attrs} '
+        f'data-state="{esc(st["state"])}"{attrs} '
         f'data-title="{esc(item.get("title", ""))}" aria-haspopup="menu" '
         f'aria-label="Job {n}: {esc(text)}. Change status" '
         f'title="{esc(text)}. Press to change it (x)">'
+        f"{avatars(holders)}"
         f'<span class="stat-t">{esc(text)}</span>'
         f'<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2.5 4l2.5 2.5L7.5 4"/></svg>'
         f"</button>"
     )
+
+
+def avatar(p: dict, size: str = "") -> str:
+    """One person as a coloured circle with their initials, the way Jira and
+    Slack show who has something, so a holder is recognised before it is read."""
+    team = " team" if p.get("team") else ""
+    return (
+        f'<span class="av{team}{" " + size if size else ""}" '
+        f'style="--h:{people.hue(p["id"])}" aria-hidden="true">'
+        f"{esc(people.initials(p))}</span>"
+    )
+
+
+def avatars(holders: list[dict]) -> str:
+    """The holders of a job as overlapping circles, two at most and a count."""
+    if not holders:
+        return ""
+    more = f'<span class="av more">+{len(holders) - 2}</span>' if len(holders) > 2 else ""
+    return f'<span class="avs">{"".join(avatar(p) for p in holders[:2])}{more}</span>'
+
+
+def people_json(board: dict) -> str:
+    """The directory as the status menu's picker reads it, embedded in the page."""
+    blob = json.dumps(
+        {"people": [people.public(p) for p in people.DIRECTORY], "near": people.near(board)},
+        ensure_ascii=False,
+    ).replace("</", "<\\/")
+    return f'<script type="application/json" id="desk-people">{blob}</script>'
 
 
 def pill(label: str, tone: str) -> str:
@@ -1156,6 +1212,8 @@ def qa_one(
                   <span class="ask-dots" aria-hidden="true"><i></i><i></i><i></i></span>
                   <span class="ask-wait-t">{"Queued, behind the one in front"
                       if state == "queued" else "Thinking"}</span>
+                  {f'<span class="qa-model">{esc(agent.model_label(a.get("model")))}</span>'
+                   if a.get("model") else ""}
                   <button type="button" class="qa-stop" data-stop="{ident}">Stop</button>
                   <span class="ask-wait-tail" hidden></span>
                 </div>
@@ -1188,7 +1246,8 @@ def qa_one(
                         title="Forget this question" aria-label="Forget this question">&times;</button>
               </li>"""
     return f"""
-              <li class="qa {esc(state)}{" kid" if child else ""}" data-qa="{ident}">
+              <li class="qa {esc(state)}{" kid" if child else ""}" data-qa="{ident}"
+                  data-at="{esc(a.get("asked_at", ""))}">
                 <details {"open" if open_ else ""}>
                   <summary>
                     <span class="qa-k">{"Then" if child else "You asked"}</span>
@@ -1197,6 +1256,7 @@ def qa_one(
                     <span class="fold-hint"></span>
                   </summary>
                   <div class="qa-a">{answered(body)}</div>
+                  {qa_by(a)}
                   {action_html(ident, moves, str(a.get("acted_on") or ""))}
                   {kids}
                   {qa_foot(ident) if foot else ""}
@@ -1204,6 +1264,43 @@ def qa_one(
                 <button type="button" class="qa-del" data-forget="{ident}"
                         title="Forget this question" aria-label="Forget this question">&times;</button>
               </li>"""
+
+
+def qa_by(a: dict) -> str:
+    """Which model wrote the answer and how long it took, under the answer.
+
+    He asked to be told, and it is the first thing to look at when an answer is
+    thin: a Haiku answer to a drafting question is the model, not the desk.
+    """
+    label = agent.model_label(a.get("model"))
+    took = a.get("took_secs")
+    bits = [b for b in (label, f"{took}s" if took else "") if b]
+    if not bits:
+        return ""
+    return f'<div class="qa-by">{SPARK}{" &middot; ".join(esc(b) for b in bits)}</div>'
+
+
+def model_picker() -> str:
+    """The model a question goes to, chosen in the composer, Claude Desktop's way.
+
+    The choice is a pref, so every composer on the page and every browser shows
+    the same one; desk.js keeps them in step and sends it with the question. The
+    default is whatever config.json gives the ask job.
+    """
+    default = agent.model_for("ask")
+    chosen = str(prefs().get("desk-ask-model") or default)
+    ids = [m for m, _, _ in agent.ASK_MODELS]
+    if chosen not in ids:
+        chosen = default if default in ids else ids[0]
+    opts = "".join(
+        f'<option value="{esc(m)}"{" selected" if m == chosen else ""}'
+        f' title="{esc(why)}">{esc(name)}{" (default)" if m == default else ""}</option>'
+        for m, name, why in agent.ASK_MODELS
+    )
+    return (
+        f'<label class="ask-model" title="Which model answers">{SPARK}'
+        f'<select aria-label="Model">{opts}</select></label>'
+    )
 
 
 def qa_foot(ident: str) -> str:
@@ -1226,6 +1323,50 @@ def qa_foot(ident: str) -> str:
                       <span class="ask-hint"></span>
                     </div>
                   </div>"""
+
+
+def chat_one(a: dict) -> str:
+    """One exchange in the side panel: his words on the right, the answer under.
+
+    Nothing folds here, because the panel is where he reads a conversation
+    rather than where he keeps one. Running, failed and stopped questions look
+    the same as on a card, so the live line and Try again work unchanged.
+    """
+    if a.get("state", "answered") != "answered":
+        return qa_one(a, True, foot=False)
+    body, moves = proposed(a.get("answer") or "")
+    ident = esc(a.get("id", ""))
+    return f"""
+              <li class="qa answered chat-qa" data-qa="{ident}"
+                  data-at="{esc(a.get("asked_at", ""))}">
+                <div class="qa-me"><span class="qa-q">{esc(a.get("question"))}</span>
+                  <span class="qa-when">{esc(a.get("asked_at", ""))}</span></div>
+                <div class="chat-a">
+                  <div class="qa-a">{answered(body)}</div>
+                  {qa_by(a)}
+                  {action_html(ident, moves, str(a.get("acted_on") or ""))}
+                </div>
+                <button type="button" class="qa-del" data-forget="{ident}"
+                        title="Forget this question" aria-label="Forget this question">&times;</button>
+              </li>"""
+
+
+def chat_thread(asks: list[dict]) -> str:
+    """The same conversation for the side panel: every exchange, oldest first.
+
+    On a card the record is folded so the card stays a card. In the panel the
+    conversation is the point, so nothing folds and nothing nests: it reads top to
+    bottom like every chat he uses, and the composer under it carries on from the
+    newest answer.
+    """
+    if not asks:
+        return (
+            '<p class="chat-empty">Nothing asked here yet. Ask anything about the '
+            "work, or tell it what to change. The answer stays here, and on the "
+            "card.</p>"
+        )
+    rows = sorted(enumerate(asks), key=lambda p: (str(p[1].get("asked_at", "")), p[0]))
+    return '<ul class="qa-list">' + "".join(chat_one(a) for _, a in rows) + "</ul>"
 
 
 def qa_thread(asks: list[dict]) -> str:
@@ -1360,7 +1501,10 @@ def ask_block(
                     {SEND}</button>
                 </div>
                 <div class="ask-go">
+                  {model_picker()}
                   <span class="ask-keys">Enter sends &middot; Shift+Enter for a new line &middot; Esc closes</span>
+                  <button type="button" class="ask-chat" data-chat-open="{esc(ref)}" hidden
+                          title="Carry on in the side panel (a)">Open in side panel</button>
                   <button type="button" class="ask-copy">Copy for a chat</button>
                   <button type="button" class="ask-cancel">Close</button>
                   <span class="ask-hint"></span>
@@ -1369,9 +1513,9 @@ def ask_block(
             </div>"""
 
 
-def thread_html(ref: str) -> str:
+def thread_html(ref: str, chat: bool = False) -> str:
     """One card's conversation, for the page to swap in without a reload."""
-    return qa_thread(ASKED.get(ref, []))
+    return (chat_thread if chat else qa_thread)(ASKED.get(ref, []))
 
 
 def render_consequences(c: dict, ref: str = "") -> str:
