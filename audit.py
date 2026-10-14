@@ -236,6 +236,26 @@ def check_duplicate_targets(b: dict, rep: Report) -> None:
                 )
 
 
+def check_terminal_steps(b: dict, rep: Report) -> None:
+    """A step telling him to type a command the page does in one press.
+
+    "Then ./tick.py 52 once it is posted" sent him to a terminal for the move
+    every draft ends in. The Posted it bar under each draft does it, and says
+    what it will do; `reply_from` and `expects_reply` on the draft are how a
+    writer tells it, not a step.
+    """
+    for ticket, item in B.items(b):
+        if not B.is_open(item):
+            continue
+        for step in item.get("steps") or []:
+            if "tick.py" in str(step):
+                rep.add(
+                    "A step that needs a terminal",
+                    f"  {item.get('id')} ({ticket.get('ref')}): \"{str(step)[:70]}\". "
+                    f"Take it out: the draft's Posted it button moves the job.",
+                )
+
+
 def check_prepared(b: dict, rep: Report) -> None:
     """Prepared work built before the ticket last moved.
 
@@ -287,6 +307,7 @@ CHECKS = (
     check_wiring,
     check_closed_tickets,
     check_duplicate_targets,
+    check_terminal_steps,
     check_prepared,
     check_sessions,
 )

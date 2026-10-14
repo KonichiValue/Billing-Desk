@@ -1215,6 +1215,7 @@
     mark(was.n, false, null);
     busy(was.n, true);
     toast("Putting " + was.n + " back…");
+    if (was.draft) { was.draft.classList.remove("posted", "nudge"); was.draft.open = true; was.btn.disabled = false; }
     tick(was.n, "undo", "", was.before).then(function () {
       busy(was.n, false);
       toast(was.n + " is back where it was");
@@ -1290,7 +1291,7 @@
   // is still the whole of the common case. Enter or a click picks and moves the
   // job; Shift+Enter or + adds a second person first. Anyone not on the board
   // yet is one "Use" row away, and joins the directory once it is written.
-  function personPicker(n, button, preIds, preText) {
+  function personPicker(n, button, preIds, preText, pick) {
     var dir = directory();
     var chosen = [];
     (preIds || []).forEach(function (id) { if (dir.byId[id]) chosen.push(dir.byId[id]); });
@@ -1335,7 +1336,7 @@
     function submit(extra) {
       if (extra && !chosen.some(function (p) { return p.id === extra.id; })) chosen.push(extra);
       if (!chosen.length) { input.focus(); return; }
-      move(n, "waiting", value(), said());
+      (pick || function (v, w) { move(n, "waiting", v, w); })(value(), said());
     }
     function add(p) {
       if (!chosen.some(function (c) { return c.id === p.id; })) chosen.push(p);
@@ -1515,6 +1516,9 @@
       menu.appendChild(option("Done", "nothing comes back", function () { move(n, "done"); }));
       menu.appendChild(option("Dropped", "no longer needed", function () { move(n, "dropped"); }));
     }
+    place(c);
+  }
+  function place(c) {
     document.body.appendChild(menu);
     var r = c.getBoundingClientRect();
     var left = Math.min(r.right + window.scrollX - menu.offsetWidth, window.scrollX + document.documentElement.clientWidth - menu.offsetWidth - 12);
@@ -1528,6 +1532,99 @@
     var first = menu.querySelector("input,[role=menuitem]");
     if (first) first.focus();
   }
+
+  // Posted it, at the foot of each draft. The draft is where he copies the
+  // words from, so it is where he comes back to say they went: copy, paste,
+  // press. It used to be a step reading "Then ./tick.py 52 once it is posted".
+  // The button already says what it will do (wait on Shiina-san, close the
+  // job, or one more to send) and does it in one press, with the same Undo as
+  // the status. The arrow beside it is for when the guess is wrong: someone
+  // else replies, or nothing comes back at all.
+  // This script is inlined above the cards, so the bars are not there yet.
+  function showFeet() {
+    [].forEach.call(document.querySelectorAll(".draft-foot"), function (f) { f.hidden = false; });
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", showFeet);
+  else showFeet();
+  function box(b) { return b.closest(".act-draft"); }
+  function postedLook(b, who, close) {
+    var after = close ? "close" : who ? "wait" : b.dataset.after;
+    if (after === "more") return null;
+    if (after === "close") return ["Sent", "green"];
+    return ["Waiting on " + (who || b.dataset.who || "them"), "blue"];
+  }
+  function postIt(b, who, shown, close) {
+    closeMenu();
+    var n = b.dataset.posted, d = box(b);
+    var look = postedLook(b, shown || who, close);
+    var closing = !!(look && look[1] === "green");
+    if (d) { d.classList.add("posting"); d.open = false; }
+    if (look) mark(n, closing, look);
+    busy(n, true);
+    b.disabled = true;
+    fetch("/api/tick?k=" + encodeURIComponent(key), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ n: n, verb: "posted", draft: b.dataset.draft, who: who || "", close: !!close })
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        if (!r.ok) throw new Error(j.error || "the desk server said no");
+        return j;
+      });
+    }).then(function (j) {
+      busy(n, false);
+      if (d) { d.classList.remove("posting"); d.classList.add("posted"); }
+      last = { n: n, before: j.before, closing: closing, look: look, draft: d, btn: b };
+      toast(j.said || "Posted", undoLast);
+    }).catch(function (err) {
+      busy(n, false);
+      b.disabled = false;
+      if (d) { d.classList.remove("posting"); d.open = true; }
+      if (look) mark(n, false, null);
+      toast("Could not mark it posted: " + err.message, null, true);
+    });
+  }
+  function postedMenu(b) {
+    closeMenu();
+    var n = b.dataset.posted;
+    menu = document.createElement("div");
+    menu.className = "stat-menu";
+    menu.setAttribute("role", "menu");
+    menu._from = b;
+    b.setAttribute("aria-expanded", "true");
+    menu.appendChild(heading("Posted, waiting on"));
+    var ids = (b.dataset.whoids || "").split(",").filter(Boolean);
+    menu.appendChild(personPicker(n, "Posted", ids, ids.length ? "" : (b.dataset.who || ""),
+      function (v, w) { postIt(b, v, w, false); }));
+    menu.appendChild(option("Posted, nothing comes back", "closes the job as sent",
+      function () { postIt(b, "", "", true); }));
+    place(b);
+  }
+  document.addEventListener("click", function (e) {
+    var t = e.target.closest && e.target.closest(".posted,.posted-more");
+    if (!t) return;
+    e.preventDefault();
+    // Immediate, or the status menu's own capture listener below sees a click
+    // outside every .stat and shuts the menu this just opened.
+    e.stopImmediatePropagation();
+    var b = t.classList.contains("posted") ? t : t.parentNode.querySelector(".posted");
+    if (!b || b.disabled) return;
+    if (menu && menu._from === b) { closeMenu(); return; }
+    if (t !== b || b.dataset.after === "ask") postedMenu(b);
+    else postIt(b, "", "", false);
+  }, true);
+  // Copying the words, or following the link to where they go, is the moment he
+  // is about to post. So the bar under that draft lights up, and stays lit
+  // until he comes back and presses it or another draft takes over.
+  document.addEventListener("click", function (e) {
+    var c = e.target.closest && e.target.closest(".act-draft.live .copy, .act-draft.live .draft-head a");
+    if (!c) return;
+    var d = box(c);
+    [].forEach.call(document.querySelectorAll(".act-draft.nudge"), function (x) {
+      if (x !== d) x.classList.remove("nudge");
+    });
+    if (d && d.querySelector(".draft-foot:not([hidden])")) d.classList.add("nudge");
+  });
 
   // Up and down walk the menu, the way every menu does, and Escape leaves it
   // from anywhere in it, the name box included.

@@ -34,6 +34,7 @@ from pathlib import Path
 
 import audit
 import board as B
+import prioritize
 import calendar_sync
 
 WRAP = 160
@@ -381,6 +382,7 @@ def _sweep_plan(b: dict) -> None:
     # Meetings that ended with Gemini notes attached and no note record on the
     # board yet, read from the calendar the desk keeps. This is how a room he
     # sat in reaches the board without him pasting anything.
+    _prioritization_plan(b)
     unread = calendar_sync.unread_notes(b)
     if unread:
         _out("  N. Meeting notes nobody has read: drive_read_file each doc, in the same message as 0/1/S.")
@@ -392,6 +394,36 @@ def _sweep_plan(b: dict) -> None:
             doc = next((n for n in e.get("notes") or [] if calendar_sync.GEMINI.search(n.get("title", ""))), {})
             _out(f"       - {e['date']} {e['at']} {e['title'][:60]}  {doc.get('url', '')}")
     _out()
+
+
+def _prioritization_plan(b: dict) -> None:
+    """Step P: his CE builds, read fresh for Heqing's bi-weekly round.
+
+    Asana ignores a CDL-Owner filter on search (13 Oct: it came back with every
+    CDL's builds), and the CE projects read whole are 120k characters. So the
+    builds already known are read by gid, new ones are found by creation date,
+    and ownership is checked on the field itself. CDL-Owner is the only rule:
+    another CDL's build never goes in, however close to his tickets it sits.
+    """
+    cfg = prioritize.config()
+    if not cfg:
+        return
+    block = b.get("prioritization") or {}
+    nxt = prioritize.next_round(cfg)
+    since = (block.get("checked_at") or "")[:10] or "2026-09-01"
+    _out(f"  P. Prioritization: next thread {nxt.get('date', '?')} {nxt.get('at', '')},"
+         f" raise by {nxt.get('ask_by', '?')}. In the same message as 0/1/S:")
+    gids = [x.get("gid") for x in block.get("builds") or [] if x.get("gid")]
+    if gids:
+        _out(f"     get_task each (include_comments=false): {' '.join(gids)}")
+    _out(f"     search_tasks projects_any={','.join(cfg.get('ce_projects') or [])} created_on_after={since}"
+         " completed=false opt_fields=name,due_on,completed,custom_fields.gid,custom_fields.display_value")
+    _out(f"     Keep only CDL-Owner ({cfg.get('cdl_owner_field')}) = Rei Samuelsson. Write the whole of")
+    _out("     board \"prioritization.builds\" (section 7c), and \"prioritization.checked_at\" = now.")
+    ran = prioritize.previous(cfg).get("date") or ""
+    if ran and (block.get("last_round") or {}).get("date", "") < ran:
+        _out(f"     A round has run: read {cfg.get('who')}'s thread in {cfg.get('channel')} ({cfg.get('channel_id')})")
+        _out("     and set prioritization.last_round {date, url, ordered, not_pushed} for his builds only.")
 
 
 CHEATSHEET = """WRITE  (the whole of a sweep's writing -- no python, no help(board), no board.json dump)
@@ -407,6 +439,8 @@ Write ONE patch file with the Write tool, then apply it with ONE command:
    "threads": [{"ticket": "...", "url": "...", "last_at": "2026-10-07 12:08", "last_from": "Heqing"}],
    "items":   {"32": {"state": "todo", "note": "Heqing replied 12:08",          moves like ./tick.py
                       "draft.body_ruby": "...", "progress_note": "...", "steps": ["..."]},
+                      draft.reply_from / draft.expects_reply: false say what Posted it does;
+                      never a "./tick.py N" step, the page has a button for it
                "45": {"state": "waiting", "who": "Tamanoi, TG", "chase_on": "2026-10-09"}},
    "new_items": [{"ticket": "...", "title": "...", "why": "...", "steps": ["..."],
                   "done_when": "...", "urgency": "today"}],        numbered for you

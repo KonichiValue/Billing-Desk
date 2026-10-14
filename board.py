@@ -15,6 +15,7 @@ Shape of `state/board.json`:
               "sessions": [ ...see below... ],
               "script": {"for_date", "at", "built_at", "headline"},
               "news": [ ...see below... ],
+              "prioritization": { ...see below... },
               "tickets": [
                 {
                   "id": "1217430352217964",        Asana gid, so nothing is duplicated
@@ -244,7 +245,21 @@ tells him to ask, tell, confirm or reply and carries no draft is a bug.
      "link": "https://...",                optional, the Go there button
      "body_ruby": "{漢字|かんじ}で…",        a ja draft's text, with furigana on whole words
      "body_en": "…",                       an en draft's text; or the translation shown under a ja draft
-     "sent": false}                        set true once he confirms it went
+     "reply_from": "Tanaka-san",           optional, who answers it, when that is not the addressee
+     "expects_reply": false,               optional, only when nothing comes back from it
+     "sent": false}                        set true by the Sent button (or tick.py --draft)
+
+A job that sends more than one message (a reply to TG and one to the engineer
+who answered) puts the first in `draft` and the rest in `drafts`, a list of the
+same shape. Each shows as its own box above `prepared`, never as a note inside it.
+
+Every unsent draft carries a Sent bar on the page. Pressing it marks that draft
+`sent`, and once the last draft on the job has gone it moves the job: waiting on
+everyone a draft expects a reply from, or closed as `sent` when none does. So
+`reply_from` and `expects_reply` are how a writer says what happens after the
+message, and a step never says it. **Never write a `./tick.py` command, or any
+other instruction for moving the job, into `steps`**: he would need a terminal
+for a thing the card does in one press, and audit.py flags it.
 
 The body has to be under the key the renderer reads, or the card shows an empty
 box that reads as ready to paste: a ja draft in `body_ruby` (furigana on whole
@@ -383,6 +398,27 @@ children can never disagree about what is open.
                   "who", "note", "items": [52]}],
       "tickets": [{"ref", "title", "asana_url", "assignee", "state"}],
       "items": [52, 54]}]
+
+`prioritization` is every CE build whose CDL-Owner is Rei, as Asana had it when
+a sweep last read them, for Heqing's bi-weekly prioritization round. The round
+dates are not here: `prioritize.py` works them out from `config.json`. CDL-Owner
+is the whole membership rule, so a build owned by another CDL never appears,
+however close it sits to one of his tickets.
+
+    {"checked_at": "ISO",
+     "last_round": {"date": "2026-10-13", "url": "the Slack thread",
+                    "ordered": ["KT-108568", "KT-108653"],
+                    "not_pushed": ["KT-106562"]},   his builds only
+     "builds": [{"kt": "KT-107146", "gid", "url", "name",
+                 "ticket": "供給中断取込",          board ref, or "" when none
+                 "status": "Status (Kraken Cust)", "refinement": "🟢",
+                 "size": "3 SP", "tg_order": "", "wave": "", "squad": "",
+                 "due_on": "YYYY-MM-DD or empty", "engineer": "",
+                 "why": "one line for Heqing on why it should be ordered"}]}
+
+A build with no TG Order that is refined is one to raise; `why` is the reason
+in Heqing's words, written for a Kraken reader. Like `internal_ticket.build`,
+none of it ever reaches TG.
 
 `phases` is the path to done, in order, the way `closes_when` is for a ticket.
 `tickets` lists every ticket under it, his or not: a `ref` that is on the board
@@ -683,6 +719,7 @@ SHAPES: dict[str, type | tuple[type, ...]] = {
     "waits_on": dict,
     "hold": dict,
     "draft": dict,
+    "drafts": list,
     "prepared": dict,
     "history": list,
     "est_minutes": (int, float),
@@ -794,8 +831,10 @@ def check(board: dict) -> list[str]:
         # body_en/body_ruby/body (en), so any other body* key is text that will never
         # show. That is the fault that shipped three blank drafts once: a ja body saved
         # under a bare key the ja branch did not read.
-        draft = item.get("draft")
-        if isinstance(draft, dict):
+        extra = item.get("drafts") if isinstance(item.get("drafts"), list) else []
+        for draft in [item.get("draft")] + extra:
+            if not isinstance(draft, dict):
+                continue
             readable = {"body_ruby", "body_ja", "body", "body_en"}
             for k, v in draft.items():
                 if (
@@ -866,6 +905,29 @@ def check(board: dict) -> list[str]:
             if str(ident) not in ids:
                 bad.append(f"{where}: item {ident} is not on the board")
 
+    prio = board.get("prioritization")
+    if prio is not None and not isinstance(prio, dict):
+        bad.append("prioritization should be an object, or left out")
+        prio = {}
+    builds = (prio or {}).get("builds")
+    if builds is not None and not isinstance(builds, list):
+        bad.append("prioritization.builds should be a list")
+        builds = []
+    for n, row in enumerate(builds or [], 1):
+        if not isinstance(row, dict) or not row.get("kt"):
+            bad.append(f"prioritization.builds[{n}] needs a kt")
+            continue
+        if row.get("due_on") and not ISO_DAY.fullmatch(str(row["due_on"])):
+            bad.append(f"prioritization build {row['kt']}: due_on {row['due_on']!r} "
+                       "is not YYYY-MM-DD; leave it empty when there is none")
+        for field in ("tg_order", "status", "size", "wave", "why", "ticket"):
+            if isinstance(row.get(field), (dict, list)):
+                bad.append(f"prioritization build {row['kt']}: {field} should be text")
+    for field in ("ordered", "not_pushed"):
+        got = ((prio or {}).get("last_round") or {}).get(field)
+        if got is not None and not isinstance(got, list):
+            bad.append(f"prioritization.last_round.{field} should be a list of KT numbers")
+
     highest = max((int(n) for n in ids if n.isdigit()), default=0)
     if board.get("next_id", 0) <= highest:
         bad.append(
@@ -880,6 +942,20 @@ def by_id(board: dict, item_id: str | int) -> tuple[dict, dict] | tuple[None, No
         if str(item.get("id")) == str(item_id):
             return ticket, item
     return None, None
+
+
+def drafts(item: dict) -> list[dict]:
+    """Every message this job sends, `draft` first, as the dicts on the item.
+
+    The same records, not copies, so a caller can mark one sent in place.
+    """
+    first = [item["draft"]] if isinstance(item.get("draft"), dict) and item["draft"] else []
+    rest = item.get("drafts") if isinstance(item.get("drafts"), list) else []
+    return first + [d for d in rest if isinstance(d, dict) and d]
+
+
+def unsent(draft: dict) -> bool:
+    return not (draft.get("sent") or draft.get("posted"))
 
 
 def next_id(board: dict) -> int:

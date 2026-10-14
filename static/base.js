@@ -415,6 +415,9 @@
     themeBtns.forEach(function(b){
       b.addEventListener('click',function(){
         document.body.dataset.theme=b.dataset.themeSet;
+        // The installed app's title bar follows the bar on the page.
+        var tc=document.querySelector('meta[name=theme-color]');
+        if(tc)tc.content=b.dataset.themeSet==='kraken'?'#29162f':'#0d1524';
         setPref('desk-theme',b.dataset.themeSet);
         mark();
       });

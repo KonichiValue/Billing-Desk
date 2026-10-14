@@ -1038,6 +1038,10 @@ TICKS = {
     "waiting": lambda n, who, note: [n, "-w", who] + (["-n", note] if note else []),
     "mine": lambda n, who, note: [n, "--mine"],
     "undo": lambda n, who, note: [n, "--undo"],
+    # One draft posted, from the bar under it. The draft's number is added
+    # below. `who` is only there when he picked someone; otherwise tick.py reads
+    # who answers off the drafts.
+    "posted": lambda n, who, note: [n] + (["-w", who] if who else []),
 }
 
 
@@ -1052,18 +1056,30 @@ def tick_from_page(body: dict) -> tuple[int, dict]:
     verb = str(body.get("verb", "done"))
     who = str(body.get("who", "")).strip()[:80]
     note = str(body.get("note", "")).strip()[:300]
-    if not n.isdigit() or verb not in TICKS:
+    if not n.isdigit():
         return 400, {"error": "say which job and what happened to it"}
+    # The page's buttons come from static/ on every load, but this file only on
+    # a restart, so a move it does not know is almost always a stale server.
+    if verb not in TICKS:
+        return 400, {"error": f"this desk server does not know '{verb}' yet; restart it "
+                     "(launchctl kickstart -k gui/$UID/com.tg-billing-desk.serve)"}
     if verb == "waiting" and not who:
         return 400, {"error": "say who it is with"}
+    k = str(body.get("draft", "")).strip()
+    if verb == "posted" and not k.isdigit():
+        return 400, {"error": "say which draft went"}
     _, item = board.by_id(board.load(), n)
     if item is None:
         return 404, {"error": f"there is no job {n}"}
     if verb == "undo" and body.get("before"):
         return undo_tick(n, body["before"])
     before = {k: item.get(k) for k in TICK_FIELDS if k in item}
+    args = TICKS[verb](n, who, note)
+    if verb == "posted":
+        # "Nothing comes back" from the bar's menu closes it as sent instead.
+        args += ["--draft", k] + (["--sent"] if body.get("close") else [])
     done = subprocess.run(
-        [sys.executable, str(ROOT / "tick.py"), *TICKS[verb](n, who, note)],
+        [sys.executable, str(ROOT / "tick.py"), *args],
         cwd=ROOT, capture_output=True, text=True, timeout=60,
     )
     if done.returncode:
@@ -1072,13 +1088,25 @@ def tick_from_page(body: dict) -> tuple[int, dict]:
         "done": f"{n} done", "sent": f"{n} sent", "dropped": f"{n} dropped",
         "waiting": f"{n} is with {who}", "mine": f"{n} is yours again",
         "undo": f"{n} is back with you",
-    }[verb]
+    }.get(verb) or posted_said(n)
     return 200, {"said": said, "before": before}
+
+
+def posted_said(n: str) -> str:
+    """The toast after a Posted it press: where the job went, read back off the board."""
+    _, item = board.by_id(board.load(), n)
+    st = render.item_state(item or {})
+    if st["state"] == "waiting":
+        return f"Posted. {n} is waiting on {st['who'] or 'them'}"
+    if st["closed"]:
+        return f"Posted. {n} is closed"
+    left = sum(1 for d in board.drafts(item or {}) if board.unsent(d))
+    return f"Posted. {left} more to send on {n}"
 
 
 # The fields a tick moves, so Undo can put exactly these back.
 TICK_FIELDS = ("state", "state_at", "state_note", "waits_on", "hold", "closed_at",
-               "sent_by_you")
+               "sent_by_you", "draft", "drafts")
 
 
 def undo_tick(n: str, before: dict) -> tuple[int, dict]:

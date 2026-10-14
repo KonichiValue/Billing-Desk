@@ -270,7 +270,11 @@ def themes_keep_the_text() -> list[str]:
     least one of `--page` or `--card`. `yoru` is the exception on the first half
     and says so, because a dark page needs its own ink to keep the contrast.
     """
-    css = (ROOT / "static" / "base.css").read_text(encoding="utf-8")
+    # Every stylesheet, not just base.css: the Kraken theme lives in its own
+    # file because it carries the logo as data.
+    css = "".join(
+        p.read_text(encoding="utf-8") for p in sorted((ROOT / "static").glob("*.css"))
+    )
     bad = []
     # Every declaration block belonging to each theme, gathered by name, because
     # a theme is allowed more than one (the standup view gets its own).
@@ -300,9 +304,9 @@ def themes_keep_the_text() -> list[str]:
     except Exception as exc:
         return bad + [f"could not read the theme list: {exc}"]
     for name in sorted(offered - seen):
-        bad.append(f"Settings offers {name}, but base.css does not style it")
+        bad.append(f"Settings offers {name}, but no stylesheet styles it")
     for name in sorted(seen - offered):
-        bad.append(f"base.css styles {name}, but Settings never offers it")
+        bad.append(f"static/ styles {name}, but Settings never offers it")
     return bad
 
 

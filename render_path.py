@@ -18,10 +18,13 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import board as B
+import people
 import render_standup
 from render import (
     ASKED,
     SPARK,
+    after_posting,
     apply_glossary,
     ask_block,
     blocked_on,
@@ -80,7 +83,68 @@ def doc_btns(files: list) -> str:
     return " ".join(o for o in out if o)
 
 
-def render_draft(d: dict, st: dict | None = None) -> str:
+item_drafts = B.drafts
+
+
+def render_drafts(r: dict, st: dict | None = None) -> str:
+    """The job's messages, each its own fold, above the evidence.
+
+    A second message used to live as a note inside `prepared`, two folds deep,
+    and he could not find the reply he had to send. So every message gets the
+    same box in the same place, open while it is his to send, and each folds
+    shut on its own when there are several.
+    """
+    drafts = item_drafts(r)
+    many = len(drafts) > 1
+    return "".join(
+        render_draft(
+            d, st, f"Reply {n} of {len(drafts)}" if many else "Reply to send", r, n
+        )
+        for n, d in enumerate(drafts, 1)
+    )
+
+
+def posted_bar(r: dict, k: int) -> str:
+    """The press that says this message went, at the foot of the box it came from.
+
+    Copy, paste it where it goes, come back, press this. It used to be a step
+    reading "Then ./tick.py 52 once it is posted", which needed a terminal for
+    the one move every draft ends in. The button says before it is pressed what
+    it will do to the job, because sending is not finishing: a reply owed puts
+    the job with that person, nothing owed closes it, and a second message still
+    to send leaves it with him. Hidden until desk.js shows it, since a page
+    opened from disk has no server to tell.
+    """
+    label, who = after_posting(r, k)
+    kind = (
+        "more" if label.endswith("more to send")
+        else "ask" if label == "say who replies"
+        else "wait" if who
+        else "close"
+    )
+    ids = ",".join(p["id"] for p in people.find(who)) if who else ""
+    return f"""
+          <div class="draft-foot" hidden>
+            <span class="df-hint">Once it is posted</span>
+            <button type="button" class="posted" data-posted="{esc(r.get("id", ""))}"
+                    data-draft="{k}" data-after="{kind}" data-who="{esc(people.said(who))}"
+                    data-whoids="{esc(ids)}" data-title="{esc(r.get("title", ""))}">
+              <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.5l2.5 2.5 4.5-5.5"/></svg>
+              <b>Posted it</b><span class="posted-then">{esc(label)}</span>
+            </button>{"" if kind == "more" else f'''<button type="button" class="posted-more"
+                    aria-haspopup="menu" aria-label="Posted, but someone else replies or nothing comes back"
+                    title="Someone else replies, or nothing comes back">
+              <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2.5 4l2.5 2.5L7.5 4"/></svg></button>'''}
+          </div>"""
+
+
+def render_draft(
+    d: dict,
+    st: dict | None = None,
+    label: str = "Reply to send",
+    item: dict | None = None,
+    k: int = 1,
+) -> str:
     """A draft to paste, or, once it has gone, a folded record of what went."""
     if not d:
         return ""
@@ -114,19 +178,25 @@ def render_draft(d: dict, st: dict | None = None) -> str:
             {link_btn(d.get("link", ""), "Go there")}
             <button class="copy" data-copy="{esc(plain(body))}">copy</button>
             <button class="ask-here" type="button"
-                    data-ask-seed="Rewrite this draft: ">{SPARK}Rewrite or ask</button>
+                    data-ask-seed="Rewrite the draft {esc(d.get("target", ""))}: ">{SPARK}Rewrite or ask</button>
           </div>
           <div class="draft-body {"ja" if is_ja else ""}">{rendered}</div>
           {trans}"""
-    gone = st and st["state"] != "todo" and st["state"] != "hold"
+    gone = (st and st["state"] != "todo" and st["state"] != "hold") or not B.unsent(d)
     if gone:
-        when = f" at {esc(st.get('at'))}" if st.get("at") else ""
+        at = str(d.get("sent_at") or "")[11:16] or (st.get("at") if st else "")
+        when = f" at {esc(at)}" if at else ""
         return f"""
         <details class="act-draft sent">
-          <summary>What you sent{when}</summary>
+          <summary>What you sent{when}: {esc(d.get("target"))}</summary>
           {inner}
         </details>"""
-    return f'<div class="act-draft">{inner}</div>'
+    return f"""
+        <details class="act-draft live" open data-draft-of="{esc((item or {}).get("id", ""))}">
+          <summary><b>{esc(label)}</b> {esc(d.get("target"))}</summary>
+          {inner}
+          {posted_bar(item, k) if item else ""}
+        </details>"""
 
 
 # A finding is written as a claim and then the evidence for it: "The four
@@ -474,8 +544,8 @@ def render_items(
           <div class="act-body">
             {status_block}
             {steps_block(r, steps, active)}
+            {render_drafts(r, st)}
             {prepared_block(r.get("prepared") or {}, standup_href)}
-            {render_draft(r.get("draft") or {}, st)}
             {f'<p class="act-done"><b>Finished when</b>{code(r.get("done_when"))}</p>' if r.get("done_when") and not done else ""}
             {f'<p class="act-commit">You committed this to {esc(committed)}</p>' if committed else ""}
             {f'<p class="act-block">Blocked by: {esc(blocked)}</p>' if blocked else ""}
@@ -486,7 +556,7 @@ def render_items(
                 ASKED.get(f'item:{r.get("id")}', []),
                 f'Read prompt-ask.md, then answer this about job {r.get("id")}'
                 f' on {ticket_ref} ("{r.get("title", "")}"):',
-                bool(r.get("draft")),
+                bool(item_drafts(r)),
             )}
           </div>
         </{tag}>"""

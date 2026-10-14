@@ -21,6 +21,7 @@ from pathlib import Path
 import calendar_sync
 import people
 import render_milestone
+import render_prioritize
 
 from render import item_state as state_of
 from render import proposed
@@ -97,9 +98,9 @@ def render_draft(d: dict, st: dict | None = None) -> list[str]:
     if not d:
         return []
     lang = "Japanese" if d.get("language") == "ja" else "English"
-    gone = st and st["state"] not in {"todo", "hold"}
+    gone = (st and st["state"] not in {"todo", "hold"}) or d.get("sent") or d.get("posted")
     head = (
-        f"**Sent {st.get('at', '')}** to {d.get('target', '')}"
+        f"**Sent {str(d.get('sent_at') or '')[11:16] or (st or {}).get('at', '')}** to {d.get('target', '')}"
         if gone
         else f"**Draft ({lang})** for {d.get('target', '')}"
     )
@@ -394,7 +395,8 @@ def render_ticket(t: dict, index: dict[str, dict] | None = None) -> list[str]:
                 f"> {link('source', a.get('source_url', ''))}",
             ]
         actions.append("")
-        actions += render_draft(a.get("draft") or {}, st)
+        for d in [a.get("draft") or {}] + list(a.get("drafts") or []):
+            actions += render_draft(d, st)
         actions += render_asks(f"item:{a.get('id')}")
         if not active:
             actions += ["</details>", ""]
@@ -714,6 +716,10 @@ def render(data: dict) -> str:
     milestones = render_milestone.markdown(data)
     if milestones:
         out += milestones.splitlines() + [""]
+
+    rounds = render_prioritize.markdown(data)
+    if rounds:
+        out += rounds.splitlines() + [""]
 
     out += render_meetings(data)
 

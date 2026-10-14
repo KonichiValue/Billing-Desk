@@ -131,9 +131,9 @@ transition:opacity var(--t-slow) var(--ease)}
 header.top,.wrap,.pal,dialog,.nami{position:relative;z-index:1}
 header.top{z-index:30}
 
-/* 浮世絵 ukiyo-e. Warm 和紙 paper: a cream card on a darker cream page, with
-   indigo and safflower pigment pooling in the corners and the fibre grain of
-   the paper running across it. The most distinctive of the set. */
+/* Ukiyo-e. Warm washi paper: a cream card on a darker cream page, with indigo
+   and safflower pigment pooling in the corners and the fibre grain of the
+   paper running across it. The most distinctive of the set. */
 body[data-theme="ukiyoe"]{--page:#e8e0d2;--card:#fdfaf3;--line:#ddd3c0;
 --hair:#f3ede0;--head:#20242e;--head-2:#33302c}
 body[data-theme="ukiyoe"]:before{background:
@@ -779,9 +779,9 @@ border:1px solid var(--accent-line);border-radius:4px;padding:3px 6px}
 .thm.wide .thm-on{grid-column:1}
 /* The swatches, each the wash of the theme it names. */
 .thm-plain{background:#f3f5fa}
-.thm-ukiyoe{background:radial-gradient(20px 16px at 20% 14%,rgba(18,83,158,.85),transparent 66%),radial-gradient(18px 14px at 86% 26%,rgba(179,38,30,.7),transparent 68%),repeating-linear-gradient(93deg,rgba(80,60,30,.16) 0 1px,transparent 1px 4px),#e8e0d2}
+.thm-ukiyoe{background:var(--u-print) no-repeat 52% 40%/auto 44px,#e8e0d2}
 .thm-ai{background:linear-gradient(180deg,#12539e,#d9e2ef 86%)}
-.thm-sakura{background:radial-gradient(24px 18px at 76% 16%,rgba(200,90,130,.85),transparent 68%),#f4dfe6}
+.thm-sakura{background:var(--s-branch) no-repeat left -6px top 2px/46px auto,radial-gradient(24px 18px at 76% 16%,rgba(200,90,130,.5),transparent 68%),#f4dfe6}
 .thm-koke{background:radial-gradient(24px 18px at 22% 16%,rgba(10,107,74,.8),transparent 68%),#dde8e0}
 .thm-sumi{background:linear-gradient(180deg,#3b4250,#eceef2)}
 .thm-yoru{background:linear-gradient(150deg,#0e1118 42%,#2a3752),

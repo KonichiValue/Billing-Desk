@@ -27,6 +27,7 @@ import calendar_sync
 import render_chat
 import people
 import render_milestone
+import render_prioritize
 import render_dialogs
 import render_path
 import render_week
@@ -779,7 +780,7 @@ def shell(
 <link rel="apple-touch-icon" href="/icon-512.png">
 <meta name="theme-color" content="#0d1524">
 <title>{esc(title)}</title>
-<style>{asset("base.css")}{asset("desk.css")}{asset("standup.css")}</style></head>
+<style>{asset("base.css")}{asset("desk.css")}{asset("standup.css")}{asset("kraken.css")}{asset("ukiyoe.css")}{asset("sakura.css")}</style></head>
 <body data-view="{esc(view)}" data-meeting="{esc(meeting_iso)}"
       data-meeting-label="{esc(meeting_label)}" data-stamp="{stamp()}" data-board="{stamp(False)}"
       data-closed="{esc(closed)}">
@@ -794,6 +795,7 @@ window.deskPrefs=p;
 try{{
 var t=p['desk-theme']||localStorage.getItem('desk-theme');
 if(t&&t!=='plain')document.body.dataset.theme=t;
+if(t==='kraken')document.querySelector('meta[name=theme-color]').content='#29162f';
 if((p['desk-motion']||localStorage.getItem('desk-motion'))==='off')document.body.dataset.motion='off';
 }}catch(e){{}}}})();
 </script>
@@ -1120,6 +1122,7 @@ def render(data: dict) -> str:
     body = f"""
 <header class="top"><div class="top-in">
   <span class="brand"><img src="/icon-192.png" alt="" onerror="this.remove()">
+  <span class="brand-k" aria-hidden="true"><i class="brand-mark"></i><i class="brand-word"></i></span>
   <h1>Billing desk</h1></span>
   {view_tabs(mine, has_script, script_session(data))}
   <span class="acts">
@@ -1142,6 +1145,7 @@ def render(data: dict) -> str:
     {jump_bar(tickets, refs, True)}
     {render_brief.render(data, refs)}
     {render_milestone.render(data, refs)}
+    {render_prioritize.render(data, refs)}
     {render_week.render(data, tickets, refs)}
     {render_track(tickets, refs, soon)}
     {ask_block("board", "the desk", ASKED.get("board", []),

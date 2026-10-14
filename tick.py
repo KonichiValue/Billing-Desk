@@ -13,6 +13,12 @@ back to you on the same number when they reply.
     ./tick.py 2 --mine                   they replied, it is yours again
     ./tick.py 5 --dropped -n "TG answered it themselves"
     ./tick.py 1 --undo                   back to with you, forget the note
+    ./tick.py 52 --draft 1               posted draft 1; the job moves once its last draft has gone
+
+The page does the last one from the Posted it button on each draft, so nobody
+should need a terminal for it: it waits on whoever the drafts expect a reply
+from, or closes as sent when nothing comes back. -w overrides who, and --sent
+with it says nothing comes back.
 
 Numbers live on the board and are never reused, so "do 4" means the same thing
 next week. State lives in `state/board.json` beside the item it describes.
@@ -28,7 +34,8 @@ from pathlib import Path
 
 import board as B
 import keep
-from render import item_state
+import people
+from render import after_posting, item_state
 
 ROOT = Path(__file__).resolve().parent
 MARK = {
@@ -85,6 +92,44 @@ def working_days_on(n: int) -> str:
     return day.isoformat()
 
 
+def posted(item: dict, k: int, who: str, note: str, chase: str, close: bool = False) -> str:
+    """Draft `k` went. Mark it, and move the job if it was the last one.
+
+    Returns what is wrong, or "" when it landed. A job with two messages is not
+    finished by the first, so it stays with him and says which one has gone.
+    `who` overrides who the job waits on; `close` says nothing comes back.
+    """
+    drafts = B.drafts(item)
+    if not 1 <= k <= len(drafts):
+        return f"there is no draft {k} (it has {len(drafts)})"
+    d = drafts[k - 1]
+    target = d.get("target") or f"draft {k}"
+    if not B.unsent(d):
+        return f"{target} is already marked sent"
+    label, owed = after_posting(item, k)
+    d["sent"] = True
+    d["sent_at"] = B.now()
+    said = note or f"posted: {target}"
+    if label.endswith("more to send"):
+        item.setdefault("history", []).append(
+            {"at": B.now(), "state": item.get("state", "todo"), "note": said}
+        )
+        return ""
+    who = "" if close else who or owed
+    if who:
+        item.pop("hold", None)
+        item["sent_by_you"] = True
+        B.set_state(item, "waiting", said, who=who)
+        item["waits_on"]["chase_on"] = chase or working_days_on(2)
+    elif label == "say who replies" and not close:
+        return "a reply is owed but the draft does not say from whom; add -w WHO"
+    else:
+        item.pop("hold", None)
+        item["sent_by_you"] = True
+        B.set_state(item, "sent", said)
+    return ""
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -103,6 +148,14 @@ def main() -> int:
     parser.add_argument("--sent", action="store_true", help="finished, and it was a message")
     parser.add_argument("--dropped", action="store_true", help="finished, no longer worth doing")
     parser.add_argument("--undo", action="store_true", help="back to with you, clear the note")
+    parser.add_argument(
+        "--draft",
+        metavar="K",
+        type=int,
+        help="draft K (1 is `draft`, 2 on are `drafts`) was posted. The job waits on "
+        "whoever it expects a reply from (or -w), closes as sent when nothing comes "
+        "back, and stays with you while another draft is still to send.",
+    )
     parser.add_argument(
         "--rebuild",
         action="store_true",
@@ -132,8 +185,17 @@ def main() -> int:
         print(f"no item numbered {', '.join(missing)}", file=sys.stderr)
         return 1
 
+    people.load(data)
     for ident in args.ids:
         _, item = B.by_id(data, ident)
+        if args.draft is not None:
+            problem = posted(
+                item, args.draft, args.waiting or "", args.note, args.chase, args.sent
+            )
+            if problem:
+                print(f"{ident}: {problem}", file=sys.stderr)
+                return 1
+            continue
         if args.undo or args.mine:
             item.pop("hold", None)
             item.pop("waits_on", None)

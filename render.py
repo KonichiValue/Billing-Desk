@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 import agent
+import board as B
 import people
 
 RUBY = re.compile(r"\{([^|{}]+)\|([^|{}]+)\}")
@@ -892,18 +893,62 @@ def section(
     return f'<section class="sub {role}">{head}{body}</section>'
 
 
-def draft_to(item: dict) -> str:
-    """Who an unsent draft is addressed to, so "Sent, waiting on" comes filled.
+def addressee(draft: dict) -> str:
+    """Who a draft is addressed to, read off its `target`.
 
-    The draft's `target` is a sentence ("Slack reply to Chris Lerus in the Ask
-    IE thread"), so this takes the words after "to" and stops at the place. A
-    guess he can overwrite in the box, never written to the board.
+    The target is a sentence ("Slack reply to Chris Lerus in the Ask IE
+    thread"), so this takes the words after "to" and stops at the place.
     """
-    draft = item.get("draft") or {}
-    if draft.get("sent") or draft.get("posted"):
-        return ""
     m = re.search(r"\bto ([A-Z].+?)(?: in | on | \u2014 | \(|,|$)", str(draft.get("target", "")))
     return m.group(1).strip()[:60] if m else ""
+
+
+def replier(draft: dict) -> str:
+    """Who answers this message once it has gone, or "" when nothing comes back.
+
+    Usually the person it is addressed to. `reply_from` says otherwise when the
+    writer knows better, and `expects_reply: false` says nobody does, which is
+    what lets the Sent bar close a job rather than leave it waiting on a reply
+    that is never coming.
+    """
+    if draft.get("expects_reply") is False:
+        return ""
+    return str(draft.get("reply_from") or "").strip()[:80] or addressee(draft)
+
+
+def draft_to(item: dict) -> str:
+    """Who the first unsent draft waits on, so "Sent, waiting on" comes filled.
+
+    A guess he can overwrite in the box, never written to the board.
+    """
+    live = [d for d in B.drafts(item) if B.unsent(d)]
+    return replier(live[0]) if live else ""
+
+
+def after_posting(item: dict, k: int) -> tuple[str, str]:
+    """What pressing Sent on draft `k` (1-based) does to the job, as (label, who).
+
+    The label is the half sentence on the button, so he knows before pressing
+    whether it closes the job, hands it to someone or leaves another message to
+    send. `who` is the holder the job will wait on, empty when it closes.
+    """
+    all_drafts = B.drafts(item)
+    rest = [d for i, d in enumerate(all_drafts, 1) if i != k and B.unsent(d)]
+    if rest:
+        return f"{len(rest)} more to send", ""
+    owed = []
+    for d in all_drafts:
+        name = replier(d)
+        if name and name not in owed:
+            owed.append(name)
+    if owed:
+        who = " and ".join(owed)
+        return f"waiting on {people.said(who)}", who
+    if any(d.get("expects_reply") is not False for d in all_drafts):
+        # A reply is owed and nobody can be read off the target: the button
+        # opens the picker instead of guessing.
+        return "say who replies", ""
+    return "closes the job", ""
 
 
 def status_button(item: dict, st: dict, label: str = "", tone: str = "") -> str:

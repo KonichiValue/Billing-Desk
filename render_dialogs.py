@@ -105,7 +105,12 @@ def help_dialog() -> str:
     lands on the same card.</p>
 
     <h3>Moving a job</h3>
-    <p>Press its status, the coloured label on the right of every job. It lists
+    <p>After posting a draft, press <b>Posted it</b> under its words. It says
+    what it will do before you press it: wait on whoever replies, close the
+    job, or note that one more draft is still to send. The arrow beside it is
+    for when that is wrong, someone else answering or nothing coming back.
+    Copying a draft lights its button up so it is waiting when you come back.</p>
+    <p>For anything else, press its status, the coloured label on the right of every job. It lists
     the moves open from where the job stands, and each one is the same as
     <code>./tick.py</code> in a terminal, with an Undo for six seconds.</p>
     <ul class="say-list">
@@ -198,9 +203,10 @@ def help_dialog() -> str:
 # type is exactly as legible on all of them.
 THEMES = (
     ("plain", "Plain", "White cards on grey. What this page always looked like."),
-    ("ukiyoe", "Ukiyo-e 浮世絵", "Cream 和紙 paper, indigo and safflower, fibre grain."),
+    ("kraken", "Kraken", "Aubergine, cream and Kraken pink, with the logo in the bar."),
+    ("ukiyoe", "Ukiyo-e", "Washi paper under Hokusai's Fuji from Shichirigahama."),
     ("ai", "Ai 藍", "Indigo, deepest at the top, like a dipped cloth."),
-    ("sakura", "Sakura 桜", "Warm pink and ochre. Easiest on a long read."),
+    ("sakura", "Sakura 桜", "Warm pink, with a cherry branch in blossom."),
     ("koke", "Koke 苔", "Quiet moss green, for an afternoon on one ticket."),
     ("sumi", "Sumi 墨", "Near monochrome, for when colour is in the way."),
     ("yoru", "Yoru 夜", "Dark. For the evening, when a white page is too much."),

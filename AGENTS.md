@@ -172,11 +172,19 @@ something done.
 ./tick.py 2 --mine         # they replied, it is his again
 ./tick.py 5 --dropped -n "TG answered it themselves"
 ./tick.py 1 --undo         # forget the state entirely
+./tick.py 52 --draft 1     # posted draft 1; moves once its last draft has gone
 ```
 
 **Sending a message is not finishing an item.** If a reply is expected, the item
 goes to `-w <who>`, so the page shows it sitting with them rather than pretending
 it is closed. Use plain `./tick.py <n>` only when nothing comes back.
+
+On the page that is the **Posted it** button under every draft, which runs
+`--draft K`: it waits on the draft's `reply_from` or the person its `target`
+names, closes the job as sent when the draft has `"expects_reply": false`, and
+keeps the job with him while another of its drafts is still to send. So a step
+never tells him to run `./tick.py`; set those two fields instead, and
+`audit.py` flags a step that forgets.
 
 When the reply arrives, the follow-up stays on the same number: run `--mine`,
 then edit that item on the board with the new draft and a `progress_note` saying
@@ -274,6 +282,16 @@ size and modification time of `state/board.json`, `state/asks.json`,
 So `./tick.py 26` in a terminal, a sweep on a schedule and an ask answered in
 another tab all reach the page on their own. If you add another file the page is
 drawn from, add it to `SOURCES` or the page will not notice it changing.
+
+**Heqing's prioritization round comes from `prioritize.py`.** Every second
+Monday (from 26 Oct 2026) she posts the build order in #team-jp-billing-cdl at
+08:30; a round on a holiday runs the next working day, and `config.json`
+`prioritization.moved` records any other move. The day that matters is the
+working day before, the last chance to raise a build. The board's
+`prioritization` block is his CE builds by CDL-Owner, nobody else's, and a
+sweep rewrites it at step P. The desk draws it as a card under the milestone
+with the note to Heqing ready to copy, and the week strip marks both days.
+`./prioritize.py` prints the same; `--dates` lists the rounds ahead.
 
 **His meetings come from `calendar_sync.py`, not the board.** It reads Google
 Calendar through a one-tool headless Haiku run and writes `state/calendar.json`:

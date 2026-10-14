@@ -362,6 +362,15 @@ thing is. If the steps tell him to ask, tell, confirm or reply, there is a
 draft out. An item with no steps renders as a warning on the page, so never
 leave one behind.
 
+**No step moves the job.** "Then `./tick.py 52` once it is posted" is a terminal
+command on a page he reads in a browser. Every draft carries a **Posted it**
+button under its words that marks it sent and moves the job, so the steps stop
+at the posting, and the draft says what happens after. Set `reply_from` to who
+answers it ("Junya Shiina, TG") when that is not the person the `target` names,
+and `"expects_reply": false` when nothing comes back, so the button closes the
+job instead of waiting on somebody. `audit.py` flags a step that names
+`tick.py`.
+
 **A draft is either the message he would send now, or it is gone.** The work
 view is only worth trusting if nothing on it is left over, so read every `draft`
 still on the ticket against what you have just found. If the thread moved,
@@ -371,7 +380,9 @@ delete the draft and the step that asked for it. A draft written yesterday
 morning is the most dangerous thing on the page, because it reads as ready to
 paste and it is addressed to TG.
 
-One exception: before clearing a draft, check whether it was already sent.
+One exception: before clearing a draft, check whether it was already sent. A
+draft with `"sent": true` was marked by his own press of Posted it, so leave it
+where it is: the page already shows it as what he sent.
 If the `progress_note` or a recent event records that the draft's message was
 actually posted, copy the sent text into the item's `history` as
 `{"at": "<ISO timestamp>", "state": "sent", "note": "<sent draft body>"}` before
@@ -554,6 +565,37 @@ of its own; his jobs on it are items on ticket cards, listed by number in its
 - `status` is `on-track` unless something you can quote puts the target at
   risk (`at-risk`) or past saving (`off-track`). Never mark it `done` until
   every phase is.
+
+## 7c. Keep the prioritization current
+
+Every second Monday Heqing posts the result of the build prioritization in
+#team-jp-billing-cdl at 08:30, and a build nobody raised before it waits two
+more weeks. `./prioritize.py` holds the dates (from `config.json`); the board's
+`prioritization` block holds his builds, and the desk card and the note to
+Heqing are drawn from it. Your part is to keep that block true.
+
+- The SWEEP PLAN's `P.` reads his known builds by gid and searches the CE
+  projects for new ones. **Keep a build only if its CDL-Owner is Rei
+  Samuelsson.** Asana ignores a CDL-Owner filter on search, so check the field
+  on every hit. Another CDL's build never goes in, even one on the same TG
+  ticket as his (Hitoshi's KT-109569 is the standing example).
+- Write the whole list as `"board": {"prioritization.builds": [...]}`, one
+  record per build: `kt`, `gid`, `url`, `name`, `ticket` (the board ref it
+  serves, or ""), `status` (Status (Kraken Cust)), `refinement` (🟢 etc.),
+  `size` ("3 SP"), `tg_order`, `wave`, `squad`, `due_on` (ISO or ""),
+  `engineer`, and `why`. Drop a build that is completed. Keep the order he would
+  raise them in: the one with a TG customer waiting on it first.
+- `why` is one clause for Heqing on why it matters, in English and from what
+  the ticket says: a held bill, a slip TG prints wrong. Never a story point, a
+  name or a guess. Keep an existing `why` unless the ticket changed.
+- When `P.` says a round has run, read Heqing's thread and set
+  `prioritization.last_round` to `{date, url, ordered: [KT...], not_pushed:
+  [KT...]}`, his builds only. A build ordered there gets its TG Order from
+  Asana on the next read; do not write one Asana does not show.
+- Set `prioritization.checked_at` to now whenever you wrote the list.
+- A CE build's Status is CE's to set: the engineer who finished refinement
+  moves it on. A 🟢 build still reading New or Solution Refinement is not a fix
+  for Rei and never becomes an item or a step of his.
 
 ## 8. Clear the alert, or leave it alone
 

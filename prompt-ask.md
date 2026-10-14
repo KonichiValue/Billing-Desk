@@ -173,6 +173,7 @@ item's `history` with a timestamp and keeps the pages honest:
 ./tick.py 29 -w "Ryan Kam"      sent, the ball is with them
 ./tick.py 29 --mine             they replied, it is his again
 ./tick.py 29 --dropped -n "why" not happening, with the reason
+./tick.py 29 --draft 1          he posted draft 1, the same as its Posted it button
 ```
 
 Then say in one line what you moved and to what.

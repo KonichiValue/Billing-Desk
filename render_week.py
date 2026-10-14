@@ -22,6 +22,7 @@ import re
 from datetime import date, datetime, timedelta
 
 import calendar_sync
+import prioritize
 from render import (
     day_words,
     esc,
@@ -285,6 +286,14 @@ def render(
             rooms.setdefault(s["date"], []).append(s)
     cal = meetings(days)
 
+    # Heqing's prioritization thread, and the last day to raise a build before
+    # it. Neither is a meeting he sits in, so they come from the cadence in
+    # config.json rather than the calendar, and both link to the card.
+    flags: dict[str, list[tuple[str, str]]] = {}
+    for r in prioritize.rounds(start=days[0], count=2):
+        flags.setdefault(r["date"], []).append((r["at"], "Prioritization"))
+        flags.setdefault(r["ask_by"], []).append(("by", "Raise builds"))
+
     cells = []
     for n, d in enumerate(days):
         iso = d.isoformat()
@@ -310,6 +319,9 @@ def render(
               <b>{esc(s.get("at", ""))}</b>
               <span class="wd-room-w">{esc((s.get("tab") or s.get("name") or s.get("kind") or "Session"))}</span>
               {f'<span class="wm-go">{links}</span>' if links else ""}</span>"""
+        for at, what in flags.get(iso, []):
+            marks += (f'<a class="wd-room wd-pr" href="#prioritization">'
+                      f'<b>{esc(at)}</b><span class="wd-room-w">{esc(what)}</span></a>')
         rest_meets = [e for e in events if e["id"] not in used]
         lo, hi = DESK_HOURS
         front = [e for e in rest_meets if e.get("work") and lo <= e["at"] < hi]
@@ -346,7 +358,7 @@ def render(
             rows += (
                 f'<span class="wd-rest">and {len(rest)} more</span>'
             )
-        quiet = not sess and not jobs and not events
+        quiet = not sess and not jobs and not events and not flags.get(iso)
         # A day this week that is already behind him reads back rather than
         # empty, so Monday on a Wednesday does not look like nothing is due.
         klass = " ".join(

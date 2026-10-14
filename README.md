@@ -180,6 +180,7 @@ the work is not over.
 ./tick.py 2 --mine                   # they replied, it is yours again
 ./tick.py 5 --dropped -n "TG answered it themselves"
 ./tick.py 1 --undo                   # forget the state entirely
+./tick.py 52 --draft 1               # posted draft 1, the Posted it button
 ```
 
 The desk opens with **Need to know**, then **To do**: one list, yours at the top,
@@ -196,6 +197,12 @@ item's history, and an Undo stays on screen for six seconds. It is a status
 rather than a checkbox because sending is not finishing. A page opened from disk
 has no server behind it and cannot move anything; close things there with
 `tick.py`, or by saying so in chat.
+
+Under every draft, below the words you copy, is **Posted it**. It names what it
+will do before you press it (wait on Shiina-san, close the job, one more to send)
+and does it in one press with the same Undo. The arrow beside it picks someone
+else or says nothing comes back. Copying the draft lights it up, so it is waiting
+when you come back from Slack or Asana.
 
 ## Asking about one job, and changing it
 
