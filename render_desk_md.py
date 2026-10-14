@@ -2,9 +2,9 @@
 """Render the board into markdown.
 
 The HTML page is for reading. This markdown file is for working: it is what a
-Cursor chat in this repo reads when Rei says "draft the reply to Nakayama-san"
-or "check the codebase for X". Keep it dense, keep every link, and keep the
-ticket grouping so a single block is enough context to act on.
+chat in this repo reads when Rei says "draft the reply to Nakayama-san" or
+"check the codebase for X". Keep it dense, keep every link, and keep the ticket
+grouping so a single block is enough context to act on.
 
 Usage:
     python3 render_desk_md.py state/board.json output/desk.md
@@ -15,10 +15,16 @@ from __future__ import annotations
 import json
 import os
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
+import calendar_sync
+import people
+import render_milestone
+import render_prioritize
+
 from render import item_state as state_of
+from render import proposed
 from render import (
     apply_glossary,
     blocked_on,
@@ -58,13 +64,17 @@ def render_asks(ref: str) -> list[str]:
     """
     out = []
     for a in ASKED.get(ref, []):
-        if not a.get("answer"):
+        if not a.get("answer") or a.get("state") == "cancelled":
             continue
         lead = "Followed up" if a.get("parent") else "Asked"
+        # The ACTION line is a button on the page, not prose; what he did with
+        # it is the part a chat needs.
+        body, _ = proposed(a["answer"])
         out += [
             f"**{lead} {a.get('asked_at', '')}:** {a.get('question', '')}",
             "",
-            f"> {a['answer'].replace(chr(10), chr(10) + '> ')}",
+            f"> {body.replace(chr(10), chr(10) + '> ')}",
+            *([f"> *{a['acted_on']}*"] if a.get("acted_on") else []),
             "",
         ]
     return out
@@ -88,9 +98,9 @@ def render_draft(d: dict, st: dict | None = None) -> list[str]:
     if not d:
         return []
     lang = "Japanese" if d.get("language") == "ja" else "English"
-    gone = st and st["state"] not in {"todo", "hold"}
+    gone = (st and st["state"] not in {"todo", "hold"}) or d.get("sent") or d.get("posted")
     head = (
-        f"**Sent {st.get('at', '')}** to {d.get('target', '')}"
+        f"**Sent {str(d.get('sent_at') or '')[11:16] or (st or {}).get('at', '')}** to {d.get('target', '')}"
         if gone
         else f"**Draft ({lang})** for {d.get('target', '')}"
     )
@@ -180,6 +190,9 @@ def closes_lines(rows: list[dict]) -> list[str]:
     return block(f"What is left before this closes ({done} of {len(rows)} done)", lines)
 
 
+TIMELINE = 8
+
+
 def render_ticket(t: dict, index: dict[str, dict] | None = None) -> list[str]:
     index = index if index is not None else {
         str(i.get("id")): i for i in t.get("items", [])
@@ -223,7 +236,17 @@ def render_ticket(t: dict, index: dict[str, dict] | None = None) -> list[str]:
     out += block("Words and shorthand on this ticket", terms)
 
     changed = []
-    for c in sorted(t.get("events", []), key=lambda x: (x.get("on", ""), x.get("at", ""))):
+    # The newest moves only. The whole history is 48 moves on one ticket, and a
+    # chat reading this file wants where it is, not how it got here.
+    events = sorted(t.get("events", []), key=lambda x: (x.get("on", ""), x.get("at", "")))
+    if len(events) > TIMELINE:
+        changed.append(
+            f"_{len(events) - TIMELINE} earlier moves are on the board: "
+            "`./digest.py --everything`._"
+        )
+        changed.append("")
+        events = events[-TIMELINE:]
+    for c in events:
         when = f"{c.get('on', '')} {c.get('at', '')}".strip()
         changed.append(f"- **{when} {c.get('who', '')}** {c.get('what', '')}")
         if c.get("so_what"):
@@ -243,6 +266,12 @@ def render_ticket(t: dict, index: dict[str, dict] | None = None) -> list[str]:
         active = st["state"] in {"todo", "hold"} and not behind
         label = f"AFTER {behind}" if behind else st["label"].upper()
         head = f"{a.get('id', '-')}. {a.get('title', '')} [{label}{mins}]"
+        if st["closed"]:
+            # Finished is finished: the number and how it ended, nothing more.
+            # Printed whole these were most of a 600KB file. --item N has the rest.
+            note = f" {st['note']}" if st.get("note") else ""
+            actions.append(f"- {head} {st.get('at', '')}.{note}")
+            continue
         if active:
             actions += [f"#### {head}", ""]
         else:
@@ -255,9 +284,7 @@ def render_ticket(t: dict, index: dict[str, dict] | None = None) -> list[str]:
                 f"\u201c{lead.get('title', 'that one')}\u201d closes.",
                 "",
             ]
-        if st["closed"]:
-            actions += [f"> {st['label']} {st.get('at', '')}.{note}", ""]
-        elif st["state"] == "waiting":
+        if st["state"] == "waiting":
             waits = a.get("waits_on") or {}
             owed = f" They owe: {waits['what']}." if waits.get("what") else ""
             chase = f" {due_words(waits['chase_on'])}" if waits.get("chase_on") else ""
@@ -310,6 +337,10 @@ def render_ticket(t: dict, index: dict[str, dict] | None = None) -> list[str]:
                 for q in prep["unanswered"]:
                     actions.append(f"- {q}")
                 actions.append("")
+            earlier = [e for e in prep.get("earlier") or [] if isinstance(e, dict)]
+            if earlier:
+                actions += [f"_{len(earlier)} earlier details, taken out by later rewrites: "
+                            "under Earlier detail on the card._", ""]
             files = [f for f in prep.get("files", []) if f.get("path") or f.get("url")]
             if files:
                 actions += [
@@ -364,7 +395,8 @@ def render_ticket(t: dict, index: dict[str, dict] | None = None) -> list[str]:
                 f"> {link('source', a.get('source_url', ''))}",
             ]
         actions.append("")
-        actions += render_draft(a.get("draft") or {}, st)
+        for d in [a.get("draft") or {}] + list(a.get("drafts") or []):
+            actions += render_draft(d, st)
         actions += render_asks(f"item:{a.get('id')}")
         if not active:
             actions += ["</details>", ""]
@@ -497,8 +529,48 @@ def render_huddle(data: dict) -> list[str]:
     return block(title, rows)
 
 
+def render_meetings(data: dict) -> list[str]:
+    """Today's and the next working day's meetings, from `state/calendar.json`.
+
+    So a chat asked "what's my afternoon" or "where's the CDL weekly link" can
+    answer from this file like the page does, and knows which notes are unread.
+    """
+    stored = calendar_sync.load_raw()
+    events = stored.get("events") or []
+    if not events:
+        return []
+    today = date.today()
+    ahead = today + timedelta(days=3 if today.weekday() == 4 else 1)
+    out = ["## Meetings", "",
+           f"From Google Calendar, read {calendar_sync.seen_at() or stored.get('fetched_at', '?')}.", ""]
+    for day in (today, ahead):
+        rows = [e for e in events if e.get("date") == day.isoformat()]
+        out.append(f"**{'Today' if day == today else day.strftime('%a %-d %b')}**"
+                   + ("" if rows else ": nothing"))
+        for e in rows:
+            span = e["at"] + (f"-{e['until']}" if e.get("until") else "")
+            tags = ", ".join(filter(None, [
+                "TG in the room" if e.get("tg") else "",
+                {"tentative": "maybe", "needsAction": "not answered"}.get(e.get("answer", ""), ""),
+            ]))
+            links = " ".join(
+                ([link("Join", e["join"])] if e.get("join") else [])
+                + [link("Notes", n["url"]) for n in (e.get("notes") or [])[:1] if n.get("url")]
+            )
+            out.append(f"- {span} {'**' + e['title'] + '**' if e.get('work') else e['title']}"
+                       + (f" ({tags})" if tags else "") + (f" {links}" if links else ""))
+        out.append("")
+    unread = calendar_sync.unread_notes(data)
+    if unread:
+        out += ["**Notes not folded in yet:** " + "; ".join(
+            f"{e['date']} {e['title'].strip()}" for e in unread[:6]) + ". The next refresh reads them.", ""]
+    return out
+
+
 def render(data: dict) -> str:
     pretty = date.today().strftime("%A %-d %B %Y")
+    # Holders said the way the page says them, so the two files agree.
+    people.load(data)
     tickets = data.get("tickets", [])
     _index = index_items(tickets)
     total = sum(
@@ -599,6 +671,8 @@ def render(data: dict) -> str:
             "",
         ]
         for ref, a, st in rows:
+            if st["closed"]:
+                continue
             bits = []
             if st["state"] == "waiting":
                 who, since = st.get("who", "them"), st.get("at", "")
@@ -639,14 +713,32 @@ def render(data: dict) -> str:
                 )
             out.append("")
 
+    milestones = render_milestone.markdown(data)
+    if milestones:
+        out += milestones.splitlines() + [""]
+
+    rounds = render_prioritize.markdown(data)
+    if rounds:
+        out += rounds.splitlines() + [""]
+
+    out += render_meetings(data)
+
     asked = render_asks("board")
     if asked:
         out += ["## Asked about the desk", "",
                 "Questions about the day rather than one job, and what came back.",
                 ""] + asked + [""]
 
+    done = [t for t in tickets if (t.get("asana") or {}).get("completed") or t.get("closed")]
     for t in tickets:
-        out += render_ticket(t, index)
+        if t not in done:
+            out += render_ticket(t, index)
+    if done:
+        out += ["## Closed on both sides", "",
+                "Finished in Asana. `./digest.py --everything` has the record.", ""]
+        out += [f"- {t.get('ref', '')}: {t.get('title_en', '')} {link('Asana', t.get('asana_url', ''))}"
+                for t in done]
+        out.append("")
 
     news = data.get("news") or data.get("watch") or []
     if news:
@@ -661,9 +753,12 @@ def render(data: dict) -> str:
             out.append(f"{line} {link('source', w.get('source_url', ''))}")
         out.append("")
 
-    if data.get("gaps"):
+    gaps = data.get("gaps") or []
+    if gaps:
         out += ["## Open gaps", ""]
-        out += [f"- {g}" for g in data["gaps"]]
+        if len(gaps) > 5:
+            out += [f"_{len(gaps) - 5} older gaps are on the board._", ""]
+        out += [f"- {g}" for g in gaps[-5:]]
         out.append("")
 
     return "\n".join(out).rstrip() + "\n"

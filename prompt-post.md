@@ -142,6 +142,11 @@ ticket numbering. So:
   worse than saying nothing.
 - Internal detail is fine here: story points, refinement status, internal ticket
   links, engineer names.
+- Ask, don't propose, when AI did the technical reading. Each technical point is
+  a question built from what TG said, what Rei saw or what an engineer already
+  wrote. No function, list or file names and no code-derived answers in the
+  message; those go in `prepared` so he can check the reply against them.
+  `.claude/skills/ask-dont-propose/SKILL.md` has the rules and an example.
 
 **Tokyo Gas (Tanaka, Komiyama, Koume, Tamanoi, Murakami).** Japanese. They see
 the TG-shared Asana projects and the standup. They see nothing internal to
@@ -436,6 +441,13 @@ An item whose steps say to send, ask, tell, confirm or reply carries a `draft`.
 If the step is to think, compare or read, it carries no draft and a step saying
 so in plain words. An item with neither a draft nor steps is a bug: the page
 prints a warning in its place, and it will be the first thing Rei sees.
+
+No step tells him to move the job afterwards, and never with a terminal command
+such as `./tick.py 52`. Each draft has a **Posted it** button under it that marks
+it sent and moves the job: it waits on whoever the draft is to, or on
+`reply_from` when someone else answers, and closes the job when the draft says
+`"expects_reply": false`. Set those two so the button does the right thing, and
+let the steps end at the posting.
 
 Give every item an honest `est_minutes`. If a ticket has more than three
 items, cut the weakest rather than shrinking estimates.
@@ -881,7 +893,9 @@ everything you are not changing.
             "link": "URL of the thread being replied to",
             "language": "ja | en",
             "body_ruby": "Draft text. Japanese uses {漢字|かんじ} markup.",
-            "body_en": "English translation when the draft is Japanese, else empty string"
+            "body_en": "English translation when the draft is Japanese, else empty string",
+            "reply_from": "Who answers it, when not the person in target. Optional.",
+            "expects_reply": false
           },
           "history": [
             {"at": "ISO 8601", "state": "waiting", "note": "with Kevin"}

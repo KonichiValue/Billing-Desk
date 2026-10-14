@@ -8,11 +8,17 @@ back to you on the same number when they reply.
     ./tick.py                            where everything is
     ./tick.py --rebuild                  redraw both pages, change nothing
     ./tick.py 4                          finished, nothing comes back
-    ./tick.py 2 -w "Kevin"               sent, ball is with Kevin
+    ./tick.py 2 -w "Kevin"               sent, ball is with Kevin, chase in 2 working days
     ./tick.py 2 -w "Kevin" -n "asked about the account-level hold"
     ./tick.py 2 --mine                   they replied, it is yours again
     ./tick.py 5 --dropped -n "TG answered it themselves"
     ./tick.py 1 --undo                   back to with you, forget the note
+    ./tick.py 52 --draft 1               posted draft 1; the job moves once its last draft has gone
+
+The page does the last one from the Posted it button on each draft, so nobody
+should need a terminal for it: it waits on whoever the drafts expect a reply
+from, or closes as sent when nothing comes back. -w overrides who, and --sent
+with it says nothing comes back.
 
 Numbers live on the board and are never reused, so "do 4" means the same thing
 next week. State lives in `state/board.json` beside the item it describes.
@@ -23,11 +29,13 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
+from datetime import date, timedelta
 from pathlib import Path
 
 import board as B
 import keep
-from render import item_state
+import people
+from render import after_posting, item_state
 
 ROOT = Path(__file__).resolve().parent
 MARK = {
@@ -76,6 +84,52 @@ def rebuild() -> None:
         )
 
 
+def working_days_on(n: int) -> str:
+    day = date.today()
+    while n:
+        day += timedelta(days=1)
+        n -= day.weekday() < 5
+    return day.isoformat()
+
+
+def posted(item: dict, k: int, who: str, note: str, chase: str, close: bool = False) -> str:
+    """Draft `k` went. Mark it, and move the job if it was the last one.
+
+    Returns what is wrong, or "" when it landed. A job with two messages is not
+    finished by the first, so it stays with him and says which one has gone.
+    `who` overrides who the job waits on; `close` says nothing comes back.
+    """
+    drafts = B.drafts(item)
+    if not 1 <= k <= len(drafts):
+        return f"there is no draft {k} (it has {len(drafts)})"
+    d = drafts[k - 1]
+    target = d.get("target") or f"draft {k}"
+    if not B.unsent(d):
+        return f"{target} is already marked sent"
+    label, owed = after_posting(item, k)
+    d["sent"] = True
+    d["sent_at"] = B.now()
+    said = note or f"posted: {target}"
+    if label.endswith("more to send"):
+        item.setdefault("history", []).append(
+            {"at": B.now(), "state": item.get("state", "todo"), "note": said}
+        )
+        return ""
+    who = "" if close else who or owed
+    if who:
+        item.pop("hold", None)
+        item["sent_by_you"] = True
+        B.set_state(item, "waiting", said, who=who)
+        item["waits_on"]["chase_on"] = chase or working_days_on(2)
+    elif label == "say who replies" and not close:
+        return "a reply is owed but the draft does not say from whom; add -w WHO"
+    else:
+        item.pop("hold", None)
+        item["sent_by_you"] = True
+        B.set_state(item, "sent", said)
+    return ""
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -94,6 +148,14 @@ def main() -> int:
     parser.add_argument("--sent", action="store_true", help="finished, and it was a message")
     parser.add_argument("--dropped", action="store_true", help="finished, no longer worth doing")
     parser.add_argument("--undo", action="store_true", help="back to with you, clear the note")
+    parser.add_argument(
+        "--draft",
+        metavar="K",
+        type=int,
+        help="draft K (1 is `draft`, 2 on are `drafts`) was posted. The job waits on "
+        "whoever it expects a reply from (or -w), closes as sent when nothing comes "
+        "back, and stays with you while another draft is still to send.",
+    )
     parser.add_argument(
         "--rebuild",
         action="store_true",
@@ -123,8 +185,17 @@ def main() -> int:
         print(f"no item numbered {', '.join(missing)}", file=sys.stderr)
         return 1
 
+    people.load(data)
     for ident in args.ids:
         _, item = B.by_id(data, ident)
+        if args.draft is not None:
+            problem = posted(
+                item, args.draft, args.waiting or "", args.note, args.chase, args.sent
+            )
+            if problem:
+                print(f"{ident}: {problem}", file=sys.stderr)
+                return 1
+            continue
         if args.undo or args.mine:
             item.pop("hold", None)
             item.pop("waits_on", None)
@@ -134,8 +205,10 @@ def main() -> int:
         if args.waiting:
             item["sent_by_you"] = True
             B.set_state(item, "waiting", args.note, who=args.waiting)
-            if args.chase:
-                item.setdefault("waits_on", {})["chase_on"] = args.chase
+            # Every wait gets a day, or it drops off the week strip and nobody
+            # chases it. Two working days is the follow-up nudge most tools
+            # default to; --chase overrides it.
+            item["waits_on"]["chase_on"] = args.chase or working_days_on(2)
         elif args.dropped:
             B.set_state(item, "dropped", args.note)
         elif args.sent:
@@ -143,7 +216,10 @@ def main() -> int:
         elif args.chase:
             # --chase on its own: set the chase date on an item already waiting,
             # without moving its state or resetting how long it has been there.
-            item.setdefault("waits_on", {})["chase_on"] = args.chase
+            # `waits_on` may be null on a job that was never with anyone.
+            if not isinstance(item.get("waits_on"), dict):
+                item["waits_on"] = {}
+            item["waits_on"]["chase_on"] = args.chase
         else:
             B.set_state(item, "done", args.note)
 
@@ -152,7 +228,17 @@ def main() -> int:
     keep.keep("tick")
     B.save(data)
     rebuild()
-    show(data)
+    # A person at a terminal wants the whole list back. An agent or the page
+    # wants to know the move landed, and the whole list is 24KB it then re-reads
+    # on every later turn of its run, so it gets the moved items only.
+    if sys.stdout.isatty():
+        show(data)
+    else:
+        for ident in args.ids:
+            ticket, item = B.by_id(data, ident)
+            st = item_state(item)
+            who = f" on {st['who']}" if st.get("who") else ""
+            print(f"{ident}. {st['state']}{who}  {ticket.get('ref', '')}: {item.get('title', '')}")
     return 0
 
 

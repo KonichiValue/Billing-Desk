@@ -21,6 +21,18 @@ carries its own status, so a script cannot contradict the list.
 that will reach one of his tickets. Add a row only with the route named, and
 take it off once that route closes.
 
+**A ticket goes on the board because Asana assigns it to Rei, never because it
+matters.** The board is his to-do list, not the programme's status. So a ticket
+nobody has given him stays off it even when it is Top Priority, handled as an
+incident, and the only thing the standup discussed: that is a `news` row, with the
+route by which it reaches one of his tickets named, and nothing more. If work in a
+chat turned up a real finding on it, a code trace or a count out of production,
+the finding goes in that row rather than becoming an item, because an item is
+something he does. Chasing who Kraken assign to a build is not his work and never
+gets a number. The one exception is a ticket already on the board with an open item
+of his on it: that stays until the item closes, however Asana's assignee field
+moves.
+
 `sessions` on the board is every room he still has to speak in, soonest first,
 and `script.for_date` says which one the current script was written for. That
 session may be an onsite rather than the 10:30 standup, which changes how much
@@ -49,8 +61,8 @@ because the context is in the file:
  `~/Projects/kraken-core`, not here. Read `~/Projects/kraken-core/AGENTS.md`
  before touching it, and never run `./src/manage.py` directly.
 - **"What does the data say"** &mdash; the production data this desk can reach is
- the `krakencore` Postgres analytics replica, and `.cursor/mcp.json` declares it
- as `ktdb-tg-krakencore`. Not Databricks, whatever an older note may say. Read
+ the `krakencore` Postgres analytics replica, declared as `ktdb-tg-krakencore`
+ by `./setup-mcp.sh`. Not Databricks, whatever an older note may say. Read
  only: a `SELECT` to see how many accounts a hold covers or what a charge
  actually did is the point, and nothing here ever writes to it. Only
  `krakencore` is readable; `consumption`, `messaging` and `voice` sit on a
@@ -112,8 +124,18 @@ closed and numbers never change.
 `./tick.py` on its own prints the same status without spending a single token,
 so use that when he only wants to know where he is. `./digest.py` prints the
 whole readable board in one call, which is how a sweep should read it rather than
-opening `state/board.json` a dozen times. `./tick.py --rebuild` redraws both
-pages without moving anything.
+opening `state/board.json` a dozen times. It holds itself under 27k characters
+so it stays inline, and `--item N` / `--ticket REF` print one record whole. A
+sweep writes everything it found as one `tmp/patch.json` and applies it with
+`./apply.py`, which goes through `board.save()`; the runner rebuilds afterwards.
+`./tick.py --rebuild` redraws both pages without moving anything.
+
+**Slack has no gate.** Asana's `modified_at` tells a sweep which tickets moved;
+a Slack reply moves nothing on the board until a sweep reads it. So the digest's
+step S names every Slack thread on a ticket with open work that spoke in the last
+month, read from its recorded `last_at`, plus searches for his own messages,
+his mentions, and the channels of older threads. Never add a "quiet, skip" rule
+for Slack: one missed Rei's and Kevin's replies on item 50 on 7 Oct.
 
 **Learning something in a chat is not a reason to leave the board stale.**
 Whenever work in a chat turns up something that belongs on the page, a ticket
@@ -150,11 +172,19 @@ something done.
 ./tick.py 2 --mine         # they replied, it is his again
 ./tick.py 5 --dropped -n "TG answered it themselves"
 ./tick.py 1 --undo         # forget the state entirely
+./tick.py 52 --draft 1     # posted draft 1; moves once its last draft has gone
 ```
 
 **Sending a message is not finishing an item.** If a reply is expected, the item
 goes to `-w <who>`, so the page shows it sitting with them rather than pretending
 it is closed. Use plain `./tick.py <n>` only when nothing comes back.
+
+On the page that is the **Posted it** button under every draft, which runs
+`--draft K`: it waits on the draft's `reply_from` or the person its `target`
+names, closes the job as sent when the draft has `"expects_reply": false`, and
+keeps the job with him while another of its drafts is still to send. So a step
+never tells him to run `./tick.py`; set those two fields instead, and
+`audit.py` flags a step that forgets.
 
 When the reply arrives, the follow-up stays on the same number: run `--mine`,
 then edit that item on the board with the new draft and a `progress_note` saying
@@ -194,7 +224,12 @@ but cannot change it; the board is the only truth about what is closed.
  write the English plainly and add any missing term to `glossary` rather than
  writing the brackets by hand. An answer in a chat or on a card is not glossed
  for you, so gloss it yourself there: 閉栓翌日開栓 (open the day after close).
-8. **Respect a hold.** When an item says "do not send this yet", do not draft
+8. **Ask, don't propose, to engineers when AI did the reading.** A draft or
+   ticket for CE, IE or any technical reader asks each technical point as a
+   question from what TG said, what Rei saw or what an engineer already wrote.
+   Function, list and file names and code-derived answers go in `prepared`, not
+   the message. Follow `.claude/skills/ask-dont-propose/SKILL.md`.
+9. **Respect a hold.** When an item says "do not send this yet", do not draft
    around it or send it because Rei asked casually. Say what it is waiting on and
    confirm he wants to override.
 
@@ -207,6 +242,29 @@ question about one job. The shape in `board.py` is the
 contract the renderers expect, so if you add a field, update `render_desk.py`,
 `render_standup.py` and `render_desk_md.py` in the same change.
 
+The page is drawn by five modules, split so one job lives in one file:
+`render_desk.py` (the shell, the ticket card, the top of the page),
+`render_path.py` (the path to closing a ticket, its jobs, drafts and steps),
+`render_week.py` (the week strip), `render_dialogs.py` (help and settings) and
+`render_standup.py` (the speaking view). `render.py` holds what more than one of
+them needs. `render_desk.render()` is still the entry point everything calls.
+
+**Every job needs a day, or it is invisible on the week strip.** Two fields, and
+which one depends on who is holding the work:
+
+- His own work carries `urgency`, which is **exactly one of `today`,
+  `this-week`, `monitor`** — hyphen, never a space. The strip reads it as a day:
+  `today` is today, `this-week` is the next working day, `monitor` is off the
+  strip. So an actionable job marked `monitor` is one he will not see coming.
+- Work with somebody else carries `waits_on.chase_on`, an **ISO date and never a
+  sentence**. A condition ("only if he raises it again") goes in
+  `waits_on.what`; a sentence in `chase_on` is a job with no day.
+
+`board.save()` refuses anything else, so a wrong value is an exception where it
+was written rather than a job quietly missing from the page an hour later.
+`./check.py` also asserts that everything the desk labels **Do now** has a place
+on the strip.
+
 **How the page looks and behaves lives in `static/`, not in the Python.**
 `base.css` and `desk.css` and `standup.css` are the styles, `base.js` runs the
 buttons and the live status, `desk.js` runs the ask boxes. The renderers read
@@ -218,17 +276,104 @@ Do not hand-edit files in `output/`. They are regenerated from the board on
 every page load.
 
 **The open page reloads itself when the board moves.** `render.stamp()` is the
-size and modification time of `state/board.json`, `state/asks.json` and
-everything in `static/`, the page carries the one it was drawn from in
+size and modification time of `state/board.json`, `state/asks.json`,
+`state/calendar.json` and everything in `static/`, the page carries the one it was drawn from in
 `data-stamp`, and `/api/status` reports the current one every couple of seconds.
 So `./tick.py 26` in a terminal, a sweep on a schedule and an ask answered in
 another tab all reach the page on their own. If you add another file the page is
 drawn from, add it to `SOURCES` or the page will not notice it changing.
 
+**Heqing's prioritization round comes from `prioritize.py`.** Every second
+Monday (from 26 Oct 2026) she posts the build order in #team-jp-billing-cdl at
+08:30; a round on a holiday runs the next working day, and `config.json`
+`prioritization.moved` records any other move. The day that matters is the
+working day before, the last chance to raise a build. The board's
+`prioritization` block is his CE builds by CDL-Owner, nobody else's, and a
+sweep rewrites it at step P. The desk draws it as a card under the milestone
+with the note to Heqing ready to copy, and the week strip marks both days.
+`./prioritize.py` prints the same; `--dates` lists the rounds ahead.
+
+**His meetings come from `calendar_sync.py`, not the board.** It reads Google
+Calendar through a one-tool headless Haiku run and writes `state/calendar.json`:
+every meeting in the four weeks the strip flips through, with its Meet link and
+any notes docs attached. A meeting is a fact about his week, not a job, so it
+never goes on the board and a sweep never writes it. serve.py on 8787 reads it
+hourly in working hours and again just after a work meeting ends, and
+`POST /api/calendar` reads it now. Nothing ever writes to the calendar. When a
+work meeting ends with Gemini notes that no `meeting_note`, `migration_note` or
+`other_notes` row covers, `calendar_sync.unread_notes()` names it, the digest
+lists it as step N, and the next refresh reads the doc and records it. A chat
+asked about his day reads the Meetings section of `output/desk.md`.
+
 It holds the reload back for one thing only: something half-written in a
 composer, where taking the words away would be worse than the staleness. Then it
-shows the amber Board changed button and waits. `tests/reload.js` is what keeps
-that true, and `./check.py` runs it.
+shows the amber Board changed button and waits, and for an Undo still on
+screen after a status was moved. `tests/reload.js` is what keeps that true,
+and `./check.py` runs it.
+
+## Many writers, one board
+
+A sweep, a prep, several asks from the page and a terminal `./tick.py` can all
+be running at once, and they all write `state/board.json`. **`board.save()` is
+the only safe way to write it.** It takes a lock on `state/board.lock`, reads
+what is on disk, and merges field by field against the copy `board.load()` handed
+out, so an ask that finished mid-sweep keeps its answer and the sweep keeps its
+events. Items and tickets merge by id, `events`, `history` and `earlier` keep
+both sides' additions, and two writers that each made a new item get two
+numbers. So never edit the file with an edit tool, `sed` or a string replace,
+and never `json.dump` it: that is the one write the merge cannot see, and it is
+how good work used to vanish from the page.
+
+Two more things `save()` holds for every model, whichever one is running:
+
+- **An item never disappears.** A save that loses an item from a ticket still on
+  the board raises. Close it with `./tick.py <n> --dropped -n "why"` instead.
+- **Condensing never loses detail.** A finding or note taken out of a
+  `prepared` block moves to `prepared.earlier`, dated, and the card shows it
+  under an *Earlier detail* fold. Nobody writes `earlier` by hand.
+
+Only sweeps exclude each other (`state/refresh.lock`). Asks run alongside a
+sweep, four at a time, each with its own live progress line.
+
+## The status, and what the page remembers
+
+Every job's status on the page is a button, Jira's idea rather than Todoist's:
+a checkbox can only say done, and half of these jobs end in "sent, now waiting
+on somebody". Pressing it lists the moves open from where the job stands (with
+you: sent and waiting on who, done, with someone else, dropped; waiting: they
+replied, done, handed on, dropped; held: start it now; closed: open it again),
+and each one posts `/api/tick`, which runs `./tick.py` like the terminal does.
+That is Rei saying the job moved, so it is allowed; an agent inferring it is
+still not. Undo puts back exactly the fields the tick moved. `j` `k` `x` `u` and
+Enter work the To do list from the keyboard, `x` opening the status.
+
+Theme, motion and which folds are open live in `state/prefs.json`, written by
+`/api/prefs` and embedded in the page, so the desk looks the same in every
+browser and on every port. localStorage is only a cache of it. `prefs.json` is
+deliberately not in `render.SOURCES`: opening a fold should not reload the page.
+
+## Which agent runs a button
+
+`agent.py` is the only place that knows which CLI runs a job, on which model, and
+how to read what it says back. `serve.py`, `bin/tg` and `run_post.sh` all ask it
+rather than hard-coding a binary, so a refresh pressed on the page, typed in a
+terminal or fired by launchd is the same run. Claude Code is first choice,
+`cursor-agent` is the fallback behind it, and `TG_AGENT=cursor-agent` forces one.
+Models come from `config.json` per job, overridable with `TG_REFRESH_MODEL` and
+friends. Prompts go in on stdin, because `prompt-post.md` is 48KB and that is no
+business of the command line.
+
+A sweep is worth nothing without Asana and Slack, so `agent.blockers()` checks
+them before a token is spent. A lapsed grant is not a refusal: the Refresh and
+Write prep buttons and `tg refresh` walk the login first and only then refuse,
+and a run that stops mid-way on a dead connection starts the login too. `./setup-mcp.sh` adds the
+servers and walks the logins, `./setup-mcp.sh --check` and `tg mcp` report where
+they stand. Only Rei can approve a grant in a browser, so a lapsed one goes in
+`gaps` rather than being worked around.
+
+Headless Claude Code has a real `Task` tool, which `cursor-agent` did not, and a
+sweep that hands itself to a subagent loses the board. `prompt-refresh.md` and
+`prompt-prep.md` forbid it by name; keep that wording if you touch them.
 
 ## Before you say you are done
 

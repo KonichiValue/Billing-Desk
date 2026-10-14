@@ -19,16 +19,45 @@
     "name": "Billing standup (TG)",
     "time_local": "10:30",
     "timezone": "Asia/Tokyo",
-    "days": ["Mon", "Wed"]
+    "days": ["Mon", "Wed"],
+    "also": [{"name": "Billing Weekly (Other-priority review)", "kind": "weekly", "time_local": "13:00", "days": ["Wed"]}]
+  },
+  "prioritization": {
+    "who": "Heqing Qian",
+    "slack_user_id": "U09CTLMV6G7",
+    "channel": "#team-jp-billing-cdl",
+    "channel_id": "C0861G5A2EQ",
+    "example_thread": "https://kraken.enterprise.slack.com/archives/C0861G5A2EQ/p1791847806917139",
+    "anchor": "2026-10-26",
+    "every_days": 14,
+    "thread_at": "08:30",
+    "ce_projects": ["1213035637695327", "1207763060173149"],
+    "cdl_owner_field": "1206771915459256",
+    "moved": [
+      {"from": "2026-10-12", "to": "2026-10-13", "why": "Sports Day holiday, so Heqing posted on Tuesday morning"}
+    ],
+    "holidays": [
+      "2026-10-12", "2026-11-03", "2026-11-23", "2026-12-29", "2026-12-30", "2026-12-31",
+      "2027-01-01", "2027-01-11", "2027-02-11", "2027-02-23", "2027-03-22",
+      "2027-04-29", "2027-05-03", "2027-05-04", "2027-05-05", "2027-07-19",
+      "2027-08-11", "2027-09-20", "2027-09-23", "2027-10-11", "2027-11-03",
+      "2027-11-23"
+    ]
   },
   "ask": {
-    "model": "claude-opus-4-8"
+    "model": "claude-low-carbon-apac-opus-5-5",
+    "effort": "medium"
   },
   "refresh": {
-    "model": "auto"
+    "model": "claude-low-carbon-apac-opus-5-5",
+    "effort": "medium"
   },
   "prep": {
-    "model": "auto"
+    "model": "claude-low-carbon-apac-opus-5-5",
+    "effort": "medium"
+  },
+  "post": {
+    "model": "claude-low-carbon-apac-opus-5-5"
   },
   "slack": {
     "search_scope": "all",

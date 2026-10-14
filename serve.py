@@ -18,6 +18,8 @@ generated at startup, so nothing else on the machine can start an agent run.
 from __future__ import annotations
 
 import argparse
+import gzip
+import hashlib
 import json
 import os
 import queue
@@ -28,28 +30,64 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import NamedTuple
+from typing import Callable, NamedTuple
+from urllib.parse import unquote
 
+import agent
+import board
+import calendar_sync
 import keep
 import render
+import render_desk
 
 ROOT = Path(__file__).resolve().parent
 KEY = secrets.token_urlsafe(16)
+# Which server drew the page, without giving away the key: /api/status answers
+# anyone, and in --lan mode that means anything on the wifi. A restart makes a new
+# key, so a page drawn by the last server has every button refused with "bad key"
+# while its status line looks perfectly healthy. The page compares this and
+# reloads, which is how it picks up the new key.
+BOOT = hashlib.blake2s(KEY.encode(), digest_size=4).hexdigest()
+# The port the desk itself answers on, and the only one that gets to write
+# state/serve.json. `tg`, the Dock icon and launchd all expect it here.
+DESK_PORT = 8787
 # A refresh is a sweep. A prep is that same sweep and then the script written on
 # top of it, so it needs longer before the timeout counts it dead: a lean sweep
 # that finishes in time only to have the script it set up killed is the worst
 # outcome, because the page then shows yesterday's words on a board swept today.
-TIMEOUT_SECS = 900
-PREP_TIMEOUT_SECS = 1200
+#
+# These are the runaway guard, not the liveness check: the stall watchdog below
+# is what catches a dead run. 30 Sep is what sized them. With a new ticket and
+# the Wednesday huddle, the sweep half of the prep alone took sixteen minutes on
+# Opus, three of its turns thinking for two to six minutes each, and the old
+# twenty-minute cap stopped it before it wrote a word. The run that then got
+# through took 34 minutes, so the cap sits well clear of that.
+TIMEOUT_SECS = 1800
+PREP_TIMEOUT_SECS = 2700
 # A launched agent that streams nothing for this long is a dead session (a lapsed
-# cursor-agent login, the MCP servers down), not slow work: a real sweep emits a
-# tool call within seconds and keeps emitting. Stop it here with a re-auth message
-# rather than making him watch the full timeout for a run that was never going to
-# do anything. "0 tool calls in 900s" is the exact failure this catches.
+# login, the MCP servers down), not slow work: a real sweep emits a tool call
+# within seconds and keeps emitting. Stop it here with a re-auth message rather
+# than making him watch the full timeout for a run that was never going to do
+# anything. "0 tool calls in 900s" is the exact failure this catches.
+#
+# Claude Code takes its time coming up, though: a cold start spent 160 seconds
+# before its first token on this gateway, and killing a run that was only still
+# connecting is the worse mistake. So the clock does not start until the agent
+# says something, and STARTUP_GRACE_SECS is how long it has to say anything.
+#
+# While a request to the model is in flight, silence means something else again.
+# Thinking arrives whole rather than streamed, so a long think on a 300k-token
+# context is minutes with nothing to show, and 150s is what killed the 30 Sep
+# prep 43 tool calls in with every server connected. MODEL_STALL_SECS is that
+# case, and a request that truly hangs is still caught: the CLI's own request
+# timeout is ten minutes and it reports its retries, which count as life.
 STALL_SECS = 150
+STARTUP_GRACE_SECS = 300
+MODEL_STALL_SECS = 480
 
 job = {"state": "idle", "message": "", "url": "", "at": ""}
 job_lock = threading.Lock()
@@ -59,23 +97,30 @@ job_lock = threading.Lock()
 # for all of it is indistinguishable from one that has broken. The agent prints
 # as it goes, so the page can show the last thing it said and how long it has
 # been going, which is the difference between waiting and wondering.
-live = {"since": 0.0, "last": "", "chars": 0}
+# One entry per run, keyed like `procs`: "sweep" for a refresh or prep, the ask id
+# for a question. A single shared slot meant two questions at once showed each
+# other's progress, and the first to finish blanked the line for the rest.
+live: dict[str, dict] = {}
 live_lock = threading.Lock()
 
 # Questions wait in a line rather than being turned away. Asking about one job
 # and then noticing something on the next card is the normal way to read the
 # page, and "something is already running, ask again" makes him hold the second
-# question in his head until the first lands. They still run one at a time: an
-# answer that rewrites a draft is a read-modify-write of the whole board, so two
-# at once would have one of them silently overwrite the other.
+# question in his head until the first lands.
 ask_queue: "queue.Queue[tuple[str, str, str, str]]" = queue.Queue()
 
-# Questions run a small pool at a time, so asking on a second card does not wait
-# out the first. Cancel needs the process per question, not one shared slot, or
-# cancelling B would reach for A's process. A sweep (refresh/prep) still runs
-# alone: it is a read-modify-write of the whole board, so it claims the lock,
-# waits for in-flight questions to finish, and new questions wait on it.
-ASK_WORKERS = 2
+# Questions run a pool at a time, so asking on a second card does not wait out
+# the first. Cancel needs the process per question, not one shared slot, or
+# cancelling B would reach for A's process.
+#
+# Nothing here waits for anything else any more. A question used to wait up to
+# five minutes for a sweep, and a sweep for every question, because each was a
+# read-modify-write of the whole board and the later save erased the earlier.
+# board.save() now merges under a lock, field by field, so a question answered
+# mid-refresh and the refresh itself both land. Only two sweeps exclude each
+# other, through state/refresh.lock, since two of them would both take the
+# same event onto the same ticket.
+ASK_WORKERS = 4
 procs: dict[str, "subprocess.Popen[str]"] = {}   # ask_id (or "sweep") -> live process
 asks_running = 0                                  # questions in their agent run right now
 cancelled: set[str] = set()
@@ -93,6 +138,13 @@ def cancel_ask(ask_id: str) -> str:
         except OSError:
             pass
         return "stopped"
+    # Still in the line, so nothing will touch its row until the worker reaches
+    # it. Say so on the row now, or the card redrawn a second later would draw
+    # it as still waiting.
+    row = next((r for r in load_asks() if r.get("id") == ask_id), None)
+    if row and row.get("state") == "queued":
+        row.update(state="cancelled", answer="You called this one off.")
+        save_ask(row)
     return "dropped from the queue"
 
 
@@ -136,19 +188,33 @@ def pending_asks() -> dict[str, str]:
     }
 
 
-def set_live(last: str = "", add: int = 0, start: bool = False) -> None:
+def set_live(key: str, last: str = "", add: int = 0, start: bool = False,
+             step: bool = False) -> None:
     with live_lock:
-        if start:
-            live.update(since=time.time(), last="", chars=0)
-            return
+        if start or key not in live:
+            live[key] = {"since": time.time(), "last": "", "chars": 0, "steps": 0}
+            if start:
+                return
         if last:
-            live["last"] = last
-        live["chars"] += add
+            live[key]["last"] = last
+        if step:
+            live[key]["steps"] = live[key].get("steps", 0) + 1
+        live[key]["chars"] += add
 
 
-def clear_live() -> None:
+def clear_live(key: str) -> None:
     with live_lock:
-        live.update(since=0.0, last="", chars=0)
+        live.pop(key, None)
+
+
+def live_view() -> dict[str, dict]:
+    """Each run's progress as the page reads it: seconds, last words, size."""
+    with live_lock:
+        return {
+            k: {"seconds": int(time.time() - v["since"]), "last": v["last"],
+                "written": v["chars"], "steps": v.get("steps", 0)}
+            for k, v in live.items()
+        }
 
 
 BOARD = ROOT / "state" / "board.json"
@@ -232,11 +298,55 @@ def rebuild() -> str:
         return html.read_text(encoding="utf-8")
 
 
-def set_job(state: str, message: str = "", url: str = "") -> None:
+def set_job(state: str, message: str = "", url: str = "", kind: str = "sweep") -> None:
     with job_lock:
         job.update(
-            state=state, message=message, url=url, at=datetime.now().strftime("%H:%M")
+            state=state, message=message, url=url, kind=kind,
+            at=datetime.now().strftime("%H:%M"),
         )
+
+
+def ask_job(state: str, message: str = "", url: str = "") -> None:
+    """The header line, from a question, unless a sweep is using it.
+
+    Each card shows its own question's progress, so the header is only a
+    courtesy for asks. A refresh running beside them owns it: "Answered in 40s"
+    over a sweep still going would read as the sweep being finished.
+    """
+    with job_lock:
+        if job.get("kind") == "sweep" and job["state"] == "running":
+            return
+    set_job(state, message, url, kind="ask")
+
+
+def guarded(work: Callable[[], None], what: str) -> Callable[[], None]:
+    """Run a worker so that a crash in it reaches the page.
+
+    The button sets "running" before the thread starts, so anything that escapes
+    the worker leaves the spinner turning for ever: the page has been told work
+    began and will never be told otherwise. That is exactly what happened to a
+    server left running across this change, where `blockers()` raised
+    `TimeoutExpired` on a `cursor-agent status` that never answered and Refresh
+    read "Starting" until it was restarted. A stuck spinner is worse than a
+    failure, because a failure says what to do next.
+    """
+
+    def run() -> None:
+        try:
+            work()
+        except Exception:
+            detail = traceback.format_exc()
+            try:
+                (ROOT / "logs").mkdir(exist_ok=True)
+                with (ROOT / "logs" / "serve.log").open("a", encoding="utf-8") as fh:
+                    fh.write(f"\n=== {datetime.now():%H:%M:%S} {what} crashed ===\n{detail}\n")
+            except OSError:
+                pass
+            set_job("failed",
+                    f"the {what} could not start, which is a fault in the desk rather "
+                    f"than in your work. Nothing was changed. See logs/serve.log")
+
+    return run
 
 
 ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
@@ -246,26 +356,9 @@ URL_IN = re.compile(r"https://\S+")
 # The CLI holds its prose to the end in text mode, so a sweep printed nothing
 # for as long as it ran and the page had a fixed sentence to show. Asking for
 # events instead means every tool call arrives the moment it starts, which is
-# what the wait actually consists of.
-STREAM = ["--output-format", "stream-json", "--stream-partial-output"]
-
-VERBS = {
-    "shell": "Running",
-    "read": "Reading",
-    "write": "Writing",
-    "edit": "Editing",
-    "delete": "Deleting",
-    "ls": "Listing",
-    "grep": "Searching",
-    "glob": "Looking for",
-    "webSearch": "Searching the web",
-    "fetch": "Fetching",
-    "readLints": "Checking",
-    "todoWrite": "Planning",
-    "task": "Handing off to a subagent",
-}
-HINTS = ("command", "path", "file_path", "target_file", "relative_workspace_path",
-         "pattern", "glob_pattern", "query", "search_term", "url", "toolName", "name")
+# what the wait actually consists of. Which flags turn streaming on, and how to
+# read what comes back, is what the two CLIs disagree about most, so `agent.py`
+# owns both and this file only ever sees ("call" | "said" | "result", text).
 
 # The same step, said in the words he would use. The log keeps the raw phrase,
 # because that is what a slow run is diagnosed from, but the line under the
@@ -273,6 +366,8 @@ HINTS = ("command", "path", "file_path", "target_file", "relative_workspace_path
 # "mcp asana: get_task_stories" tells him nothing he wanted to know. Tested
 # against the raw phrase in order, so the specific cases come before the general.
 PLAIN = (
+    ("apply.py", "Writing what it found"),
+    ("note.py", "Writing what it found"),
     ("tick.py", "Moving the job"),
     ("audit.py", "Checking what is out of date"),
     ("board.save", "Writing the change"),
@@ -308,43 +403,29 @@ def plain_phrase(phrase: str) -> str:
     return phrase[:70]
 
 
-def tool_phrase(call: dict) -> str:
-    """One line saying what the agent has just gone off to do.
-
-    The event names the tool in a key like `shellToolCall` and puts its arguments
-    under it, so the shape carries what is worth showing without a table of
-    every tool the CLI has.
-    """
-    key = next(iter(call), "")
-    kind = key[: -len("ToolCall")] if key.endswith("ToolCall") else key
-    args = (call.get(key) or {}).get("args") or {}
-    hint = ""
-    for name in HINTS:
-        value = args.get(name)
-        if isinstance(value, str) and value.strip():
-            hint = value.strip()
-            break
-    if kind == "mcp":
-        where = args.get("serverName") or args.get("server") or "Tool"
-        return f"{where}: {args.get('toolName') or hint or 'call'}"[:120]
-    hint = hint.replace(f"{ROOT}/", "").replace(str(ROOT), "the repo")
-    verb = VERBS.get(kind) or kind or "Working"
-    return (f"{verb} {hint}" if hint else verb)[:120]
-
-
 def mmss(secs: float) -> str:
     return f"{int(secs) // 60:d}:{int(secs) % 60:02d}"
 
 
 def read_events(stream, said: list[str], noise: list[str], calls: list[str],
-                began: float, beat: list[float], fh=None) -> None:
+                began: float, beat: list[float], fh=None,
+                kind: agent.Kind | None = None,
+                thinking: list[bool] | None = None, key: str = "sweep") -> None:
     """Turn the agent's event stream into progress, and into a readable log.
 
     Three things come out of one pass: the final message, whatever the CLI said
     that was not an event (reconnect notices, warnings), and a timed list of the
     tool calls. The last of those is how a slow sweep is diagnosed later: the log
     shows where the minutes went rather than only what it concluded.
+
+    Which events mean what is the CLI's business, so `kind.event` answers that
+    and this only has to know the three things it can be told.
+
+    `thinking`, when given, is kept true while a model request is in flight, so
+    the watchdog can tell a model at work from a session that has gone.
     """
+    reader = kind or agent.KINDS[0]
+    thinking = thinking if thinking is not None else [False]
     try:
         for raw in stream:
             clean = ANSI.sub("", raw).strip()
@@ -353,7 +434,7 @@ def read_events(stream, said: list[str], noise: list[str], calls: list[str],
             beat[0] = time.time()   # any line from the agent is a sign of life
             if not clean.startswith("{"):
                 noise.append(clean)
-                set_live(last=clean[-200:])
+                set_live(key, last=clean[-200:])
                 if fh is not None:
                     fh.write(clean + "\n")
                     fh.flush()
@@ -363,29 +444,32 @@ def read_events(stream, said: list[str], noise: list[str], calls: list[str],
             except ValueError:
                 noise.append(clean)
                 continue
-            kind = event.get("type")
-            if kind == "assistant":
-                for part in (event.get("message") or {}).get("content") or []:
-                    text = part.get("text") or ""
-                    if text:
-                        said.append(text)
-                        set_live(add=len(text))
+            what, text = reader.event(event)
+            if what in ("model", "idle"):
+                thinking[0] = what == "model"
+            elif what == "said":
+                said.append(text)
+                set_live(key, add=len(text))
+                # A sweep narrates between calls ("Now let me check the..."), and
+                # half a sentence of that is noise on the progress line. It shows
+                # the step it is on instead; an ask, which makes few calls, keeps
+                # the tail of what it is writing.
                 tail = "".join(said)[-200:].replace("\n", " ").strip()
-                if tail:
-                    set_live(last=tail)
-            elif kind == "tool_call" and event.get("subtype") == "started":
-                phrase = tool_phrase(event.get("tool_call") or {})
-                calls.append(phrase)
-                set_live(last=plain_phrase(phrase))
+                if tail and key != "sweep":
+                    set_live(key, last=tail)
+            elif what == "call":
+                # The tool runs now, not the model, so a hung MCP call gets
+                # the ordinary stall window rather than the model's.
+                thinking[0] = False
+                calls.append(text)
+                set_live(key, last=plain_phrase(text), step=True)
                 if fh is not None:
-                    fh.write(f"  [{mmss(time.time() - began)}] {phrase}\n")
+                    fh.write(f"  [{mmss(time.time() - began)}] {text}\n")
                     fh.flush()
-            elif kind == "result":
+            elif what == "result":
                 # The whole final message, which is cleaner than the deltas: it
                 # is the report without the narration between tool calls.
-                whole = event.get("result")
-                if isinstance(whole, str) and whole.strip():
-                    said[:] = [whole]
+                said[:] = [text]
     except (OSError, ValueError):
         pass
     finally:
@@ -404,30 +488,85 @@ class Ran(NamedTuple):
     stalled: bool = False  # killed for producing nothing, not for running long
 
 
-def run_stream(cmd: list[str], payload: str, timeout: int, fh=None, key: str = "sweep") -> Ran:
+# What the CLI says when it never reached the model. 1 Oct is the case: Zscaler
+# let its private-app session expire at 09:40, an ask started 23 seconds later,
+# and every TLS handshake to the gateway failed for three minutes. The CLI's own
+# retries gave up and the card read "API Error: Unable to connect to API
+# (UNKNOWN_CERTIFICATE_VERIFICATION_ERROR)". Nothing was wrong with the question
+# or the certificates; it only needed asking again once Zscaler settled.
+CONNECTION_LOST = re.compile(
+    r"Unable to connect to API|CERTIFICATE|Connection dropped|Can't reach the API"
+    r"|ECONNRESET|ECONNREFUSED|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|socket hang up",
+    re.I,
+)
+
+# How long to give the network before each further try. A Zscaler reconnect
+# settles in under a minute; one that wants him to sign in again does not settle
+# at all, and the message afterwards says so.
+RECONNECT_WAITS = (30, 90)
+
+
+def connection_lost(ran: Ran) -> bool:
+    """Whether a run failed only because it never reached the model.
+
+    No tool call is the safety half: nothing was read or written, so running it
+    again cannot apply anything twice.
+    """
+    # An answer that only mentions ECONNRESET is still an answer, so the final
+    # message counts only when it is the CLI's own "API Error" line.
+    if ran.calls or (ran.text and not ran.text.startswith("API Error")):
+        return False
+    return bool(CONNECTION_LOST.search(f"{ran.text}\n{ran.noise}"))
+
+
+CONNECTION_NOTE = (
+    "Could not reach the model: the connection kept failing, which on this Mac is "
+    "almost always Zscaler reconnecting or asking you to sign in again. Nothing was "
+    "read or changed. Check Zscaler shows connected, then press Send."
+)
+
+
+def run_stream(cmd: list[str], payload: str, timeout: int, fh=None, key: str = "sweep",
+               kind: agent.Kind | None = None) -> Ran:
     """One agent run, reported as it goes."""
+    runner = kind or agent.KINDS[0]
     began = time.time()
-    set_live(start=True)
+    set_live(key, start=True)
     # The CLI takes some seconds to come up before it says anything, and a blank
     # progress line in that gap reads as a hang.
-    set_live(last="Starting the agent")
+    set_live(key, last="Starting the agent")
+    # The prompt goes in on stdin rather than as an argument. A refresh prompt is
+    # 30KB and a prep prompt 25KB, which is a large fraction of the shell's
+    # argument limit and pointless to spend when the CLI reads stdin.
     proc = subprocess.Popen(
-        cmd + STREAM + [payload],
+        cmd + runner.stream,
         cwd=ROOT,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        stdin=subprocess.DEVNULL,
+        stdin=subprocess.PIPE,
         text=True,
         bufsize=1,
+        env=runner.env(),
     )
     with cancel_lock:
         procs[key] = proc
+    # Written and closed before the reader starts, so the agent sees end-of-input
+    # and begins. A CLI still waiting on stdin never emits, which the stall check
+    # would then report as a lapsed session.
+    try:
+        proc.stdin.write(payload)
+        proc.stdin.close()
+    except OSError:
+        pass
     said: list[str] = []
     noise: list[str] = []
     calls: list[str] = []
     beat = [began]   # last time the agent emitted anything; read_events bumps it
+    thinking = [False]  # a model request is in flight; read_events keeps it
     reader = threading.Thread(
-        target=read_events, args=(proc.stdout, said, noise, calls, began, beat, fh), daemon=True
+        target=read_events,
+        args=(proc.stdout, said, noise, calls, began, beat, fh, runner, thinking, key),
+        daemon=True,
     )
     reader.start()
     # Poll rather than one long wait, so a dead session (no output at all) is
@@ -441,7 +580,20 @@ def run_stream(cmd: list[str], payload: str, timeout: int, fh=None, key: str = "
             break
         except subprocess.TimeoutExpired:
             now = time.time()
-            stalled = now - beat[0] >= STALL_SECS
+            # Before the first word, the grace period applies: a cold start on
+            # this gateway has taken over two minutes to its first token, and
+            # killing a run that was only still connecting is the worse error.
+            # With a model request open, the model's window; otherwise the
+            # tools', which are fast when they are alive at all.
+            quiet = now - beat[0]
+            silent_start = not said and not calls
+            if silent_start:
+                allowed = STARTUP_GRACE_SECS
+            elif thinking[0]:
+                allowed = MODEL_STALL_SECS
+            else:
+                allowed = STALL_SECS
+            stalled = quiet >= allowed
             if stalled or now - began >= timeout:
                 proc.kill()
                 try:
@@ -456,50 +608,145 @@ def run_stream(cmd: list[str], payload: str, timeout: int, fh=None, key: str = "
                round(time.time() - began), len(calls), stalled)
 
 
-def cli(*args: str, timeout: int = 60) -> str:
-    out = subprocess.run(
-        ["cursor-agent", *args],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=timeout,
-        stdin=subprocess.DEVNULL,
-    )
-    return ANSI.sub("", out.stdout + out.stderr)
-
-
-def logged_in() -> bool:
-    return "not logged in" not in cli("status").lower()
-
-
-def unauthorised_mcps() -> list[str]:
-    """Which configured MCP servers the agent cannot actually use.
-
-    Without these a refresh has no Asana and no Slack. An agent with no tools
-    does not stop: it improvises with curl and invented tokens, or starts
-    another agent. Better to refuse the run and name what is missing.
-    """
-    missing = []
-    for line in cli("mcp", "list").splitlines():
-        name, _, state = line.partition(":")
-        if state.strip() and "requires_authentication" in state:
-            missing.append(name.strip())
-    return missing
-
-
 def blockers() -> tuple[list[str], str]:
-    """Everything standing between the button and a real run, in one look."""
-    if not logged_in():
-        return ["account"], "cursor-agent is signed out."
-    missing = unauthorised_mcps()
-    if missing:
-        names = " and ".join(n.title() for n in missing)
-        verb = "needs" if len(missing) == 1 else "need"
-        return missing, f"{names} {verb} authorising before a refresh can read anything."
-    return [], ""
+    """Everything standing between the button and a real run, in one look.
+
+    Which CLI is answering is decided here rather than held open, because it can
+    change between one press and the next: a `claude` whose MCP grants lapse
+    should fall through to Cursor without the server being restarted.
+    """
+    return agent.blockers(agent.pick())
 
 
-def connect_one(args: list[str], label: str, done) -> bool:
+# The last diagnostics run, for the Settings panel. Its own state rather than
+# `job`, because pressing Test connections must not look like a sweep starting:
+# the Refresh button stays live throughout and the board never moves.
+health: dict = {"state": "cold", "at": "", "rows": [], "note": ""}
+health_lock = threading.Lock()
+
+
+def run_check() -> None:
+    """Every connection a sweep needs, tested the way a sweep would test it.
+
+    Three separate questions, and 28 September is the day that proved they are
+    separate. All four MCP servers reported Connected while the prep died six
+    minutes in, because what had failed was the model credential, which nothing
+    on this page had ever checked.
+
+    So: the credential (can a run reach a model at all), the servers (has he
+    approved the grants), and the tools (would a run starting now actually have
+    Asana and Slack in context, which is the only one that predicts a working
+    sweep). `agent.tools_ready` is the expensive one and it goes last.
+    """
+    started = datetime.now().strftime("%H:%M")
+    with health_lock:
+        health.update(state="running", at=started, rows=[], note="")
+
+    rows: list[dict] = []
+
+    def add(name: str, ok: bool | None, said: str, fix: str = "") -> None:
+        rows.append({"name": name, "ok": ok, "said": said, "fix": fix})
+        with health_lock:
+            health["rows"] = list(rows)
+
+    kind = agent.pick()
+    if kind is None:
+        add("Agent", False, "No agent CLI is installed.", "Install Claude Code.")
+        with health_lock:
+            health.update(state="done", note="Nothing can run.")
+        return
+    add("Agent", True, f"{kind.name} is installed.")
+
+    cred = bool(kind.signed_in())
+    add(
+        "Model credential",
+        cred,
+        "Reachable." if cred else "apiKeyHelper gave nothing back.",
+        "" if cred else "Unlock 1Password, or run `op signin`, then try again.",
+    )
+
+    try:
+        states = kind.mcp_states()
+    except (OSError, subprocess.SubprocessError) as exc:
+        states = {}
+        add("MCP servers", None, f"Could not ask: {exc}")
+    for name in ("asana", "slack", "google", "ktdb-tg-krakencore"):
+        if name not in states:
+            add(name, None, "Not configured.", "Run ./setup-mcp.sh")
+            continue
+        state = states[name]
+        add(
+            name,
+            state == "connected",
+            {"connected": "Connected.", "needs-auth": "Needs authorising."}.get(
+                state, state.title() + "."
+            ),
+            "" if state == "connected" else "Press Log in, or run ./setup-mcp.sh",
+        )
+
+    if not cred:
+        with health_lock:
+            health.update(state="done", note="No credential, so the tool check was skipped.")
+        return
+    agent.forget_readiness()
+    ready, why = agent.tools_ready(kind)
+    add(
+        "Tools in a real run",
+        ready,
+        "Asana and Slack arrive with their tools." if ready else why,
+        "" if ready else "Run ./setup-mcp.sh, then test again.",
+    )
+    bad = [r for r in rows if r["ok"] is False]
+    with health_lock:
+        health.update(
+            state="done",
+            note="Everything a sweep needs is there."
+            if not bad
+            else f"{len(bad)} thing{'s' if len(bad) != 1 else ''} to fix before a sweep.",
+        )
+
+
+# The calendar read, for the week strip. Its own state for the same reason as
+# `health`: reading the calendar is not a sweep, and the Refresh button stays
+# live while it runs.
+cal: dict = {"state": "idle", "said": ""}
+cal_lock = threading.Lock()
+
+
+def read_calendar() -> None:
+    """One calendar read, its outcome kept where /api/status can report it."""
+    with cal_lock:
+        if cal["state"] == "running":
+            return
+        cal.update(state="running", said="Reading the calendar")
+    try:
+        got = calendar_sync.fetch()
+    except Exception as exc:  # noqa: BLE001  (a thread that raises says nothing)
+        got = {"error": str(exc)}
+    with cal_lock:
+        if got.get("error"):
+            cal.update(state="failed", said=str(got["error"])[:200])
+        else:
+            cal.update(state="done", said=f"{got['events']} meetings")
+
+
+def calendar_loop() -> None:
+    """Read the calendar when it is due: hourly, and just after a work meeting.
+
+    Never dies: a lapsed Google grant or a locked credential is one failed read,
+    reported on the page, and the next due read tries again.
+    """
+    time.sleep(20)
+    while True:
+        try:
+            if calendar_sync.due():
+                read_calendar()
+        except Exception:  # noqa: BLE001
+            pass
+        time.sleep(60)
+
+
+def connect_one(kind: agent.Kind, args: list[str], label: str, done) -> bool:
     """Run one auth command, show the link it prints, wait for it to land.
 
     Driving Terminal through AppleScript needs an automation permission this
@@ -508,13 +755,14 @@ def connect_one(args: list[str], label: str, done) -> bool:
     """
     try:
         proc = subprocess.Popen(
-            ["cursor-agent", *args],
+            [kind.binary, *args],
             cwd=ROOT,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
+            env=kind.env(),
         )
     except OSError as exc:
         set_job("needs_login", f"could not start {label}: {exc}")
@@ -540,7 +788,7 @@ def connect_one(args: list[str], label: str, done) -> bool:
     set_job(
         "needs_login",
         f"Approve {label} in your browser." if url else
-        f"{label} printed no link. In a Terminal run: cursor-agent {' '.join(args)}",
+        f"{label} printed no link. In a Terminal run: {kind.binary} {' '.join(args)}",
         url,
     )
 
@@ -560,15 +808,50 @@ def start_login() -> None:
 
     The account sign-in is only half of it. Asana and Slack are separate grants,
     and a refresh without them reads nothing at all.
+
+    A server nobody has configured cannot be logged in to, so that case is sent
+    to `setup-mcp.sh` rather than attempted: `claude mcp login asana` on a
+    machine with no Asana server would fail in a way that reads like a lapsed
+    grant when it is really a missing one.
     """
-    if not logged_in() and not connect_one(["login"], "the Cursor sign-in", logged_in):
+    kind = agent.pick()
+    if kind is None:
+        set_job("needs_login", "No agent is installed, so there is nothing to sign in to.")
         return
-    for name in unauthorised_mcps():
+    if not kind.signed_in():
+        if kind.name == "claude":
+            # The credential comes from apiKeyHelper, not a browser flow, so
+            # there is no link this could open.
+            set_job("needs_login", agent.blockers(kind)[1])
+            return
+        if not connect_one(kind, kind.login_args("account"),
+                           f"the {kind.name} sign-in", kind.signed_in):
+            return
+    try:
+        states = kind.mcp_states()
+    except (OSError, subprocess.SubprocessError) as exc:
+        set_job("needs_login", f"could not read the connections: {exc}")
+        return
+    absent = [n for n in agent.NEEDED_MCPS if n not in states]
+    if absent:
+        names = " and ".join(n.title() for n in absent)
+        set_job("needs_login",
+                f"{names} {'is' if len(absent) == 1 else 'are'} not set up on this "
+                f"machine yet. In a Terminal run: ./setup-mcp.sh")
+        return
+    for name, state in states.items():
+        if state != "needs-auth":
+            continue
         connect_one(
-            ["mcp", "login", name],
+            kind,
+            kind.login_args(name),
             f"the {name.title()} connection",
-            lambda n=name: n not in unauthorised_mcps(),
+            lambda n=name: kind.mcp_states().get(n) == "connected",
         )
+    # A grant has just changed, so any remembered readiness answer is about the
+    # world before the login. Ask again from scratch, or the page reports the
+    # problem he has this second finished fixing.
+    agent.forget_readiness()
     left, message = blockers()
     set_job("needs_login", message) if left else set_job("idle", "Connected. Press Refresh.")
 
@@ -607,22 +890,14 @@ JOBS = {
 }
 
 ASK_TIMEOUT_SECS = 420
-# How long an ask will wait for a running sweep or prep to finish before it gives
-# up. A refresh runs up to 15 minutes and a prep up to 20, but blocking the queue
-# that long helps no one; wait a few minutes, then fail with the question kept so
-# Send retries it.
-LOCK_WAIT_SECS = 300
-# How long a sweep waits for in-flight questions to finish before it gives up and
-# asks him to retry. A question answers in well under this; blocking a refresh
-# forever behind one that hung helps no one.
-SWEEP_WAIT_SECS = 180
+
 
 def ask_model() -> str:
     """Which model answers a question from a card.
 
-    Auto, like every other run here. A question and a change arrive through the
-    same box and half of what comes out of it is read by Tokyo Gas, so the answer
-    is worth the wait.
+    Opus 5.5, like every other run here. A question and a change arrive through
+    the same box and half of what comes out of it is read by Tokyo Gas, so the
+    answer is worth the wait.
 
     The wait divides in two, and the logs say where: an ask that only answers
     comes back in 11 to 34 seconds, and one that rewrites a draft takes 100 to
@@ -637,14 +912,12 @@ def ask_model() -> str:
     `config.json` under `ask` pins one when speed matters more than the wording,
     and `TG_ASK_MODEL` does it for a single question.
     """
-    for var in ("TG_ASK_MODEL", "TG_MODEL"):
-        if os.environ.get(var):
-            return os.environ[var]
-    try:
-        conf = json.loads(CONFIG.read_text(encoding="utf-8")).get("ask", {})
-    except (ValueError, OSError):
-        conf = {}
-    return conf.get("model") or "auto"
+    return agent.model_for("ask")
+
+
+# What the picker may send. Anything else is ignored rather than passed to the
+# CLI, so a stale page or a typed request can never name a model nobody chose.
+ASK_MODEL_IDS = {m for m, _, _ in agent.ASK_MODELS}
 
 
 def load_asks() -> list[dict]:
@@ -702,6 +975,214 @@ def forget_ask(ident: str) -> int:
             encoding="utf-8",
         )
         return len(rows) - len(left)
+
+
+def clear_asks(ref: str = "") -> int:
+    """Throw away one conversation, or every one when `ref` is empty.
+
+    The panel's Clear. A question still queued or running stays, because its
+    answer is on its way back to that row and would only land as an orphan.
+    """
+    with asks_lock:
+        rows = load_asks()
+        left = [
+            r for r in rows
+            if (ref and r.get("ref") != ref)
+            or r.get("state") in ("queued", "running")
+        ]
+        if len(left) == len(rows):
+            return 0
+        ASKS.parent.mkdir(exist_ok=True)
+        ASKS.write_text(
+            json.dumps({"asks": left}, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        return len(rows) - len(left)
+
+
+prefs_lock = threading.Lock()
+PREF_KEY = re.compile(r"(desk|fold)-[\w@.:-]{1,80}")
+
+
+def save_prefs(changes: dict) -> int:
+    """Fold a batch of pref changes into state/prefs.json. None deletes one."""
+    with prefs_lock:
+        now_set = render.prefs()
+        n = 0
+        for k, v in changes.items():
+            if not PREF_KEY.fullmatch(str(k)):
+                continue
+            if v is None:
+                now_set.pop(k, None)
+            else:
+                now_set[str(k)] = str(v)[:200]
+            n += 1
+        # A fold is remembered by name, and names come and go with the board, so
+        # the oldest go first once there are more than anyone could have opened.
+        folds = [k for k in now_set if k.startswith("fold-")]
+        for k in folds[:-400]:
+            now_set.pop(k, None)
+        tmp = render.PREFS.with_name("prefs.json.tmp")
+        tmp.write_text(json.dumps(now_set, ensure_ascii=False, indent=1) + "\n",
+                       encoding="utf-8")
+        os.replace(tmp, render.PREFS)
+        return n
+
+
+# What the status button on a job may do. The same moves tick.py already has, and
+# nothing that takes free text other than a note and a name.
+TICKS = {
+    "done": lambda n, who, note: [n] + (["-n", note] if note else []),
+    "sent": lambda n, who, note: [n, "--sent"] + (["-n", note] if note else []),
+    "dropped": lambda n, who, note: [n, "--dropped"] + (["-n", note] if note else []),
+    "waiting": lambda n, who, note: [n, "-w", who] + (["-n", note] if note else []),
+    "mine": lambda n, who, note: [n, "--mine"],
+    "undo": lambda n, who, note: [n, "--undo"],
+    # One draft posted, from the bar under it. The draft's number is added
+    # below. `who` is only there when he picked someone; otherwise tick.py reads
+    # who answers off the drafts.
+    "posted": lambda n, who, note: [n] + (["-w", who] if who else []),
+}
+
+
+def tick_from_page(body: dict) -> tuple[int, dict]:
+    """The status button: move one job from the page, the way ./tick.py does.
+
+    He presses it himself, on the job he means, so this is him saying it is
+    done rather than an agent inferring it. Undo puts back exactly what was
+    there before, from the copy keep.py took, rather than guessing.
+    """
+    n = str(body.get("n", "")).strip()
+    verb = str(body.get("verb", "done"))
+    who = str(body.get("who", "")).strip()[:80]
+    note = str(body.get("note", "")).strip()[:300]
+    if not n.isdigit():
+        return 400, {"error": "say which job and what happened to it"}
+    # The page's buttons come from static/ on every load, but this file only on
+    # a restart, so a move it does not know is almost always a stale server.
+    if verb not in TICKS:
+        return 400, {"error": f"this desk server does not know '{verb}' yet; restart it "
+                     "(launchctl kickstart -k gui/$UID/com.tg-billing-desk.serve)"}
+    if verb == "waiting" and not who:
+        return 400, {"error": "say who it is with"}
+    k = str(body.get("draft", "")).strip()
+    if verb == "posted" and not k.isdigit():
+        return 400, {"error": "say which draft went"}
+    _, item = board.by_id(board.load(), n)
+    if item is None:
+        return 404, {"error": f"there is no job {n}"}
+    if verb == "undo" and body.get("before"):
+        return undo_tick(n, body["before"])
+    before = {k: item.get(k) for k in TICK_FIELDS if k in item}
+    args = TICKS[verb](n, who, note)
+    if verb == "posted":
+        # "Nothing comes back" from the bar's menu closes it as sent instead.
+        args += ["--draft", k] + (["--sent"] if body.get("close") else [])
+    done = subprocess.run(
+        [sys.executable, str(ROOT / "tick.py"), *args],
+        cwd=ROOT, capture_output=True, text=True, timeout=60,
+    )
+    if done.returncode:
+        return 500, {"error": (done.stderr or done.stdout).strip()[-300:] or "tick.py failed"}
+    said = {
+        "done": f"{n} done", "sent": f"{n} sent", "dropped": f"{n} dropped",
+        "waiting": f"{n} is with {who}", "mine": f"{n} is yours again",
+        "undo": f"{n} is back with you",
+    }.get(verb) or posted_said(n)
+    return 200, {"said": said, "before": before}
+
+
+def posted_said(n: str) -> str:
+    """The toast after a Posted it press: where the job went, read back off the board."""
+    _, item = board.by_id(board.load(), n)
+    st = render.item_state(item or {})
+    if st["state"] == "waiting":
+        return f"Posted. {n} is waiting on {st['who'] or 'them'}"
+    if st["closed"]:
+        return f"Posted. {n} is closed"
+    left = sum(1 for d in board.drafts(item or {}) if board.unsent(d))
+    return f"Posted. {left} more to send on {n}"
+
+
+# The fields a tick moves, so Undo can put exactly these back.
+TICK_FIELDS = ("state", "state_at", "state_note", "waits_on", "hold", "closed_at",
+               "sent_by_you", "draft", "drafts")
+
+
+def undo_tick(n: str, before: dict) -> tuple[int, dict]:
+    """Put a job back the way it was a moment ago, and say so in its history."""
+    if not isinstance(before, dict):
+        return 400, {"error": "nothing to put back"}
+    b = board.load()
+    _, item = board.by_id(b, n)
+    if item is None:
+        return 404, {"error": f"there is no job {n}"}
+    for k in TICK_FIELDS:
+        if k in before and before[k] is not None:
+            item[k] = before[k]
+        else:
+            item.pop(k, None)
+    if item.get("state") not in board.OPEN_STATES + board.CLOSED_STATES:
+        item["state"] = "todo"
+    item.setdefault("history", []).append(
+        {"at": board.now(), "state": item.get("state", "todo"), "note": "undone from the page"}
+    )
+    keep.keep("undo")
+    try:
+        board.save(b)
+    except ValueError as exc:
+        return 409, {"error": str(exc)[:300]}
+    # desk.md too, which a chat reads; the page itself redraws on its own.
+    subprocess.run([sys.executable, str(ROOT / "tick.py"), "--rebuild"], cwd=ROOT,
+                   capture_output=True, timeout=60)
+    return 200, {"said": f"{n} put back"}
+
+
+def act_on(body: dict) -> tuple[int, dict]:
+    """Make the move an answer proposed, now that he has pressed it.
+
+    Only a move the answer actually wrote, on a job that card is about, in one
+    of the four shapes `./tick.py` already knows. The button carries the words,
+    but the server reads them again from the saved answer, so nothing the page
+    sends can move an item the agent did not propose for this card.
+    """
+    ident = str(body.get("id", ""))
+    n, verb, who = str(body.get("n", "")), str(body.get("verb", "")), str(body.get("who", ""))
+    row = next((r for r in load_asks() if r.get("id") == ident), None)
+    if not row or row.get("state") != "answered":
+        return 404, {"error": "no such answer"}
+    if row.get("acted_on"):
+        return 409, {"error": row["acted_on"]}
+    _, moves = render.proposed(row.get("answer", ""))
+    if not any((m["n"], m["verb"], m["who"]) == (n, verb, who) for m in moves):
+        return 400, {"error": "that answer did not propose this"}
+    ticket, item = find_subject(row.get("ref", ""))
+    mine = {str(item.get("id"))} if item else {
+        str(i.get("id")) for i in ticket.get("items", [])
+    }
+    if n not in mine:
+        return 400, {"error": f"{n} is not on this card"}
+    args = {
+        "done": [n],
+        "mine": [n, "--mine"],
+        "dropped": [n, "--dropped"] + (["-n", who] if who else []),
+        "waiting": [n, "-w", who],
+    }[verb]
+    done = subprocess.run(
+        [sys.executable, str(ROOT / "tick.py"), *args],
+        cwd=ROOT, capture_output=True, text=True, timeout=60,
+    )
+    if done.returncode:
+        return 500, {"error": (done.stderr or done.stdout).strip()[-300:] or "tick.py failed"}
+    said = {
+        "done": f"Marked {n} done",
+        "mine": f"{n} is yours again",
+        "dropped": f"Dropped {n}",
+        "waiting": f"{n} is with {who}",
+    }[verb]
+    row["acted_on"] = f"{said}, {datetime.now().strftime('%H:%M')}"
+    save_ask(row)
+    return 200, {"acted_on": row["acted_on"]}
 
 
 def find_subject(ref: str) -> tuple[dict, dict]:
@@ -794,6 +1275,13 @@ def chain_to(parent: str) -> list[dict]:
     return list(reversed(chain))
 
 
+# How much of a conversation travels with a follow-up. The side panel makes
+# twenty-exchange conversations normal, and every earlier answer whole on every
+# question is a long prompt for "and the second one?". The newest few are what
+# "that" can mean; the rest are named as being there.
+FOLLOW_KEEP = 6
+
+
 def followed(chain: list[dict]) -> list[str]:
     if not chain:
         return []
@@ -802,12 +1290,17 @@ def followed(chain: list[dict]) -> list[str]:
         "He is following up on this, and the last exchange is the one he means.",
         "Oldest first:",
     ]
+    if len(chain) > FOLLOW_KEEP:
+        lines.append(f"  ({len(chain) - FOLLOW_KEEP} earlier exchanges in this "
+                     "conversation are left out; they are in state/asks.json.)")
+        chain = chain[-FOLLOW_KEEP:]
     for r in chain:
         lines += [f"  Q: {r.get('question', '')}", f"  A: {r.get('answer', '')}"]
     return lines
 
 
 ASK_NOTE_CAP = 220
+EARLIER_CAP = 360
 
 
 def trim_history(hist: list | None) -> list:
@@ -953,15 +1446,23 @@ def ask_context(ref: str, question: str, parent: str = "") -> str:
         if r.get("ref") == ref and r.get("answer") and r.get("id") not in above
     ]
     if earlier:
-        lines += ["", "Already asked about this, oldest first:"]
-        for r in earlier[-4:]:
-            lines += [f"  Q: {r.get('question', '')}", f"  A: {r.get('answer', '')}"]
+        # Only the gist of what was asked before. The follow-up chain below goes
+        # whole, because that is the exchange he is replying to; these are the
+        # card's other questions, and a 2KB draft answer from last week repeated
+        # in every new question is weight the model reads and he waits for.
+        lines += ["", "Already asked about this, oldest first (answers cut short):"]
+        for r in earlier[-3:]:
+            a = " ".join(str(r.get("answer", "")).split())
+            if len(a) > EARLIER_CAP:
+                a = a[:EARLIER_CAP] + " …"
+            lines += [f"  Q: {r.get('question', '')}", f"  A: {a}"]
     lines += followed(chain)
     lines += ["", "His question:", "", question.strip(), ""]
     return "\n".join(lines)
 
 
-def run_ask(ask_id: str, ref: str, question: str, parent: str = "") -> None:
+def run_ask(ask_id: str, ref: str, question: str, parent: str = "",
+            chosen: str = "") -> None:
     """One question, answered against the board and pinned back onto the card."""
     global asks_running
     # The row already exists: the request handler wrote it as `queued` so the card
@@ -983,83 +1484,66 @@ def run_ask(ask_id: str, ref: str, question: str, parent: str = "") -> None:
     if not prompt.exists():
         row.update(state="failed", answer="prompt-ask.md is missing.")
         save_ask(row)
-        set_job("failed", "prompt-ask.md is missing")
+        ask_job("failed", "prompt-ask.md is missing")
         return
     left, message = blockers()
     if left:
         row.update(state="failed", answer=message)
         save_ask(row)
-        set_job("needs_login", f"{message} Press Log in and approve each one.")
+        ask_job("needs_login", f"{message} Press Log in and approve each one.")
         return
-    # A refresh or prep writing the board must not be read out from under it: an
-    # answer is a read-modify-write of the whole file. But the answer to "something
-    # is running" is to wait for it, not to make him ask again -- the queue already
-    # runs one at a time, and the card already says "it starts on its own". So hold
-    # here until the sweep clears, then go, checking Cancel each time round. Only
-    # give up if it runs so long that something is likely wrong, and then the card
-    # keeps its question so Send retries it in one click.
-    # Wait out a running sweep, then claim a slot. Questions run alongside each
-    # other; only a sweep (refresh/prep) is exclusive, so we wait on the sweep
-    # lock, not on the other questions. Claim a slot, then re-check the lock: if a
-    # sweep grabbed the board in the gap, drop the slot and wait again. Give up
-    # only if a sweep runs so long that something is likely wrong, keeping the
-    # question so Send retries it in one click.
-    waited = 0
-    while True:
-        while lock_held():
-            with cancel_lock:
-                if ask_id in cancelled:
-                    row.update(state="cancelled", answer="You called this one off.")
-                    save_ask(row)
-                    set_job("idle", "Cancelled")
-                    return
-            if waited >= LOCK_WAIT_SECS:
-                row.update(
-                    state="failed",
-                    answer="A sweep or prep has been running for a while, so your question "
-                           "could not start yet. Press Send to try it again.",
-                )
-                save_ask(row)
-                set_job("failed", "a sweep was still running; the question did not start")
-                return
-            set_job("running", "Waiting for the current sweep to finish, then your question runs")
-            time.sleep(3)
-            waited += 3
-        with cancel_lock:
-            asks_running += 1
-        if lock_held():                      # a sweep claimed the board in the gap
-            with cancel_lock:
-                asks_running -= 1
-            continue
-        break
+    # No waiting on a sweep: board.save() merges, so this answer and a refresh
+    # running beside it both land. See ASK_WORKERS.
+    with cancel_lock:
+        if ask_id in cancelled:
+            row.update(state="cancelled", answer="You called this one off.")
+            save_ask(row)
+            return
+        asks_running += 1
 
     which = ref.replace("item:", "job ").replace("ticket:", "")
-    set_job("running", f"Thinking about {which}")
-    model = ask_model()
-    cmd = ["cursor-agent", "--print", "--force", "--approve-mcps", "--trust",
-           "--workspace", str(ROOT)]
-    if model != "auto":
-        cmd += ["--model", model]
+    ask_job("running", f"Thinking about {which}")
+    # The model he picked in the composer, when it is one this desk offers.
+    model = chosen if chosen in ASK_MODEL_IDS else ask_model()
+    row["model"] = model
+    save_ask(row)
+    kind = agent.pick()
+    if kind is None:
+        row.update(state="failed", answer="No agent is installed to answer with.")
+        save_ask(row)
+        ask_job("failed", "no agent is installed")
+        with cancel_lock:
+            asks_running -= 1
+        return
+    cmd = kind.command(model, effort=agent.effort_for("ask"), job="ask")
     log = ROOT / "logs" / f"ask-{datetime.now():%Y-%m-%d}.log"
     log.parent.mkdir(exist_ok=True)
     try:
         # Streamed rather than collected, so the card can say what it is doing
         # rather than only that it is doing something. The answer is the final
         # message, which keeps the CLI's own chatter off the card.
-        ran = run_stream(
-            cmd,
-            prompt.read_text(encoding="utf-8") + ask_context(ref, question, parent),
-            ASK_TIMEOUT_SECS,
-            key=ask_id,
-        )
-        with cancel_lock:
-            called_off = ask_id in cancelled
+        payload = prompt.read_text(encoding="utf-8") + ask_context(ref, question, parent)
+        waits = list(RECONNECT_WAITS)
+        while True:
+            ran = run_stream(cmd, payload, ASK_TIMEOUT_SECS, key=ask_id, kind=kind)
+            with cancel_lock:
+                called_off = ask_id in cancelled
+            if called_off or not waits or not connection_lost(ran):
+                break
+            wait = waits.pop(0)
+            ask_job("running", f"The connection to the model dropped. Trying {which} "
+                               f"again in {wait}s")
+            for _ in range(wait):
+                with cancel_lock:
+                    if ask_id in cancelled:
+                        break
+                time.sleep(1)
         if called_off:
             # Terminated on purpose, so the non-zero exit below is not a fault
             # and must not be reported to him as one.
             row.update(state="cancelled", answer="You called this one off.")
             save_ask(row)
-            set_job("idle", "Cancelled")
+            ask_job("idle", "Cancelled")
             return
         if ran.code is None:
             if ran.stalled:
@@ -1070,129 +1554,135 @@ def run_ask(ask_id: str, ref: str, question: str, parent: str = "") -> None:
                 msg = "The question ran past seven minutes and was stopped."
             row.update(state="failed", answer=msg)
             save_ask(row)
-            set_job("failed", msg)
+            ask_job("failed", msg)
             return
         answer, took = ran.text, ran.took
         # Logged with the model, the wait and the number of steps, so "this is
         # slow" is a number that can be compared rather than a feeling.
         with log.open("a", encoding="utf-8") as fh:
             fh.write(
-                f"\n=== {datetime.now():%H:%M:%S} {ref} on {model}, {took}s, "
-                f"{ran.calls} tool calls ===\n{question}\n\n{answer}\n"
+                f"\n=== {datetime.now():%H:%M:%S} {ref} on {kind.name}/{model}, "
+                f"{took}s, {ran.calls} tool calls ===\n{question}\n\n{answer}\n"
             )
+        if connection_lost(ran):
+            row.update(state="failed", answer=CONNECTION_NOTE)
+            save_ask(row)
+            ask_job("failed", "could not reach the model; check Zscaler, then press Send")
+            return
         if ran.code != 0 or not answer:
             row.update(
                 state="failed",
                 answer=answer or f"The agent exited {ran.code} without answering.",
             )
             save_ask(row)
-            set_job("failed", f"the question came back empty. See {log.name}")
+            ask_job("failed", f"the question came back empty. See {log.name}")
             return
         row.update(state="answered", answer=answer, took_secs=took, model=model)
         save_ask(row)
-        set_job("done", f"Answered in {took}s")
+        ask_job("done", f"Answered in {took}s")
     except (OSError, ValueError) as exc:
         # ValueError covers a JSONDecodeError from reading the board mid-write:
         # without it the exception escapes the thread and the card spins on
         # "running" for good.
         row.update(state="failed", answer=f"Could not run the question: {exc}")
         save_ask(row)
-        set_job("failed", f"could not run the question: {exc}")
+        ask_job("failed", f"could not run the question: {exc}")
     finally:
         with cancel_lock:
             asks_running -= 1
-            still_asking = asks_running
-        # Only blank the live line when nothing else of ours is still running,
-        # or one question finishing would wipe the progress of another.
-        if not still_asking:
-            clear_live()
+        clear_live(ask_id)
 
 
 def agent_model(kind: str) -> str:
     """Which model a refresh or a prep runs on.
 
-    A sweep reads threads and decides where an item stands; it is not writing
-    words Tokyo Gas will hear, so it does not need the heaviest model on the
-    account. `config.json` names one per kind, `TG_MODEL` overrides either for a
-    single run, and leaving both unset falls back to whatever `cursor-agent`
-    calls Auto.
+    Opus 5.5 by default, the same as everything else here: a sweep decides where
+    every item stands and which drafts the threads have overtaken, and being
+    wrong about that is expensive in a way a cheaper model does not repay.
+    `config.json` names one per kind, `TG_MODEL` overrides either for a single
+    run, and `TG_REFRESH_MODEL` or `TG_PREP_MODEL` does it for one of them.
     """
-    if os.environ.get("TG_MODEL"):
-        return os.environ["TG_MODEL"]
-    try:
-        conf = json.loads(CONFIG.read_text(encoding="utf-8")).get(kind, {})
-    except (ValueError, OSError):
-        conf = {}
-    return conf.get("model") or "auto"
+    return agent.model_for(kind)
 
 
 def run_agent(kind: str) -> None:
     """One agent pass over a prompt, then the page reloads itself."""
     prompt_name, running_note = JOBS[kind]
+    # A patch left by a run that died before applying it would block this run's
+    # Write (the tool will not overwrite a file it has not read) and could be
+    # applied by mistake. It is unapplied work from a dead run, so it goes.
+    for stale in (ROOT / "tmp").glob("*.json"):
+        stale.unlink(missing_ok=True)
     prompt = ROOT / prompt_name
     if not prompt.exists():
         set_job("failed", f"{prompt_name} is missing")
         return
-    agent = subprocess.run(["which", "cursor-agent"], capture_output=True, text=True)
-    if agent.returncode != 0:
-        set_job("failed", "cursor-agent is not installed. Type 'refresh' in a Cursor chat instead.")
+    runner = agent.pick()
+    if runner is None:
+        set_job("failed",
+                "No agent is installed. Install Claude Code, or type 'refresh' in "
+                "a chat on this folder instead.")
         return
     if lock_held():
         set_job("failed", "a refresh or prep is already running. Let it finish.")
         return
 
     left, message = blockers()
+    if left and set(left) <= set(agent.NEEDED_MCPS) | {"tools"}:
+        # A lapsed grant is the one blocker this can walk him through, so it
+        # does, rather than stopping on a message telling him to press Log in.
+        # start_login shows each browser link on the page and waits for it.
+        start_login()
+        left, message = blockers()
     if left:
         set_job("needs_login", f"{message} Press Log in and approve each one.")
         return
 
     set_job("running", running_note)
+    # Which button is running, so the progress line can say "Refresh" or
+    # "Prep" as a title rather than repeating the long running note.
+    with job_lock:
+        job["job"] = kind
     keep.keep(kind)
     log = ROOT / "logs" / f"{kind}-{datetime.now():%Y-%m-%d}.log"
     log.parent.mkdir(exist_ok=True)
     model = agent_model(kind)
-    cmd = ["cursor-agent", "--print", "--force", "--approve-mcps", "--trust",
-           "--workspace", str(ROOT)]
-    if model != "auto":
-        cmd += ["--model", model]
+    cmd = runner.command(model, effort=agent.effort_for(kind), job=kind)
     LOCK.write_text(f"{os.getpid()} desk-server {kind} {datetime.now():%H:%M}\n")
 
-    # The board is ours alone for a sweep. The lock is set now, so new questions
-    # wait on it; give any question already mid-run a moment to finish before we
-    # start reading and writing the whole file under it.
-    waited = 0
-    while True:
-        with cancel_lock:
-            busy = asks_running
-        if not busy:
-            break
-        if waited >= SWEEP_WAIT_SECS:
-            LOCK.unlink(missing_ok=True)
-            set_job("failed", "questions are still running against the board; let them finish, then press Refresh.")
-            return
-        set_job("running", "Waiting for open questions to finish, then starting")
-        time.sleep(3)
-        waited += 3
-
     timeout = PREP_TIMEOUT_SECS if kind == "prep" else TIMEOUT_SECS
+    waits = list(RECONNECT_WAITS)
     try:
-        for attempt in (1, 2):
+        for attempt in (1, 2, 3):
             with log.open("a", encoding="utf-8") as fh:
-                fh.write(f"\n=== {datetime.now():%H:%M:%S} {kind} on {model} ===\n")
+                fh.write(
+                    f"\n=== {datetime.now():%H:%M:%S} {kind} on "
+                    f"{runner.name}/{model}/{agent.effort_for(kind) or 'default'} ===\n"
+                )
                 fh.flush()
-                ran = run_stream(cmd, prompt.read_text(encoding="utf-8"), timeout, fh)
+                ran = run_stream(cmd, prompt.read_text(encoding="utf-8"), timeout, fh,
+                                 kind=runner)
                 fh.write(
                     f"\n{ran.text}\n"
                     f"=== {kind} ended after {ran.took}s, {ran.calls} tool calls, "
-                    f"exit {ran.code} ===\n"
+                    f"exit {ran.code}{', stalled' if ran.stalled else ''} ===\n"
                 )
             if ran.code is None:
-                if ran.stalled:
+                if ran.stalled and ran.calls:
+                    # It was working and then stopped answering, which is a
+                    # hung request or tool, not a lapsed login: pointing him
+                    # at setup-mcp.sh then sent him to check servers that were
+                    # all connected.
                     set_job("failed",
-                            f"the {kind} started but produced nothing for "
-                            f"{STALL_SECS // 60} minutes and was stopped, so the agent "
-                            "session has most likely lapsed. Press Log in to "
-                            "re-authenticate, then try again.")
+                            f"the {kind} stopped answering after {ran.calls} steps "
+                            f"and was stopped. It may have written part of the "
+                            f"board, so read {log.name} before pressing it again.")
+                elif ran.stalled:
+                    set_job("failed",
+                            f"the {kind} went quiet and was stopped, so the agent "
+                            "session has most likely lapsed or a connection is down. "
+                            f"Check ./setup-mcp.sh --check, then try again. "
+                            f"See {log.name}")
                 else:
                     set_job("failed", f"the {kind} ran past {timeout // 60} minutes and was stopped")
                 return
@@ -1200,21 +1690,54 @@ def run_agent(kind: str) -> None:
             # drops can still exit nought having read nothing, and reporting that
             # as "Refreshed" is the worst of the outcomes: he walks into the room
             # on a board that nobody swept.
+            # The run found a connection dead mid-sweep and stopped, as
+            # prompt-refresh.md tells it to. Its grants were fine at preflight,
+            # so this is a lapse since: start the reconnect rather than calling
+            # a one-line stop "Refreshed".
+            if ran.code == 0 and AUTH_STOP.search(ran.text) and len(ran.text) < 400:
+                start_login()
+                if not blockers()[0]:
+                    set_job("failed", f"{ran.text.strip()} Reconnected: press "
+                                      f"{'Refresh' if kind == 'refresh' else 'Write prep'} again.")
+                return
             if ran.code == 0 and ran.text:
+                # The run writes the board and nothing else; desk.md, which a
+                # chat reads, is redrawn here so a run never spends a turn on it.
+                subprocess.run([sys.executable, str(ROOT / "tick.py"), "--rebuild"],
+                               cwd=ROOT, capture_output=True, timeout=60)
                 set_job("done", "Refreshed" if kind == "refresh" else "Script written")
                 return
             # Worth running again only when it cannot have changed anything. No
             # tool call means no edit, so nothing can be applied twice; a sweep
             # that stopped halfway must not be repeated, because the board would
             # take the same event on two numbers.
+            if connection_lost(ran) and waits and attempt < 3:
+                wait = waits.pop(0)
+                set_job("running", f"the connection to the model dropped. Trying again in {wait}s")
+                time.sleep(wait)
+                set_job("running", running_note)
+                continue
             if attempt == 1 and not ran.text and not ran.calls:
                 set_job("running", f"the connection dropped before it started. {running_note}")
                 continue
+            if connection_lost(ran):
+                set_job("failed", f"the {kind} could not reach the model, so nothing was "
+                                  "read or changed. Check Zscaler shows connected, then "
+                                  "press it again.")
+                return
             set_job("failed", failure_note(kind, ran, log.name))
             return
     finally:
-        clear_live()
+        clear_live("sweep")
         LOCK.unlink(missing_ok=True)
+
+
+# How a run says it stopped on a dead connection, per "Stop rather than improvise".
+AUTH_STOP = re.compile(
+    r"\b(asana|slack)\b.{0,80}\b(missing|disconnected|not connected|authenticat|authori[sz]|"
+    r"unavailable|no tools?)",
+    re.I | re.S,
+)
 
 
 def failure_note(kind: str, ran: Ran, log_name: str) -> str:
@@ -1228,7 +1751,8 @@ def failure_note(kind: str, ran: Ran, log_name: str) -> str:
     if not ran.text and not ran.calls:
         return (
             "the connection to the agent dropped twice before it started, so nothing "
-            "was read or changed. Press Refresh again, or type refresh in a Cursor chat."
+            "was read or changed. Press Refresh again, or type refresh in a chat on "
+            "this folder."
         )
     if not ran.text:
         return (
@@ -1255,6 +1779,34 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def send(self, code: int, body: bytes, ctype: str) -> None:
+        # The desk page is a megabyte of markup: ten tickets, both views, every
+        # fold and a hundred composers, all drawn on every load because that is
+        # what makes the page never stale. It compresses to about a fifth of
+        # that, and gzip costs 13ms against a 9ms render, which is worth it on
+        # anything but the loopback where it is free anyway. It matters most on
+        # `tg phone`, where the same page goes over the wifi.
+        #
+        # Only text, only above the size where the header costs more than the
+        # saving, and only when the browser said it would take it.
+        if (
+            len(body) > 1400
+            and ("text/" in ctype or "json" in ctype or "javascript" in ctype)
+            and "gzip" in (self.headers.get("Accept-Encoding") or "")
+        ):
+            # Level 1, not 6. On this page 6 spends 15ms to save 233KB and 1
+            # spends 5ms to save 293KB: the extra 10ms of latency buys 60KB
+            # that neither loopback nor a phone on the same wifi will notice.
+            packed = gzip.compress(body, 1)
+            if len(packed) < len(body):
+                self.send_response(code)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Encoding", "gzip")
+                self.send_header("Content-Length", str(len(packed)))
+                self.send_header("Vary", "Accept-Encoding")
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(packed)
+                return
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
@@ -1278,19 +1830,93 @@ class Handler(BaseHTTPRequestHandler):
             local = client in ("127.0.0.1", "::1", "::ffff:127.0.0.1")
             self.json_out(200, {"ok": True, **({"key": KEY} if local else {})})
             return
+        if path == "/api/events":
+            # The earlier half of one ticket's timeline, as HTML, for the button
+            # the card draws when there is more history than it carries. A GET
+            # with no key: it is the same board the page is already showing, it
+            # writes nothing, and keying it would mean handing the key to a
+            # page that may have been opened from disk.
+            query = self.path.split("?", 1)[1] if "?" in self.path else ""
+            want = ""
+            for bit in query.split("&"):
+                if bit.startswith("ref="):
+                    want = unquote(bit[4:])
+            try:
+                data = board.load()
+            except (OSError, ValueError) as exc:
+                self.json_out(500, {"error": str(exc)})
+                return
+            row = next(
+                (t for t in data.get("tickets", []) if t.get("ref") == want), None
+            )
+            if row is None:
+                self.json_out(404, {"error": "no such ticket"})
+                return
+            self.send(
+                200,
+                render_desk.earlier_events(row.get("events", [])).encode("utf-8"),
+                "text/html; charset=utf-8",
+            )
+            return
+        if path == "/api/week":
+            # Another week on the strip, for the arrows. Unkeyed like
+            # /api/thread: it writes nothing and shows what the page shows.
+            query = self.path.split("?", 1)[1] if "?" in self.path else ""
+            try:
+                offset = int(next(
+                    (b[7:] for b in query.split("&") if b.startswith("offset=")), "0"
+                ))
+                data = board.load()
+            except ValueError:
+                self.json_out(400, {"error": "which week?"})
+                return
+            except OSError as exc:
+                self.json_out(500, {"error": str(exc)})
+                return
+            self.send(
+                200, render_desk.week_html(data, offset).encode("utf-8"),
+                "text/html; charset=utf-8",
+            )
+            return
+        if path == "/api/thread":
+            # One card's conversation, redrawn. When an answer lands the page
+            # swaps this in where the old one was, rather than reloading and
+            # putting him somewhere else on the board. Unkeyed for the same
+            # reason as /api/events: it is what the page already shows.
+            query = self.path.split("?", 1)[1] if "?" in self.path else ""
+            want = next(
+                (unquote(b[4:]) for b in query.split("&") if b.startswith("ref=")), ""
+            )
+            # The side panel draws the same record as a chat, with nothing folded.
+            chat = "chat=1" in query.split("&")
+            render.load_asks(ASKS)
+            self.send(
+                200, render.thread_html(want, chat).encode("utf-8"),
+                "text/html; charset=utf-8",
+            )
+            return
         if path == "/api/status":
             with job_lock:
                 state = dict(job)
-            with live_lock:
-                if live["since"]:
-                    state["seconds"] = int(time.time() - live["since"])
-                    state["last"] = live["last"]
-                    state["written"] = live["chars"]
+            runs = live_view()
+            sweep = runs.pop("sweep", None)
+            if sweep and state.get("kind") == "sweep":
+                state.update(sweep)
+            # Each question's own progress, so two cards thinking at once each
+            # say what they are doing rather than sharing one line.
+            state["live"] = runs
             state["asks"] = pending_asks()
+            with health_lock:
+                if health["state"] != "cold":
+                    state["health"] = dict(health, rows=list(health["rows"]))
+            with cal_lock:
+                state["calendar"] = dict(cal)
             # What the board looks like now. The page holds the one it was drawn
             # from, so a `./tick.py 26` in a terminal reloads the browser rather
             # than sitting there being quietly wrong.
             state["stamp"] = render.stamp()
+            state["board"] = render.stamp(False)
+            state["boot"] = BOOT
             self.json_out(200, state)
             return
         if path == "/manifest.webmanifest":
@@ -1335,7 +1961,7 @@ class Handler(BaseHTTPRequestHandler):
             with job_lock:
                 if job["state"] == "done":
                     job.update(state="idle", message=f"Last refreshed {job['at']}")
-            html = html.replace("__DESK_KEY__", KEY)
+            html = html.replace("__DESK_KEY__", KEY).replace("__DESK_BOOT__", BOOT)
             self.send(200, html.encode("utf-8"), "text/html; charset=utf-8")
             return
         self.send(404, b"not here", "text/plain")
@@ -1347,12 +1973,18 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path in ("/api/refresh", "/api/prep"):
             with job_lock:
-                if job["state"] == "running":
+                if job["state"] == "running" and job.get("kind") == "sweep":
                     self.json_out(409, dict(job))
                     return
+            if lock_held():
+                self.json_out(409, {"state": "running",
+                                    "message": "a refresh or prep is already running"})
+                return
             kind = path.rsplit("/", 1)[1]
             set_job("running", "Starting")
-            threading.Thread(target=run_agent, args=(kind,), daemon=True).start()
+            threading.Thread(
+                target=guarded(lambda: run_agent(kind), kind), daemon=True
+            ).start()
             self.json_out(202, {"state": "running"})
             return
         if path == "/api/ask":
@@ -1372,6 +2004,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.json_out(404, {"error": f"nothing on the board matches {ref}"})
                 return
             parent = str(body.get("parent", "")).strip()
+            chosen = str(body.get("model", "")).strip()
+            chosen = chosen if chosen in ASK_MODEL_IDS else ""
             ask_id = f"{int(time.time())}-{secrets.token_hex(3)}"
             # Written before the reply goes back, so the card can find itself on
             # the very next poll rather than racing the worker for it.
@@ -1382,13 +2016,14 @@ class Handler(BaseHTTPRequestHandler):
                     "question": question,
                     "asked_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
                     "state": "queued",
+                    "model": chosen or ask_model(),
                 }
                 | ({"parent": parent} if parent else {})
             )
             ahead = ask_queue.qsize()
-            ask_queue.put((ask_id, ref, question, parent))
+            ask_queue.put((ask_id, ref, question, parent, chosen))
             if not ahead:
-                set_job("running", "Starting")
+                ask_job("running", "Starting")
             self.json_out(202, {"state": "queued", "id": ask_id, "ahead": ahead})
             return
         if path == "/api/cancel":
@@ -1404,12 +2039,49 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self.json_out(200, {"state": "cancelled", "how": cancel_ask(ask_id)})
             return
+        if path == "/api/prefs":
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+                body = json.loads(self.rfile.read(length) or b"{}")
+            except (ValueError, OSError):
+                self.json_out(400, {"error": "unreadable"})
+                return
+            if not isinstance(body, dict):
+                self.json_out(400, {"error": "prefs are a map"})
+                return
+            self.json_out(200, {"saved": save_prefs(body)})
+            return
+        if path == "/api/tick":
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+                body = json.loads(self.rfile.read(length) or b"{}")
+            except (ValueError, OSError):
+                self.json_out(400, {"error": "unreadable"})
+                return
+            code, reply = tick_from_page(body)
+            self.json_out(code, reply)
+            return
+        if path == "/api/act":
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+                body = json.loads(self.rfile.read(length) or b"{}")
+            except (ValueError, OSError):
+                self.json_out(400, {"error": "unreadable"})
+                return
+            code, reply = act_on(body)
+            self.json_out(code, reply)
+            return
         if path == "/api/forget":
             try:
                 length = int(self.headers.get("Content-Length") or 0)
-                ident = str(json.loads(self.rfile.read(length) or b"{}").get("id", ""))
-            except (ValueError, OSError):
+                body = json.loads(self.rfile.read(length) or b"{}")
+                ident = str(body.get("id", ""))
+            except (ValueError, OSError, AttributeError):
                 self.json_out(400, {"error": "unreadable"})
+                return
+            # Clear: one conversation by its ref, or all of them.
+            if body.get("ref") or body.get("all") is True:
+                self.json_out(200, {"forgot": clear_asks(str(body.get("ref") or ""))})
                 return
             if not ident:
                 self.json_out(400, {"error": "nothing named"})
@@ -1421,8 +2093,30 @@ class Handler(BaseHTTPRequestHandler):
             self.json_out(200, {"forgot": gone})
             return
         if path == "/api/login":
-            threading.Thread(target=start_login, daemon=True).start()
+            threading.Thread(
+                target=guarded(start_login, "sign-in"), daemon=True
+            ).start()
             self.json_out(202, {"state": "needs_login"})
+            return
+        if path == "/api/check":
+            # What Settings shows when he presses Test connections. Started in a
+            # thread and collected from /api/status, because the real check
+            # spends about 16 seconds starting a headless run to count its
+            # tools, and holding the request open for that is how a page ends up
+            # looking hung.
+            threading.Thread(target=guarded(run_check, "check"), daemon=True).start()
+            self.json_out(202, {"state": "checking"})
+            return
+        if path == "/api/calendar":
+            # Read the calendar now. Collected from /api/status like the check,
+            # since a read is a headless run of about forty seconds. A read that
+            # finds something new rewrites state/calendar.json and the page
+            # reloads on its own.
+            with cal_lock:
+                busy = cal["state"] == "running"
+            if not busy:
+                threading.Thread(target=read_calendar, daemon=True).start()
+            self.json_out(202, {"state": "running"})
             return
         self.json_out(404, {"error": "not here"})
 
@@ -1445,7 +2139,13 @@ def lan_address() -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--port", type=int, default=8787)
+    parser.add_argument("--port", type=int, default=DESK_PORT)
+    parser.add_argument(
+        "--no-claim",
+        action="store_true",
+        help="do not write state/serve.json, so `tg open` keeps pointing at the "
+        "real desk. Implied on any port but the default.",
+    )
     parser.add_argument(
         "--lan",
         type=int,
@@ -1460,6 +2160,10 @@ def main() -> int:
     (ROOT / "state").mkdir(exist_ok=True)
     for _ in range(ASK_WORKERS):
         threading.Thread(target=ask_worker, daemon=True).start()
+    # Only the real desk reads the calendar on a timer. A preview on another
+    # port would spend a run an hour for a page nobody is looking at.
+    if args.port == DESK_PORT or os.environ.get("TG_CALENDAR_LOOP"):
+        threading.Thread(target=calendar_loop, daemon=True).start()
 
     # Claim the port before announcing the key. `serve.json` is how `tg` and the
     # browser find this server, so a second copy started by hand while launchd
@@ -1475,10 +2179,17 @@ def main() -> int:
         print("The desk is already being served. Open it with: tg open", file=sys.stderr)
         return 1
 
-    (ROOT / "state" / "serve.json").write_text(
-        json.dumps({"port": args.port, "key": KEY, "started": time.time()}) + "\n",
-        encoding="utf-8",
-    )
+    # `serve.json` is how `tg` and the Dock icon find the desk, so only the desk
+    # writes it. A second copy on another port (a preview while working on the
+    # page, two of them side by side) used to overwrite the file and point every
+    # `tg open` at itself, which outlives it: the file stays behind when the
+    # spare is stopped and `tg` then holds a key no running server accepts.
+    # `--no-claim` is for a spare that should be reachable but not findable.
+    if args.port == DESK_PORT and not args.no_claim:
+        (ROOT / "state" / "serve.json").write_text(
+            json.dumps({"port": args.port, "key": KEY, "started": time.time()}) + "\n",
+            encoding="utf-8",
+        )
     print(f"http://127.0.0.1:{args.port}/?k={KEY}", flush=True)
 
     minutes = max(0, args.lan)

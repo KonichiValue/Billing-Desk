@@ -15,6 +15,7 @@ Shape of `state/board.json`:
               "sessions": [ ...see below... ],
               "script": {"for_date", "at", "built_at", "headline"},
               "news": [ ...see below... ],
+              "prioritization": { ...see below... },
               "tickets": [
                 {
                   "id": "1217430352217964",        Asana gid, so nothing is duplicated
@@ -42,7 +43,7 @@ rooms, and `script.for_date` says which one the current script was written for.
 A standup that is not running stays in the list with `skipped` set, since "no
 standup Wednesday" changes what has to move into Asana instead.
 
-    [{"kind": "standup|onsite|workshop", "date": "2026-08-26", "at": "10:30",
+    [{"kind": "standup|weekly|onsite|workshop", "date": "2026-08-26", "at": "10:30",
       "label", "title", "place", "focus", "skipped", "reason", "quote",
       "timetable": [{"at": "11:00", "what": "...", "mine": true}],
       "agenda": [{"topic", "why", "owner"}], "bring": ["..."]}]
@@ -116,15 +117,10 @@ what came out of it.
 
     [{"date", "title", "url", "found", "gist"}]
 
-`news` is drawn inside Need to know at the top of the work view, along with the
-next session and `alert`. One block, because they are one question asked once a
-morning, and it folds.
-
-The first line of that block is not stored anywhere. It is counted from the
-items every time the page is drawn: how many are his, which one to start on, how
-long they add up to, and whether the next room is close enough to matter. It
-used to be a sentence an agent wrote, and a sentence written yesterday about a
-conversation reads as a riddle this morning.
+`news` is drawn in the brief at the top of the work view: the newest row as the
+Big news line, the rest folded under it. The next session and `alert` are lines
+of the same brief, so the morning is one block rather than a brief and a second
+fold repeating it.
 
 `alert` is the exception, and it is empty almost every day: something that needs
 him inside the hour and is not an item, because there is nothing to do until
@@ -132,6 +128,42 @@ somebody else moves. Two sentences that make sense to someone who has read
 nothing else, and a link to the message.
 
     {"what": "...", "source_url": "..."}
+
+`brief` is the morning briefing: the five things he would want a secretary to
+tell him before the day starts, and nothing else.
+
+    {"built_at": "2026-09-28T08:15:00+09:00", "for_date": "2026-09-28",
+     "lines": [{"what": "...", "kind": "room|moved|do|watch|big",
+                "items": ["43"], "ref": "保安閉栓",
+                "source_url": "...", "at": "10:30"}]}
+
+**Five lines, hard cap, and fewer is the normal answer.** Everything on the board
+is already on a card; this is only the part that is true *this morning* and would
+cost him something to miss. A sixth line means one of the five was not important
+enough, not that today was busy.
+
+`kind` is what sort of thing it is, and orders the list:
+
+- `room` a session today and what he owes it. Always first if there is one.
+- `moved` something that changed since the last brief: a reply landed, TG closed
+  a ticket, a flag went on, a ticket was assigned to him.
+- `do` what to start on, named by item number so he can act on it at once.
+- `watch` something with a clock on it he cannot act on: a hold window, someone
+  away, a release going out.
+- `big` the exception to "his work only". Something happening across TG **or
+  Kyuden** with enough people and enough consequence that not knowing it would
+  be worse than any of the above: a platform decision, a migration-wide freeze,
+  an incident that will reach billing. It does not need a route to one of his
+  tickets, which is the one place on this board that rule is relaxed. Most days
+  there is none, and inventing one to fill the slot is the failure mode.
+
+`items` are item numbers the line is about, so the page can link them. `ref` is a
+ticket tag when the line is about one. A line with neither is fine for `big`.
+
+Written by the sweep as its last step, and rewritten every time, so it always
+matches the board it was drawn from. The page says its age and refuses to draw a
+brief written for a day that has passed, because a stale briefing read as a
+current one is worse than no briefing.
 
 `terms` carries the vocabulary of the ticket in both languages: `term` in
 English, `say` as TG say it with furigana as `{漢字|かんじ}`, `means` in a
@@ -213,7 +245,21 @@ tells him to ask, tell, confirm or reply and carries no draft is a bug.
      "link": "https://...",                optional, the Go there button
      "body_ruby": "{漢字|かんじ}で…",        a ja draft's text, with furigana on whole words
      "body_en": "…",                       an en draft's text; or the translation shown under a ja draft
-     "sent": false}                        set true once he confirms it went
+     "reply_from": "Tanaka-san",           optional, who answers it, when that is not the addressee
+     "expects_reply": false,               optional, only when nothing comes back from it
+     "sent": false}                        set true by the Sent button (or tick.py --draft)
+
+A job that sends more than one message (a reply to TG and one to the engineer
+who answered) puts the first in `draft` and the rest in `drafts`, a list of the
+same shape. Each shows as its own box above `prepared`, never as a note inside it.
+
+Every unsent draft carries a Sent bar on the page. Pressing it marks that draft
+`sent`, and once the last draft on the job has gone it moves the job: waiting on
+everyone a draft expects a reply from, or closed as `sent` when none does. So
+`reply_from` and `expects_reply` are how a writer says what happens after the
+message, and a step never says it. **Never write a `./tick.py` command, or any
+other instruction for moving the job, into `steps`**: he would need a terminal
+for a thing the card does in one press, and audit.py flags it.
 
 The body has to be under the key the renderer reads, or the card shows an empty
 box that reads as ready to paste: a ja draft in `body_ruby` (furigana on whole
@@ -317,17 +363,91 @@ An item with a `prepared` block has steps that start after it: read this, take
 it into the room, send it. Never steps that redo it.
 
 Only `tick.py` and the agents write here. Renderers read it and never change it.
+
+**Every write goes through `save()`, and `save()` is safe to call from anywhere
+at once.** A refresh, two asks and a `./tick.py` in a terminal can all hold the
+board in memory at the same time. Each `load()` remembers the file it read, and
+`save()` takes `state/board.lock`, reads the file again, and if somebody else
+wrote it in between, merges: their change and this one both land, field by
+field, and only a field both of them changed is decided by this writer. Items
+are matched by number and tickets by gid, so a sweep adding an event never
+erases the draft an ask rewrote a minute earlier. Never edit `board.json` with
+a text editor or a string replace: that skips the lock, the merge and the check.
+
+`save()` also keeps what a writer throws away. A `prepared` finding or note that
+a rewrite drops moves into `prepared.earlier` with the time it went, so a sweep
+condensing twelve findings into four costs nothing he can not get back, and an
+item may never vanish from a ticket that is still on the board. Close it as
+`dropped` instead, because the number is how he refers to it.
+
+    "earlier": [{"at": "ISO", "text": "a finding or 'Heading: body'"}]
+
+`milestones` is work Rei leads that is bigger than one ticket: an Asana
+milestone, a Jira epic, a row on the Notion TG page with his name as Lead. It
+is assigned to him there, which is what earns it a place, and it holds no work
+of its own. The work is the tickets and items it points at, so the epic and its
+children can never disagree about what is open.
+
+    [{"id": "elec-price-update",            a slug, so apply.py can address it
+      "name": "Elec Price Update", "name_ja": "電気料金改定",
+      "target": "2026-11-30",              ISO, the date it has to be done by
+      "target_note": "desired due date",
+      "status": "on-track|at-risk|off-track|done",
+      "outcome", "lead", "support", "notes", "source_url", "asana_url",
+      "phases": [{"what", "when", "state": "done|now|next|blocked",
+                  "who", "note", "items": [52]}],
+      "tickets": [{"ref", "title", "asana_url", "assignee", "state"}],
+      "items": [52, 54]}]
+
+`prioritization` is every CE build whose CDL-Owner is Rei, as Asana had it when
+a sweep last read them, for Heqing's bi-weekly prioritization round. The round
+dates are not here: `prioritize.py` works them out from `config.json`. CDL-Owner
+is the whole membership rule, so a build owned by another CDL never appears,
+however close it sits to one of his tickets.
+
+    {"checked_at": "ISO",
+     "last_round": {"date": "2026-10-13", "url": "the Slack thread",
+                    "ordered": ["KT-108568", "KT-108653"],
+                    "not_pushed": ["KT-106562"]},   his builds only
+     "builds": [{"kt": "KT-107146", "gid", "url", "name",
+                 "ticket": "供給中断取込",          board ref, or "" when none
+                 "status": "Status (Kraken Cust)", "refinement": "🟢",
+                 "size": "3 SP", "tg_order": "", "wave": "", "squad": "",
+                 "due_on": "YYYY-MM-DD or empty", "engineer": "",
+                 "why": "one line for Heqing on why it should be ordered"}]}
+
+A build with no TG Order that is refined is one to raise; `why` is the reason
+in Heqing's words, written for a Kraken reader. Like `internal_ticket.build`,
+none of it ever reaches TG.
+
+`phases` is the path to done, in order, the way `closes_when` is for a ticket.
+`tickets` lists every ticket under it, his or not: a `ref` that is on the board
+links to that card, anything else is a child he follows and does not own, and
+it stays a row here rather than becoming a card. `items` are item numbers on
+any ticket that move the milestone; the page counts them for its progress bar.
 """
 
 from __future__ import annotations
 
+import copy
+import fcntl
 import json
 import os
+import re
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 BOARD = ROOT / "state" / "board.json"
+LOCKFILE = ROOT / "state" / "board.lock"
+
+# What each loaded board looked like on disk, so save() can tell what this writer
+# changed from what somebody else wrote meanwhile. Keyed by the object, bounded
+# because the server loads the board on every timeline request and never saves.
+_BASES: dict[int, tuple[dict, str]] = {}
+_BASES_KEPT = 8
+EARLIER_KEPT = 40
 
 OPEN_STATES = ("todo", "hold", "waiting")
 CLOSED_STATES = ("done", "sent", "dropped")
@@ -337,11 +457,41 @@ def now() -> str:
     return datetime.now().astimezone().isoformat(timespec="seconds")
 
 
+def _remember(board: dict, text: str) -> None:
+    # The board object itself is held beside its text, so its id() cannot be
+    # handed to a new dict while the entry is here and match the wrong base.
+    _BASES[id(board)] = (board, text)
+    while len(_BASES) > _BASES_KEPT:
+        _BASES.pop(next(iter(_BASES)))
+
+
 def load(path: Path | None = None) -> dict:
     path = path or BOARD
     if not path.exists():
         return {"version": 1, "checked_at": "", "next_id": 1, "tickets": []}
-    return json.loads(path.read_text(encoding="utf-8"))
+    text = path.read_text(encoding="utf-8")
+    board = json.loads(text)
+    if path == BOARD:
+        _remember(board, text)
+    return board
+
+
+@contextmanager
+def locked():
+    """Hold `state/board.lock` for one read-merge-write.
+
+    An flock rather than a file that exists, so a writer that dies lets go of it
+    with its process and nothing ever has to decide a lock is stale. Held for the
+    write only, which is milliseconds, never for a whole sweep: that is what lets
+    an ask and a refresh run side by side.
+    """
+    LOCKFILE.parent.mkdir(parents=True, exist_ok=True)
+    with LOCKFILE.open("a") as fh:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(fh, fcntl.LOCK_UN)
 
 
 def save(board: dict, path: Path | None = None) -> None:
@@ -361,14 +511,190 @@ def save(board: dict, path: Path | None = None) -> None:
 
     path = path or BOARD
     path.parent.mkdir(parents=True, exist_ok=True)
-    # Write to a sibling temp file and rename it into place. The rename is atomic
-    # on the same filesystem, so a crash or a full disk mid-write leaves the old
-    # board intact rather than truncating the one durable file to nothing.
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(
-        json.dumps(board, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
-    os.replace(tmp, path)
+    with locked():
+        disk_text = path.read_text(encoding="utf-8") if path.exists() else ""
+        disk = json.loads(disk_text) if disk_text else None
+        entry = _BASES.get(id(board))
+        base_text = entry[1] if entry and entry[0] is board else None
+        merged = board
+        # Somebody wrote the board after this writer read it. Their change and
+        # this one both land; see the module docstring.
+        if disk is not None and base_text is not None and base_text != disk_text:
+            merged = merge(json.loads(base_text), board, disk)
+            _renumber_collisions(merged, disk)
+        if disk is not None:
+            vanished(disk, merged)
+            keep_earlier(disk, merged)
+        problems = check(merged)
+        if problems:
+            raise ValueError(
+                "the board was not written, because merging it with what another "
+                "writer saved meanwhile would not render:\n  " + "\n  ".join(problems)
+            )
+        text = json.dumps(merged, ensure_ascii=False, indent=2) + "\n"
+        # Write to a sibling temp file and rename it into place. The rename is
+        # atomic on the same filesystem, so a crash or a full disk mid-write
+        # leaves the old board intact rather than truncating it to nothing.
+        tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+        tmp.write_text(text, encoding="utf-8")
+        os.replace(tmp, path)
+    # The caller goes on holding what is now on disk, so a second save from the
+    # same writer merges against this one rather than undoing the other writer.
+    if merged is not board:
+        board.clear()
+        board.update(merged)
+    if path == BOARD:
+        _remember(board, text)
+
+
+# ---------------------------------------------------------------- the merge
+#
+# Three versions of one board: what a writer loaded (base), what it now holds
+# (mine) and what is on disk because somebody else saved first (theirs). A field
+# only one side changed takes that side's value; a field both changed takes mine,
+# because this writer is the one saving now. Tickets and items are matched by id,
+# so two writers on two different jobs never touch each other at all.
+
+_MISSING = object()
+KEYED = {"tickets", "items", "milestones"}  # lists of records with an "id"
+LOGS = {"events", "history", "earlier"}  # append-mostly: keep both sides' additions
+
+
+def merge(base, mine, theirs, field: str = ""):
+    if mine == base:
+        return theirs
+    if theirs == base or mine == theirs:
+        return mine
+    if isinstance(mine, dict) and isinstance(theirs, dict):
+        base = base if isinstance(base, dict) else {}
+        out = {}
+        for key in list(mine) + [k for k in theirs if k not in mine]:
+            value = merge(base.get(key, _MISSING), mine.get(key, _MISSING),
+                          theirs.get(key, _MISSING), key)
+            if value is not _MISSING:
+                out[key] = value
+        return out
+    if isinstance(mine, list) and isinstance(theirs, list):
+        base = base if isinstance(base, list) else []
+        if field in KEYED:
+            return _merge_keyed(base, mine, theirs, field)
+        if field in LOGS:
+            gone = [x for x in base if x not in theirs]
+            kept = [x for x in mine if x not in gone]
+            return kept + [x for x in theirs if x not in base and x not in kept]
+    return mine
+
+
+def _merge_keyed(base: list, mine: list, theirs: list, field: str) -> list:
+    def by_id(rows):
+        return {str(r.get("id")): r for r in rows if isinstance(r, dict)}
+
+    b, m, t = by_id(base), by_id(mine), by_id(theirs)
+    out = []
+    for row in mine:
+        key = str(row.get("id")) if isinstance(row, dict) else None
+        if key is None:
+            out.append(row)
+        elif key in t and key not in b and row != t[key]:
+            # Both writers added a record under the same id. They are two
+            # different things, so both stay, and the renumbering below gives
+            # this writer's the next free number.
+            out += [t[key], row]
+        elif key in t:
+            out.append(merge(b.get(key, _MISSING), row, t[key], ""))
+        elif key not in b or row != b[key]:
+            out.append(row)   # new here, or they removed what this writer changed
+    for key, row in t.items():
+        if key in m:
+            continue
+        if key not in b or row != b[key]:
+            out.append(row)   # new there, or this writer removed what they changed
+    return out
+
+
+def _renumber_collisions(board: dict, theirs: dict) -> None:
+    """Two writers that each took board.next_id() got the same number.
+
+    Theirs is already on disk and may already be on the page, so it keeps the
+    number and this writer's item takes the next free one.
+    """
+    on_disk = {str(i.get("id")): i for _, i in items(theirs)}
+    rows = [i for _, i in items(board)]
+    count: dict[str, int] = {}
+    for item in rows:
+        count[str(item.get("id"))] = count.get(str(item.get("id")), 0) + 1
+    top = max((int(i.get("id")) for i in rows if str(i.get("id", "")).isdigit()), default=0)
+    top = max(top, int(theirs.get("next_id", 1)) - 1, int(board.get("next_id", 1)) - 1)
+    for key in [k for k, n in count.items() if n > 1]:
+        twins = [i for i in rows if str(i.get("id")) == key]
+        keeper = next((i for i in twins if i == on_disk.get(key)), twins[0])
+        for item in twins:
+            if item is not keeper:
+                top += 1
+                item["id"] = top
+    board["next_id"] = top + 1
+
+
+def vanished(before: dict, after: dict) -> None:
+    """Refuse a save that loses an item from a ticket still on the board."""
+    tickets = {str(t.get("id")) for t in after.get("tickets", [])}
+    now_ids = {str(i.get("id")) for _, i in items(after)}
+    lost = [
+        f"item {i.get('id')} on {t.get('ref')}"
+        for t, i in items(before)
+        if str(i.get("id")) not in now_ids and str(t.get("id")) in tickets
+    ]
+    if lost:
+        raise ValueError(
+            "the board was not written, because it would lose "
+            + ", ".join(lost)
+            + ". An item keeps its number until it closes: close it with "
+            "./tick.py <n> --dropped -n 'why' rather than deleting it."
+        )
+
+
+def _note_text(note) -> str:
+    if isinstance(note, dict):
+        return f"{note.get('heading', '')}: {note.get('body', '')}".strip(": ")
+    return str(note)
+
+
+def keep_earlier(before: dict, after: dict) -> None:
+    """Move whatever a rewrite dropped from `prepared` into `prepared.earlier`.
+
+    A sweep is told to keep a prepared block short, and it should be: four
+    findings he can act on beat sixteen he cannot. But the detail it condensed
+    away was real work, a line reference or a comment id he may need in the
+    room, and a model deciding what to forget is how good work went missing. So
+    nothing is forgotten. The page shows it under one fold, newest first, and
+    `earlier` itself can only grow until it reaches EARLIER_KEPT.
+    """
+    old = {str(i.get("id")): i for _, i in items(before)}
+    stamp = now()
+    for _, item in items(after):
+        was = (old.get(str(item.get("id"))) or {}).get("prepared")
+        if not isinstance(was, dict):
+            continue
+        new = item.get("prepared") if isinstance(item.get("prepared"), dict) else {}
+        earlier = [e for e in new.get("earlier") or [] if isinstance(e, dict)]
+        known = {e.get("text") for e in earlier}
+        # What was already kept stays kept, whoever rewrote the block.
+        carried = [e for e in was.get("earlier") or []
+                   if isinstance(e, dict) and e.get("text") not in known]
+        known |= {e.get("text") for e in carried}
+        dropped = []
+        for field in ("findings", "notes"):
+            now_there = new.get(field) or []
+            for entry in was.get(field) or []:
+                text = _note_text(entry)
+                if entry not in now_there and text and text not in known:
+                    dropped.append({"at": stamp, "text": text})
+                    known.add(text)
+        if not dropped and not carried:
+            continue
+        new = dict(new)
+        new["earlier"] = (dropped + earlier + carried)[:EARLIER_KEPT]
+        item["prepared"] = new
 
 
 def items(board: dict) -> list[tuple[dict, dict]]:
@@ -393,13 +719,26 @@ SHAPES: dict[str, type | tuple[type, ...]] = {
     "waits_on": dict,
     "hold": dict,
     "draft": dict,
+    "drafts": list,
     "prepared": dict,
     "history": list,
     "est_minutes": (int, float),
     "after": (int, str),
 }
 LISTS_OF_TEXT = ("steps",)
+PREP_LISTS = ("issue", "script", "open_questions", "decisions", "pushback", "unknowns")
 PREPARED_TEXT = ("findings", "unanswered", "sources", "files")
+
+# The only three urgencies. The week strip reads them to place a job on a day,
+# so a fourth spelling is a job that loses its column rather than a tidiness
+# problem. `prompt-refresh.md` says the same thing in the same words.
+URGENCIES = frozenset({"today", "this-week", "monitor"})
+
+# A chase date, and nothing else. A sentence in this field is a job with no day.
+ISO_DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+MILESTONE_STATUS = ("on-track", "at-risk", "off-track", "done")
+PHASE_STATES = ("done", "now", "next", "blocked")
 
 
 def check(board: dict) -> list[str]:
@@ -441,8 +780,36 @@ def check(board: dict) -> list[str]:
                         f"should be a plain sentence"
                     )
 
+        # `urgency` is a closed set of three words, because the week strip reads
+        # them to place a job on a day. A fourth spelling is not a style slip:
+        # `this week` with a space sorted as unknown and the job lost its column.
+        # Refused here, at the point of writing, rather than found on the page.
+        urgency = item.get("urgency")
+        if urgency is not None and str(urgency).strip().lower() not in URGENCIES:
+            bad.append(
+                f"{where}: urgency is {urgency!r}. It has to be one of "
+                f"{', '.join(sorted(URGENCIES))} (hyphen, not a space), because "
+                f"the week strip reads it to place this job on a day."
+            )
+
+        # A chase date has to be a date. A sentence here ("Only if he raises it
+        # again") is a job with no day on it, so it never appears on the week he
+        # plans against. The sentence belongs in waits_on.what.
+        waits = item.get("waits_on")
+        if isinstance(waits, dict):
+            chase = waits.get("chase_on")
+            if chase and not ISO_DAY.fullmatch(str(chase).strip()):
+                bad.append(
+                    f"{where}: waits_on.chase_on is {chase!r}, which is not a "
+                    f"date. Use YYYY-MM-DD so the week strip can place it, and "
+                    f"put any condition in waits_on.what."
+                )
+
         prepared = item.get("prepared")
         if isinstance(prepared, dict):
+            for n, entry in enumerate(prepared.get("earlier") or [], 1):
+                if not isinstance(entry, dict) or not isinstance(entry.get("text"), str):
+                    bad.append(f"{where}: prepared.earlier[{n}] should be {{at, text}}")
             for field in PREPARED_TEXT:
                 for n, entry in enumerate(prepared.get(field) or [], 1):
                     if not isinstance(entry, (str, dict)):
@@ -464,8 +831,10 @@ def check(board: dict) -> list[str]:
         # body_en/body_ruby/body (en), so any other body* key is text that will never
         # show. That is the fault that shipped three blank drafts once: a ja body saved
         # under a bare key the ja branch did not read.
-        draft = item.get("draft")
-        if isinstance(draft, dict):
+        extra = item.get("drafts") if isinstance(item.get("drafts"), list) else []
+        for draft in [item.get("draft")] + extra:
+            if not isinstance(draft, dict):
+                continue
             readable = {"body_ruby", "body_ja", "body", "body_en"}
             for k, v in draft.items():
                 if (
@@ -488,6 +857,77 @@ def check(board: dict) -> list[str]:
                 f"One of {', '.join(OPEN_STATES + CLOSED_STATES)}."
             )
 
+    # A prep list written as null rather than left out takes both pages down:
+    # the renderers read a missing list as empty but iterate whatever is there.
+    for ticket in board.get("tickets", []):
+        prep = ticket.get("prep")
+        if not isinstance(prep, dict):
+            continue
+        for field in PREP_LISTS:
+            if field in prep and not isinstance(prep[field], list):
+                bad.append(
+                    f"prep on {ticket.get('ref', '?')}: {field} is "
+                    f"{type(prep[field]).__name__}, should be a list. Leave it "
+                    f"out when there is nothing to say."
+                )
+
+    milestones = board.get("milestones")
+    if milestones is not None and not isinstance(milestones, list):
+        bad.append("milestones should be a list, or left out")
+        milestones = []
+    seen: set[str] = set()
+    for n, ms in enumerate(milestones or [], 1):
+        if not isinstance(ms, dict) or not ms.get("id") or not ms.get("name"):
+            bad.append(f"milestones[{n}] needs an id and a name")
+            continue
+        where = f"milestone {ms['id']}"
+        if ms["id"] in seen:
+            bad.append(f"{where}: id used twice")
+        seen.add(ms["id"])
+        if ms.get("target") and not ISO_DAY.fullmatch(str(ms["target"])):
+            bad.append(f"{where}: target {ms['target']!r} is not YYYY-MM-DD; "
+                       "put any wording in target_note")
+        if ms.get("status") not in (None, *MILESTONE_STATUS):
+            bad.append(f"{where}: status {ms['status']!r}, one of {', '.join(MILESTONE_STATUS)}")
+        for field in ("phases", "tickets", "items"):
+            if ms.get(field) is not None and not isinstance(ms[field], list):
+                bad.append(f"{where}: {field} should be a list")
+        for p, phase in enumerate(ms.get("phases") or [], 1):
+            if not isinstance(phase, dict) or not phase.get("what"):
+                bad.append(f"{where}: phases[{p}] needs a 'what'")
+            elif phase.get("state", "next") not in PHASE_STATES:
+                bad.append(f"{where}: phases[{p}] state {phase['state']!r}, "
+                           f"one of {', '.join(PHASE_STATES)}")
+        for p, row in enumerate(ms.get("tickets") or [], 1):
+            if not isinstance(row, dict) or not (row.get("ref") or row.get("title")):
+                bad.append(f"{where}: tickets[{p}] needs a ref or a title")
+        for ident in ms.get("items") or []:
+            if str(ident) not in ids:
+                bad.append(f"{where}: item {ident} is not on the board")
+
+    prio = board.get("prioritization")
+    if prio is not None and not isinstance(prio, dict):
+        bad.append("prioritization should be an object, or left out")
+        prio = {}
+    builds = (prio or {}).get("builds")
+    if builds is not None and not isinstance(builds, list):
+        bad.append("prioritization.builds should be a list")
+        builds = []
+    for n, row in enumerate(builds or [], 1):
+        if not isinstance(row, dict) or not row.get("kt"):
+            bad.append(f"prioritization.builds[{n}] needs a kt")
+            continue
+        if row.get("due_on") and not ISO_DAY.fullmatch(str(row["due_on"])):
+            bad.append(f"prioritization build {row['kt']}: due_on {row['due_on']!r} "
+                       "is not YYYY-MM-DD; leave it empty when there is none")
+        for field in ("tg_order", "status", "size", "wave", "why", "ticket"):
+            if isinstance(row.get(field), (dict, list)):
+                bad.append(f"prioritization build {row['kt']}: {field} should be text")
+    for field in ("ordered", "not_pushed"):
+        got = ((prio or {}).get("last_round") or {}).get(field)
+        if got is not None and not isinstance(got, list):
+            bad.append(f"prioritization.last_round.{field} should be a list of KT numbers")
+
     highest = max((int(n) for n in ids if n.isdigit()), default=0)
     if board.get("next_id", 0) <= highest:
         bad.append(
@@ -504,6 +944,20 @@ def by_id(board: dict, item_id: str | int) -> tuple[dict, dict] | tuple[None, No
     return None, None
 
 
+def drafts(item: dict) -> list[dict]:
+    """Every message this job sends, `draft` first, as the dicts on the item.
+
+    The same records, not copies, so a caller can mark one sent in place.
+    """
+    first = [item["draft"]] if isinstance(item.get("draft"), dict) and item["draft"] else []
+    rest = item.get("drafts") if isinstance(item.get("drafts"), list) else []
+    return first + [d for d in rest if isinstance(d, dict) and d]
+
+
+def unsent(draft: dict) -> bool:
+    return not (draft.get("sent") or draft.get("posted"))
+
+
 def next_id(board: dict) -> int:
     """Numbers are never reused, so 'do 4' means the same thing next week."""
     used = [int(i.get("id", 0)) for _, i in items(board)]
@@ -518,7 +972,11 @@ def set_state(item: dict, state: str, note: str = "", who: str = "") -> None:
     item["state_at"] = stamp
     item["state_note"] = note
     if who:
-        item.setdefault("waits_on", {})["who"] = who
+        # A job that was never with anyone may hold `"waits_on": null`, and
+        # setdefault hands that None back rather than a dict to write into.
+        if not isinstance(item.get("waits_on"), dict):
+            item["waits_on"] = {}
+        item["waits_on"]["who"] = who
         item["waits_on"].setdefault("since", stamp)
     if state in CLOSED_STATES:
         item["closed_at"] = now()

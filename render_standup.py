@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
+import render_milestone
 from render import (
     asset,
     ASKED,
@@ -346,19 +347,6 @@ def render_ticket(t: dict, ident: str, desk_id: str, since: str) -> str:
         </div>
       </header>
 
-      {f'''<section class="sub key">
-        <h3>The issue in 20 seconds<span class="hint">if they ask what this is</span></h3>
-        <ul class="st-issue">{issue}</ul>
-        {f'<p class="matters">{esc(prep.get("why_it_matters"))}</p>' if prep.get("why_it_matters") else ""}
-      </section>''' if issue else ""}
-
-      {section("Where it stands",
-               f'<p class="st-stands">{esc(t.get("where_it_stands"))}</p>'
-               f'{raise_rows(t, desk_id)}',
-               role="key", hint="one line if they only ask once")}
-
-      {since_last(t, since)}
-
       <section class="sub say script">
         <h3>Say this<span class="hint">out loud, as written</span>
           <button class="ask-here" type="button"
@@ -367,10 +355,24 @@ def render_ticket(t: dict, ident: str, desk_id: str, since: str) -> str:
         {render_script(prep.get("script", []))}
       </section>
 
+      {warn}
       {render_pushback(prep.get("pushback", []))}
       {needs(t, spoken)}
+
+      {f'''<details class="sub key st-brief" data-remember="brief-{esc(ident)}">
+        <summary><h3>If they ask what this is
+          <span class="hint">the issue, where it stands, what moved</span></h3>
+          <span class="fold-hint"></span></summary>
+        <div class="st-brief-in">
+          {f'<ul class="st-issue">{issue}</ul>' if issue else ""}
+          {f'<p class="matters">{esc(prep.get("why_it_matters"))}</p>' if prep.get("why_it_matters") else ""}
+          <p class="st-stands">{esc(t.get("where_it_stands"))}</p>
+          {raise_rows(t, desk_id)}
+          {since_last(t, since)}
+        </div>
+      </details>'''}
+
       <div class="st-cons">{render_consequences(prep.get("consequences", {}), t.get("ref", ""))}</div>
-      {warn}
       {secret}
       {section("Ask or change on this ticket",
                ask_block(
@@ -709,6 +711,7 @@ def render(board: dict, desk_ids: dict[str, str], built: str, stale: bool) -> st
         }
         return f"""
   {render_huddle(board)}
+  {render_milestone.speaking(board)}
   {render_xws(board, empty_ids)}
   {banner}
   <div class="st-empty">
@@ -753,6 +756,7 @@ def render(board: dict, desk_ids: dict[str, str], built: str, stale: bool) -> st
   {prep_jump(tickets, ids, bool(also), bool(xws), bool(huddle))}
   {stale_note}
   {huddle}
+  {render_milestone.speaking(board)}
   {xws}
   <details class="nk" id="prep-need" data-remember="prep-need" open>
     <summary>

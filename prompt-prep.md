@@ -12,43 +12,81 @@ informed and specific, out loud, without rehearsing.
 You need the Asana and Slack tools. If they are missing, or answer with an
 authentication error, **stop immediately**, change nothing, and reply with one
 line naming what is missing. Never call those HTTP APIs yourself with `curl`,
-never invent an API token, and never start another agent (`cursor-agent`,
-`tg prep`, a subagent that runs either). A source you could not read is a source
-you do not write about.
+never invent an API token, and never start another agent: not the `Task` tool,
+not `claude`, not `cursor-agent`, not `tg prep`. A source you could not read is a
+source you do not write about.
+
+## The shape of a fast prep: read once, call in parallel, write once
+
+1. **Turn 1: `./digest.py --full`, once.** The whole board, unclipped, with the
+   SWEEP PLAN and the WRITE block. It is the only read of the board for both
+   halves. Never re-run it, never read `output/desk.md` or `state/board.json` on
+   top of it, never read `prompt-refresh.md` (the run cannot, and does not need
+   to: the sweep is below).
+2. **Turn 2: every source call the plan names, in one message**, as parallel tool
+   calls: they do not depend on each other. Then the deep reads they earn,
+   together, in the next.
+3. **Write once.** The sweep's findings and every `prep` block go in one JSON
+   patch, written with the Write tool to `tmp/patch.json` and applied with one
+   `./apply.py tmp/patch.json`. A `prep` block is
+   `"tickets": {"<ref>": {"prep": {...}}}`; `script`, `sessions` and `xws` go
+   under `"board"`. If apply refuses, it says why and writes nothing: fix that
+   part of the patch and run it again.
+4. **`./check.py`, a second small patch for what it prints, then report.**
+
+A record you need whole (a `prepared` block, a draft) is
+`./digest.py --item <n>` or `--ticket <ref>`, never a read of `output/` or a `.py`.
+Banned outright: Python against the board (`python3 -c`, `import board`,
+`help(board)`, reading any source), `git`, `./tick.py --rebuild` (the runner
+redraws both pages when the run ends), and subagents: no `Task` tool, no
+`claude`, no `cursor-agent`, no handing a slice of the work to anyone.
 
 ## Half one: bring the board up to date
 
-**First check how fresh the board already is.** `./digest.py` prints `checked_at`
-at the top. If it is within the last ~15 minutes, a full sweep just ran and the
-board is already current — do **not** re-run it. Do the one cheap confirmation
-(the batched Asana `modified_at.after=checked_at` gate, and a glance at the
-threads the SWEEP PLAN still lists as not looked at), fold in anything it turns
-up, and go straight to the script. Re-sweeping a board that was swept minutes ago
-is most of why prep feels slow, and it changes nothing.
+**If `checked_at` is within the last ~15 minutes, a sweep just ran.** Run only
+the gate (`modified_at.after=checked_at`) and the threads the plan still lists,
+fold in what they turn up, and go to the script.
 
-Only when `checked_at` is genuinely stale (hours old, or you cannot tell): read
-`prompt-refresh.md` and do everything in it, including the rebuild at the end. The
-script must sit on top of the newest replies, not yesterday's, and the sweep is
-written down in one place so the two routines cannot drift.
+Otherwise sweep, briefly, in the same turns as above:
 
-That gives you a current `state/board.json`: every open TG billing ticket
-assigned to Rei, every item of work on it, and the timeline of how each got
-there. `board.py` documents the shape.
+- **Census and gate together.** The census is every incomplete task assigned to
+  Rei in both TG projects, no date filter, with
+  `opt_fields=completed,assignee.name,memberships.section.name,custom_fields.name,custom_fields.display_value`.
+  It decides membership and refreshes every card's `asana` fields (Status is the
+  custom field named `Status`). An assigned gid not on the board is added as a
+  ticket; nothing unassigned ever is, however important (that is a `news` row).
+  A board ticket missing from the census was completed or reassigned: find out
+  which. The gate (`modified_at.after`, `opt_fields=name,modified_at,assignee.name,completed`)
+  decides which tickets earn `get_task_stories`.
+- **The milestone search** (`M.` in the plan): bring its child-ticket rows and
+  phase states up to date, a child assigned to Rei becomes a card, and nothing
+  else does.
+- **The threads the plan names**, forward from the time it names. Every thread
+  you open goes in the patch's `"checked"`; one with a newer message goes in
+  `"threads"` with `last_at` and `last_from`.
+- **What you find** goes in as `events` (`on`, `at`, `who`, `what`, `so_what`,
+  `where`, `source_url`; Rei is "You"), and items move only on an event you can
+  quote: a reply brings an item back to `todo` on the same number with its draft
+  rewritten; something he sent makes it `waiting` on a named person with a
+  `chase_on` date. New work goes in `new_items`. Every job needs a day: `urgency`
+  exactly `today`, `this-week` or `monitor`, or an ISO `chase_on`.
+- Fix every line of the digest's `OUT OF DATE` block, update `news` (route named,
+  five at most) and `brief`, and end the patch with `"swept": true`.
+
+That gives you a current board: every open TG billing ticket assigned to Rei,
+every item of work on it, and the timeline of how each got there.
 
 ## Half two: what he says
 
-Only the speaking half is yours to write now. Do not touch item states, and do
-not rewrite `events` or `where_it_stands` beyond what the sweep already did.
-
-**Read the board for the script the same way the sweep does: once, and never by
-dumping it.** Writing the script needs the untruncated `where_it_stands`,
-`consequences`, `events` and `prepared` that the ordinary digest clips, so run
-`./digest.py --full` **once** and write from that. The hard rule in
-`prompt-refresh.md` holds here too: no `help(board)`, and no `python3 -c "import
-board; ... for t in b['tickets']: print(...)"` to read a field back. You may only
-`import board` to *write* your `prep` block, using the WRITE CHEATSHEET forms.
+Only the speaking half is yours to write now. Do not move item states beyond
+what the sweep did, and do not rewrite `events` or `where_it_stands` beyond it.
 Reading the board per ticket to compose is the flail that runs prep past its
-budget.
+budget: compose from the one `--full` read.
+
+A milestone he leads may carry `say`: one or two house-style Japanese lines for
+the room on where the programme stands, written only when the session will
+discuss it (`"board": {"milestones.<id>.say": ["..."]}`). Nothing internal: no
+ticket links, sizes or engineer names.
 
 Read `config.json` first for the Asana workspace, the two TG project GIDs, Rei's
 user GID and the Slack channel hints.
@@ -67,6 +105,15 @@ sentence saying what the session is actually for, and, for anything that is not 
 standup, the `agenda` and what he has to `bring`. A standup that is not running
 stays in the list with `skipped` and a `reason`, because "no standup Wednesday"
 changes what has to move into Asana instead.
+
+**Wednesday has two rooms.** The 10:30 standup walks Top Priority and New, and
+the 13:00 **Billing Weekly** (`kind: weekly`) reviews the Other-priority tickets,
+which is where most of his are actually discussed. Once the 10:30 has passed,
+write for the weekly, and set `script.at` to `13:00` so the page picks it over the
+standup on the same date. A weekly gets onsite depth for a contested ticket
+(`decisions`, `pushback`), but it is an hour, not a day: three or four blocks at
+most, and a quiet ticket still gets one 現状. A ticket the morning standup did not
+reach is not settled by it; carry its question into the weekly unchanged.
 
 **When the session is an onsite**, four things change:
 
@@ -448,12 +495,10 @@ the page puts the meaning in brackets after its first mention in the script. Add
 what is missing rather than writing the brackets yourself, and never gloss inside
 `ja_ruby` or `say_ja`: he reads those out to Tokyo Gas.
 
-## Then rebuild and report
+## Then check and report
 
-```
-python3 render_desk.py    state/board.json output/desk.html
-python3 render_desk_md.py state/board.json output/desk.md
-```
+Run `./check.py` and fix what it prints with a second patch. Do not rebuild: the
+runner redraws both pages when the run ends.
 
 Finish with a few lines: which session you wrote for, which tickets have an ask
 on the table, which are status only, and anything he should check before he
